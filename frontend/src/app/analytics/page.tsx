@@ -27,13 +27,13 @@ export default function AnalyticsPage() {
 
     return (
         <DashboardLayout>
-            <div className="min-h-screen bg-slate-50/50 p-4 md:p-8">
+            <div className="min-h-screen bg-slate-100 p-4 md:p-8">
                 <div className="max-w-7xl mx-auto space-y-8">
                     {/* Header with Tabs */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Analytics Suite</h1>
-                            <p className="text-slate-500 font-medium">Real-time insights on campaign performance and brand sentiment.</p>
+                            <p className="text-slate-600 font-medium">Real-time insights on campaign performance and brand sentiment.</p>
                         </div>
 
                         <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-sm inline-flex">
@@ -76,7 +76,7 @@ export default function AnalyticsPage() {
                                             </span>
                                         </div>
                                         <div className="text-3xl font-black text-slate-900 mb-1">{stat.value}</div>
-                                        <div className="text-sm font-bold text-slate-400 uppercase tracking-wide">{stat.title}</div>
+                                        <div className="text-sm font-bold text-slate-500 uppercase tracking-wide">{stat.title}</div>
                                     </div>
                                 ))}
                             </div>

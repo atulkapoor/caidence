@@ -2,6 +2,7 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2 } from "lucide-react";
+import { toast } from "sonner";
 import { generateContent, fetchContentGenerations, ContentGeneration } from "@/lib/api";
 import { useEffect, useState } from "react";
 
@@ -183,7 +184,7 @@ ${prompt}
 
     return (
         <DashboardLayout>
-            <div className="h-[calc(100vh-48px)] flex flex-col bg-slate-50/50 relative">
+            <div className="h-[calc(100vh-48px)] flex flex-col bg-slate-100 relative">
                 {/* Modal Overlay */}
                 {previewContent && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setPreviewContent(null)}>
@@ -417,7 +418,7 @@ ${prompt}
                             </div>
 
                             {/* RIGHT PANEL: Live Canvas */}
-                            <div className="lg:col-span-7 h-full bg-slate-50/50 p-6 sm:p-8 overflow-y-auto">
+                            <div className="lg:col-span-7 h-full bg-slate-100 p-6 sm:p-8 overflow-y-auto">
                                 {(currentResponses.length > 0) ? (
                                     <div className="max-w-3xl mx-auto space-y-6">
                                         <div className="flex justify-between items-center mb-4">

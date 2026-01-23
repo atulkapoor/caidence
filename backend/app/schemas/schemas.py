@@ -150,3 +150,26 @@ class Presentation(PresentationBase):
 
     class Config:
         from_attributes = True
+
+# --- Discovery Schemas ---
+class DiscoveryFilter(BaseModel):
+    category: Optional[str] = None
+    min_reach: Optional[int] = 0
+    min_engagement: Optional[float] = 0.0
+    location: Optional[str] = None
+
+class DiscoveryRequest(BaseModel):
+    query: str
+    filters: Optional[DiscoveryFilter] = None
+
+class InfluencerProfile(BaseModel):
+    handle: str
+    platform: str
+    avatar_color: str
+    followers: int
+    engagement_rate: float
+    content_style_match: List[str] # e.g. "High Energy", "Minimalist"
+    voice_analysis: List[str] # e.g. "Authoritative", "Relatable"
+    image_recognition_tags: List[str] # e.g. "Outdoors", "Tech"
+    audience_demographics: str
+    match_score: int # 0-100

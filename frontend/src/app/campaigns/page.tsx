@@ -62,7 +62,7 @@ export default function CampaignPage() {
 
     return (
         <DashboardLayout>
-            <div className="min-h-screen bg-slate-50/50 p-8">
+            <div className="min-h-screen bg-slate-100 p-8">
                 <div className="max-w-7xl mx-auto space-y-6">
 
                     {/* Header */}
@@ -73,7 +73,7 @@ export default function CampaignPage() {
                             </div>
                             <div>
                                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Campaign Planner</h1>
-                                <p className="text-slate-500 text-sm font-medium">Strategic campaign management and scheduling</p>
+                                <p className="text-slate-600 text-sm font-medium">Strategic campaign management and scheduling</p>
                             </div>
                         </div>
                         <div className="flex gap-3">
@@ -96,7 +96,7 @@ export default function CampaignPage() {
 
                     {/* Tabs */}
                     <div className="flex justify-center mb-10">
-                        <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100 inline-flex">
+                        <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-slate-300 inline-flex">
                             <button
                                 onClick={() => setActiveTab("Campaign List")}
                                 className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === "Campaign List"

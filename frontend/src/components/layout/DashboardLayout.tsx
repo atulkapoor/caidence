@@ -17,7 +17,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             {/* Main Content */}
             <div className="flex flex-1 flex-col overflow-hidden">
                 <Topbar />
-                <main className="flex-1 overflow-y-auto bg-background p-6">
+                <main className="flex-1 overflow-y-auto bg-slate-100 p-6">
                     {children}
                 </main>
             </div>

@@ -49,7 +49,7 @@ export default function WorkflowPage() {
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-2xl font-black text-slate-900">Workflow Automation</h1>
-                        <p className="text-slate-500 text-sm">Automate your marketing tasks with AI agents</p>
+                        <p className="text-slate-600 text-sm">Automate your marketing tasks with AI agents</p>
                     </div>
                     <button
                         onClick={handleCreate}
@@ -62,7 +62,7 @@ export default function WorkflowPage() {
 
                 {/* Tabs */}
                 <div className="flex justify-center mb-10">
-                    <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100 inline-flex">
+                    <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-slate-300 inline-flex">
                         {["my-workflows", "templates"].map((tab) => (
                             <button
                                 key={tab}

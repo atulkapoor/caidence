@@ -18,13 +18,13 @@ export default function MarcomPage() {
 
     return (
         <DashboardLayout>
-            <div className="min-h-screen bg-slate-50/50 p-8">
+            <div className="min-h-screen bg-slate-100 p-8">
                 <div className="max-w-7xl mx-auto space-y-8">
                     {/* Header */}
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                         <div>
                             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Marcom Hub</h1>
-                            <p className="text-slate-500 mt-2 text-lg">Your AI-powered marketing & communication toolkit</p>
+                            <p className="text-slate-600 mt-2 text-lg">Your AI-powered marketing & communication toolkit</p>
                         </div>
                     </div>
 
@@ -35,7 +35,7 @@ export default function MarcomPage() {
                         </div>
                         <input
                             type="text"
-                            className="block w-full pl-11 pr-4 py-4 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm text-base"
+                            className="block w-full pl-11 pr-4 py-4 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm text-base"
                             placeholder="Search for a tool..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}

@@ -35,7 +35,7 @@ export default function Dashboard() {
                 {/* 0. Header Text */}
                 <div className="space-y-2">
                     <h1 className="text-4xl font-black text-slate-900 tracking-tight">C(AI)DENCE</h1>
-                    <p className="text-lg text-slate-500 font-medium">AI-powered marketing intelligence & automation suite</p>
+                    <p className="text-lg text-slate-600 font-medium">AI-powered marketing intelligence & automation suite</p>
                 </div>
 
                 {/* 1. Action Cards (Start Here / Marcom Hub) */}

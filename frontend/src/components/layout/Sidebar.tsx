@@ -48,8 +48,8 @@ export function Sidebar() {
     const pathname = usePathname();
 
     return (
-        <div className="flex h-full w-[287px] flex-col bg-slate-50 border-r border-slate-200">
-            <div className="flex h-16 items-center px-6 border-b border-slate-200">
+        <div className="flex h-full w-[287px] flex-col bg-white border-r border-slate-300">
+            <div className="flex h-16 items-center px-6 border-b border-slate-300">
                 <div className="flex items-center gap-2 font-bold text-xl text-slate-900">
                     <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-white">
                         C
@@ -82,7 +82,7 @@ export function Sidebar() {
                                     <span className={cn("leading-none mb-1", isActive ? "text-slate-900 font-bold" : "text-slate-700")}>
                                         {item.name}
                                     </span>
-                                    <span className="text-[10px] text-slate-400 font-normal leading-none">
+                                    <span className="text-[10px] text-slate-500 font-bold leading-none">
                                         {item.subtitle}
                                     </span>
                                 </div>
@@ -93,12 +93,12 @@ export function Sidebar() {
             </div>
 
             {/* Live Metrics */}
-            <div className="px-6 py-4 border-t border-slate-200">
-                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-4">Live Metrics</h4>
+            <div className="px-6 py-4 border-t border-slate-300">
+                <h4 className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-4">Live Metrics</h4>
                 <div className="space-y-4">
                     <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-600 font-medium">Active Campaigns</span>
+                            <span className="text-slate-700 font-medium">Active Campaigns</span>
                             <span className="text-slate-900 font-bold">12/15</span>
                         </div>
                         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">

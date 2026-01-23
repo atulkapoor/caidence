@@ -119,7 +119,7 @@ export default function DesignStudioPage() {
 
     return (
         <DashboardLayout>
-            <div className="h-[calc(100vh-48px)] flex flex-col bg-slate-50/50 relative">
+            <div className="h-[calc(100vh-48px)] flex flex-col bg-slate-100 relative">
                 {/* Modal Overlay */}
                 {previewDesign && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setPreviewDesign(null)}>
