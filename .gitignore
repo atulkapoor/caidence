@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.DS_Store
+
+# Node
+node_modules/
+.next/
+dist/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE methods
+.idea/
+.vscode/

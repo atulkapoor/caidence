@@ -1,0 +1,152 @@
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+
+# --- Campaign Schemas ---
+class CampaignBase(BaseModel):
+    title: str
+    status: str = "draft"
+
+class CampaignCreate(CampaignBase):
+    pass
+
+class Campaign(CampaignBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    owner_id: int
+
+    class Config:
+        from_attributes = True
+
+# --- Project Schemas ---
+class ProjectBase(BaseModel):
+    name: str
+    objective: str
+    project_type: str
+    strategy_json: Optional[str] = None
+
+class ProjectCreate(ProjectBase):
+    pass
+
+class Project(ProjectBase):
+    id: int
+    status: str
+    created_at: datetime
+    owner_id: int
+
+    class Config:
+        from_attributes = True
+
+# --- Activity Schemas ---
+class ActivityLogBase(BaseModel):
+    action: str
+    details: str
+
+class ActivityLogCreate(ActivityLogBase):
+    pass
+
+class ActivityLog(ActivityLogBase):
+    id: int
+    timestamp: datetime
+    user_id: int
+
+    class Config:
+        from_attributes = True
+
+# --- Dashboard Stats Schema ---
+class DashboardStats(BaseModel):
+    active_campaigns: int
+    active_campaigns_growth: float
+    ai_workflows: int
+    content_generated: int
+    ai_conversations: int
+
+# --- Content Studio Schemas ---
+class ContentGenerationBase(BaseModel):
+    title: str
+    platform: str
+    content_type: str
+    prompt: str
+
+class ContentGenerationCreate(ContentGenerationBase):
+    pass
+
+class ContentGeneration(ContentGenerationBase):
+    id: int
+    result: Optional[str] = None
+    created_at: datetime
+    user_id: int
+
+    class Config:
+        from_attributes = True
+
+# --- Design Studio Schemas ---
+class DesignAssetBase(BaseModel):
+    title: str
+    style: str
+    aspect_ratio: str
+    prompt: str
+    brand_colors: Optional[str] = None
+    reference_image: Optional[str] = None
+
+class DesignAssetCreate(DesignAssetBase):
+    pass
+
+class DesignAsset(DesignAssetBase):
+    id: int
+    image_url: Optional[str] = None
+    created_at: datetime
+    user_id: int
+
+    class Config:
+        from_attributes = True
+
+# --- Workflow Studio Schemas ---
+class WorkflowBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    steps_json: str # JSON string
+
+class WorkflowCreate(WorkflowBase):
+    pass
+
+class Workflow(WorkflowBase):
+    id: int
+    status: str
+    run_count: int
+    last_run: Optional[datetime] = None
+    created_at: datetime
+    user_id: int
+
+    class Config:
+        from_attributes = True
+
+class WorkflowRun(BaseModel):
+    id: int
+    workflow_id: int
+    status: str
+    logs: Optional[str] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+# --- Presentation Studio Schemas ---
+class PresentationBase(BaseModel):
+    title: str
+    source_type: str # 'upload' or 'powerbi'
+
+class PresentationCreate(PresentationBase):
+    pass
+
+class Presentation(PresentationBase):
+    id: int
+    slides_json: Optional[str] = None
+    slide_count: int
+    created_at: datetime
+    user_id: int
+
+    class Config:
+        from_attributes = True
