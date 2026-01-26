@@ -2,18 +2,22 @@
 
 import { useState } from "react";
 import { useTabState } from "@/hooks/useTabState";
-import { Users, Share2, FileText, Lightbulb, ChevronRight, Save, LayoutDashboard } from "lucide-react";
+import { Users, Share2, FileText, Lightbulb, ChevronRight, Save, LayoutDashboard, Pencil, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
+import { updateStrategy } from "@/lib/api/agent";
 
 interface StrategyResultProps {
     strategy: any; // JSON object from backend
     projectId: number;
 }
 
-export function StrategyResult({ strategy, projectId }: StrategyResultProps) {
+export function StrategyResult({ strategy: initialStrategy, projectId }: StrategyResultProps) {
+    const [strategy, setStrategy] = useState(initialStrategy);
     const [activeTab, setActiveTab] = useTabState("audience");
+    const [isEditing, setIsEditing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     const tabs = [
         { id: "audience", label: "Target Audience", icon: Users },
@@ -42,13 +46,54 @@ export function StrategyResult({ strategy, projectId }: StrategyResultProps) {
                                 Dashboard
                             </button>
                         </Link>
-                        <button
-                            onClick={() => toast.success("Project saved successfully!")}
-                            className="px-4 py-2 bg-white text-indigo-600 hover:bg-indigo-50 rounded-xl text-sm font-bold shadow-lg transition-colors flex items-center gap-2"
-                        >
-                            <Save className="w-4 h-4" />
-                            Save Project
-                        </button>
+
+                        {isEditing ? (
+                            <>
+                                <button
+                                    onClick={() => setIsEditing(false)}
+                                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-bold backdrop-blur-sm transition-colors flex items-center gap-2"
+                                >
+                                    <X className="w-4 h-4" />
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        setIsSaving(true);
+                                        try {
+                                            await updateStrategy(projectId, strategy);
+                                            setIsEditing(false);
+                                            toast.success("Strategy updated successfully!");
+                                        } catch (e) {
+                                            toast.error("Failed to save changes");
+                                        } finally {
+                                            setIsSaving(false);
+                                        }
+                                    }}
+                                    className="px-4 py-2 bg-white text-indigo-600 hover:bg-indigo-50 rounded-xl text-sm font-bold shadow-lg transition-colors flex items-center gap-2"
+                                >
+                                    {isSaving ? <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div> : <Check className="w-4 h-4" />}
+                                    Save Changes
+                                </button>
+                            </>
+                        ) : (
+                            <button
+                                onClick={() => setIsEditing(true)}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-bold backdrop-blur-sm transition-colors flex items-center gap-2"
+                            >
+                                <Pencil className="w-4 h-4" />
+                                Edit Strategy
+                            </button>
+                        )}
+
+                        {!isEditing && (
+                            <button
+                                onClick={() => toast.success("Project saved successfully!")}
+                                className="px-4 py-2 bg-white text-indigo-600 hover:bg-indigo-50 rounded-xl text-sm font-bold shadow-lg transition-colors flex items-center gap-2"
+                            >
+                                <Save className="w-4 h-4" />
+                                Save Project
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -82,8 +127,33 @@ export function StrategyResult({ strategy, projectId }: StrategyResultProps) {
                                     <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mb-4 text-indigo-600">
                                         <Users className="w-6 h-6" />
                                     </div>
-                                    <h4 className="font-bold text-slate-900 text-lg mb-2">{persona.name}</h4>
-                                    <p className="text-slate-600 text-sm leading-relaxed">{persona.description}</p>
+                                    {isEditing ? (
+                                        <div className="space-y-3">
+                                            <input
+                                                className="w-full font-bold text-lg bg-white border border-slate-200 rounded px-2 py-1"
+                                                value={persona.name}
+                                                onChange={(e) => {
+                                                    const newAudience = [...strategy.target_audience];
+                                                    newAudience[i].name = e.target.value;
+                                                    setStrategy({ ...strategy, target_audience: newAudience });
+                                                }}
+                                            />
+                                            <textarea
+                                                className="w-full text-sm bg-white border border-slate-200 rounded px-2 py-1 h-24"
+                                                value={persona.description}
+                                                onChange={(e) => {
+                                                    const newAudience = [...strategy.target_audience];
+                                                    newAudience[i].description = e.target.value;
+                                                    setStrategy({ ...strategy, target_audience: newAudience });
+                                                }}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <h4 className="font-bold text-slate-900 text-lg mb-2">{persona.name}</h4>
+                                            <p className="text-slate-600 text-sm leading-relaxed">{persona.description}</p>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>

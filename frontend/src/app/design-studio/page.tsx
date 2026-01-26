@@ -565,6 +565,20 @@ export default function DesignStudioPage() {
                                                     >
                                                         View <ArrowRight className="w-3 h-3" />
                                                     </button>
+
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (confirm("Delete this design?")) {
+                                                                setRecentDesigns(prev => prev.filter(p => p.id !== asset.id));
+                                                                // toast.success("Design deleted"); // toast not imported here? It is not.
+                                                            }
+                                                        }}
+                                                        className="text-slate-400 hover:text-red-500 transition-colors ml-4"
+                                                        title="Delete"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
