@@ -3,6 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ArrowLeft, Play, Clock, CheckCircle, AlertCircle, Terminal, FileJson, Settings, Layers, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTabState } from "@/hooks/useTabState";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchWorkflowById, fetchWorkflowHistory, runWorkflow, Workflow, WorkflowRun } from "@/lib/api";
@@ -24,7 +25,8 @@ export default function WorkflowDetailPage({ params }: PageProps) {
     const [workflow, setWorkflow] = useState<Workflow | null>(null);
     const [history, setHistory] = useState<WorkflowRun[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<"config" | "history">("history");
+    // @ts-ignore
+    const [activeTab, setActiveTab] = useTabState("history");
     const [isRunning, setIsRunning] = useState(false);
 
     // State for the visual builder

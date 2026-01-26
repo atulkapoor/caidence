@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+// import { useSearchParams } from "next/navigation"; // Not needed with useTabState
+import { useTabState } from "@/hooks/useTabState";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { SettingsSidebar } from "@/components/settings/SettingsSidebar";
 
@@ -15,16 +16,9 @@ import { DashboardSettings } from "@/components/settings/DashboardSettings"; // 
 import { Users, Plus } from "lucide-react"; // For new Members placeholder
 
 export default function SettingsPage() {
-    const searchParams = useSearchParams();
-    const [activeTab, setActiveTab] = useState("profile");
-
-    // Allow deep linking via ?tab=billing
-    useEffect(() => {
-        const tab = searchParams.get("tab");
-        if (tab) {
-            setActiveTab(tab);
-        }
-    }, [searchParams]);
+    // const searchParams = useSearchParams(); // Removed, handled by useTabState
+    // Use useTabState for full deep linking (read & write to URL)
+    const [activeTab, setActiveTab] = useTabState("profile");
 
     // Map content to tabs
     const renderContent = () => {

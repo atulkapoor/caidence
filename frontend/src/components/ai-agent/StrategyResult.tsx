@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTabState } from "@/hooks/useTabState";
 import { Users, Share2, FileText, Lightbulb, ChevronRight, Save, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -12,7 +13,7 @@ interface StrategyResultProps {
 }
 
 export function StrategyResult({ strategy, projectId }: StrategyResultProps) {
-    const [activeTab, setActiveTab] = useState("audience");
+    const [activeTab, setActiveTab] = useTabState("audience");
 
     const tabs = [
         { id: "audience", label: "Target Audience", icon: Users },
