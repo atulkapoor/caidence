@@ -6,6 +6,11 @@ from datetime import datetime
 class CampaignBase(BaseModel):
     title: str
     status: str = "draft"
+    budget: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    channels: Optional[str] = None
+    audience_targeting: Optional[str] = None
 
 class CampaignCreate(CampaignBase):
     pass
@@ -54,6 +59,17 @@ class ActivityLog(ActivityLogBase):
     class Config:
         from_attributes = True
 
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: Optional[str] = None
+    role: str
+    organization_id: Optional[int]
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
+
 # --- Dashboard Stats Schema ---
 class DashboardStats(BaseModel):
     active_campaigns: int
@@ -61,6 +77,25 @@ class DashboardStats(BaseModel):
     ai_workflows: int
     content_generated: int
     ai_conversations: int
+
+class PerformanceMetric(BaseModel):
+    name: str
+    campaigns: int
+    engagement: int
+
+class CampaignSummary(BaseModel):
+    title: str
+    status: str
+    description: str
+    progress: int
+    budget: str
+    channels: int
+
+class DashboardData(BaseModel):
+    stats: DashboardStats
+    activities: List['ActivityLog']
+    performance: List[PerformanceMetric]
+    featuredCampaign: Optional[CampaignSummary] = None
 
 # --- Content Studio Schemas ---
 class ContentGenerationBase(BaseModel):

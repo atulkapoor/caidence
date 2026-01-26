@@ -1,25 +1,11 @@
-import { useEffect, useState } from "react";
-import { FileText, Image, Mail, Clock, MessageSquare, Briefcase } from "lucide-react";
-import { fetchActivities, type ActivityLog } from "@/lib/api";
+import { FileText, Image, Mail, Clock, MessageSquare } from "lucide-react";
+import { type ActivityLog } from "@/lib/api";
 
-export function RecentActivity() {
-    const [activities, setActivities] = useState<ActivityLog[]>([]);
-    const [loading, setLoading] = useState(true);
+interface RecentActivityProps {
+    activities: ActivityLog[];
+}
 
-    useEffect(() => {
-        async function loadActivities() {
-            try {
-                const data = await fetchActivities();
-                setActivities(data);
-            } catch (error) {
-                console.error("Failed to load activities", error);
-            } finally {
-                setLoading(false);
-            }
-        }
-        loadActivities();
-    }, []);
-
+export function RecentActivity({ activities }: RecentActivityProps) {
     const getIconForAction = (action: string) => {
         const lower = action.toLowerCase();
         if (lower.includes("email")) return { icon: Mail, color: "text-orange-600", bg: "bg-orange-100", type: "Email" };
@@ -28,8 +14,6 @@ export function RecentActivity() {
         if (lower.includes("workflow")) return { icon: Clock, color: "text-emerald-600", bg: "bg-emerald-100", type: "Workflow" };
         return { icon: FileText, color: "text-slate-600", bg: "bg-slate-100", type: "Content" };
     };
-
-    if (loading) return <div className="p-8 text-center text-slate-400">Loading activities...</div>;
 
     if (activities.length === 0) {
         return (

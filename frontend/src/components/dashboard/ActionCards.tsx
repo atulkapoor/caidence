@@ -18,7 +18,7 @@ export function ActionCards() {
                         <div>
                             <h2 className="text-4xl font-black text-white mb-3">AI Agent</h2>
                             <p className="text-lg text-blue-100 font-medium max-w-sm">
-                                Automated campaign creation with intelligent AI
+                                Automated campaign creation with AI
                             </p>
                         </div>
                         <button className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-indigo-600 transition-colors hover:bg-blue-50">

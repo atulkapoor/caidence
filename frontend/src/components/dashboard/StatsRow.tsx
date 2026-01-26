@@ -19,7 +19,7 @@ export function StatsRow({ stats }: StatsRowProps) {
         },
         {
             label: "AI WORKFLOWS",
-            value: stats?.ai_workflows || "5",
+            value: stats?.ai_workflows || "0",
             trend: "Active this month",
             trendUp: true,
             icon: Share2,
@@ -29,8 +29,8 @@ export function StatsRow({ stats }: StatsRowProps) {
         },
         {
             label: "CONTENT GENERATED",
-            value: stats?.content_generated || "5",
-            trend: "+25% this month",
+            value: stats?.content_generated || "0",
+            trend: "Updated this month",
             trendUp: true,
             icon: PenTool,
             color: "text-emerald-600",
@@ -39,7 +39,7 @@ export function StatsRow({ stats }: StatsRowProps) {
         },
         {
             label: "AI CONVERSATIONS",
-            value: stats?.ai_conversations || "847",
+            value: stats?.ai_conversations || "0",
             trend: "+89% this month",
             trendUp: true,
             icon: MessageSquare,

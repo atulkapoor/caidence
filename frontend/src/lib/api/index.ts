@@ -22,3 +22,4 @@ export * from "./discovery";
 export * from "./crm";
 export * from "./admin";
 export * from "./brands";
+export * from "./organizations";

@@ -94,7 +94,11 @@ export function Sidebar() {
                             </h3>
                             <div className="space-y-0.5">
                                 {group.items.map((item) => {
-                                    const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                                    // Normalize paths by removing trailing slashes for comparison
+                                    const currentPath = pathname?.replace(/\/$/, "") || "";
+                                    const itemPath = item.href.replace(/\/$/, "");
+                                    const isActive = currentPath === itemPath || currentPath.startsWith(itemPath + "/");
+
                                     return (
                                         <Link
                                             key={item.name}

@@ -1,16 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Bot, UploadCloud, ChevronRight, Wand2, Loader2, AlertCircle } from "lucide-react";
 import { StrategyResult } from "@/components/ai-agent/StrategyResult";
 import { StrategyHistory } from "@/components/ai-agent/StrategyHistory";
 import { useTabState } from "@/hooks/useTabState";
 import { toast } from "sonner";
+import { usePreferences } from "@/context/PreferencesContext";
+
+const AGENT_PLACEHOLDERS: Record<string, { project: string; objective: string }> = {
+    "Technology": { project: "e.g. SaaS Product Launch", objective: "Describe product capabilities, user pain points, and launch goals..." },
+    "Real Estate": { project: "e.g. Luxury Apartment Launch", objective: "Describe property features, target demographic, and key selling points..." },
+    "E-Commerce": { project: "e.g. Seasonal Sale Campaign", objective: "Describe discount strategy, target segments, and featured products..." },
+    "Healthcare": { project: "e.g. New Clinic Opening", objective: "Describe patient services, facility highlights, and community outreach goals..." }
+};
 
 const API_Base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function AIAgentPage() {
+    const { industry } = usePreferences();
     const [step, setStep] = useState(1);
     const [dragging, setDragging] = useState(false);
 
@@ -18,6 +27,30 @@ export default function AIAgentPage() {
     const [role, setRole] = useState("Marketing Manager");
     const [projectType, setProjectType] = useState("");
     const [objective, setObjective] = useState("");
+
+    // Sync defaults with Industry
+    useEffect(() => {
+        if (!industry) return;
+
+        switch (industry) {
+            case "Real Estate":
+                setRole("Real Estate Agent");
+                setProjectType("Luxury Apartment Launch");
+                break;
+            case "Technology":
+                setRole("Product Marketing Manager");
+                setProjectType("SaaS Product Launch");
+                break;
+            case "E-Commerce":
+                setRole("E-Commerce Manager");
+                setProjectType("Seasonal Sale Campaign");
+                break;
+            case "Healthcare":
+                setRole("Medical Practice Manager");
+                setProjectType("New Clinic Opening");
+                break;
+        }
+    }, [industry]);
 
     // Submitting State
     const [loading, setLoading] = useState(false);
@@ -198,7 +231,7 @@ export default function AIAgentPage() {
                                         <label className="text-sm font-bold text-slate-700">Project Type</label>
                                         <input
                                             type="text"
-                                            placeholder="e.g. Luxury Apartment Launch"
+                                            placeholder={AGENT_PLACEHOLDERS[industry]?.project || "e.g. Luxury Apartment Launch"}
                                             className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium placeholder:text-slate-400"
                                             value={projectType}
                                             onChange={(e) => setProjectType(e.target.value)}
@@ -215,7 +248,7 @@ export default function AIAgentPage() {
                                     </label>
                                     <textarea
                                         className="w-full h-32 p-4 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none font-medium placeholder:text-slate-400"
-                                        placeholder="Describe your campaign goals, target audience, and key selling points..."
+                                        placeholder={AGENT_PLACEHOLDERS[industry]?.objective || "Describe your campaign goals, target audience, and key selling points..."}
                                         value={objective}
                                         onChange={(e) => setObjective(e.target.value)}
                                     ></textarea>

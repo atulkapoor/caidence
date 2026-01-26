@@ -7,7 +7,7 @@ import { Users, Building, CreditCard, Shield, UserPlus, Search, MoreVertical } f
 import { cn } from "@/lib/utils";
 import { AccessControlTab } from "@/components/admin/AccessControlTab";
 import { toast } from "sonner";
-import { fetchAdminUsers, approveUser, inviteUser, AdminUser } from "@/lib/api";
+import { fetchAdminUsers, fetchOrganizationUsers, approveUser, inviteUser, AdminUser } from "@/lib/api";
 
 // --- Types ---
 interface PlatformOverview {
@@ -138,6 +138,21 @@ function UserManagement() {
             const data = await fetchAdminUsers();
             setUsers(data);
         } catch (error) {
+            // Fallback: Try fetching org users if admin fetch fails (e.g. Agency Admin accessing this)
+            try {
+                const userJson = localStorage.getItem("user");
+                if (userJson) {
+                    const currentUser = JSON.parse(userJson);
+                    if (currentUser.organization_id) {
+                        const orgUsers = await fetchOrganizationUsers(currentUser.organization_id);
+                        setUsers(orgUsers as AdminUser[]);
+                        return;
+                    }
+                }
+            } catch (fbError) {
+                console.error("Fallback failed", fbError);
+            }
+
             console.error(error);
             toast.error("Failed to fetch users");
         } finally {

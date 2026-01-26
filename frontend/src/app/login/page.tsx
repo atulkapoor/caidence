@@ -6,32 +6,36 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { login } from "@/lib/api";
+import { login, fetchCurrentUser } from "@/lib/api";
 
 export default function LoginPage() {
     const router = useRouter();
-    const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        email: "",
-        password: ""
-    });
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
+        setIsLoading(true);
 
         try {
-            const data = await login(formData);
-            if (data.access_token) {
-                localStorage.setItem("token", data.access_token);
-                toast.success("Welcome back!");
-                router.push("/dashboard");
+            const data = await login({ email, password });
+            localStorage.setItem("token", data.access_token);
+            toast.success("Welcome back!");
+
+            // Fetch and store user details for RBAC & Fallback logic
+            try {
+                const user = await fetchCurrentUser();
+                localStorage.setItem("user", JSON.stringify(user));
+            } catch (userErr) {
+                console.error("Failed to fetch user details", userErr);
             }
+
+            router.push("/dashboard");
         } catch (error: any) {
-            console.error("Login error", error);
-            toast.error(error.message || "Invalid credentials");
+            toast.error(error.message || "Failed to login");
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
     };
 
@@ -44,7 +48,7 @@ export default function LoginPage() {
                 </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleLogin} className="space-y-6">
                 <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">Email Address</label>
                     <input
@@ -52,8 +56,8 @@ export default function LoginPage() {
                         required
                         className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
                         placeholder="name@company.com"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                     />
                 </div>
 
@@ -69,18 +73,18 @@ export default function LoginPage() {
                         required
                         className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
                         placeholder="••••••••"
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
                     />
                 </div>
 
                 <button
                     type="submit"
-                    disabled={loading}
+                    disabled={isLoading}
                     className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                    {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {loading ? "Signing in..." : "Sign in"}
+                    {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {isLoading ? "Signing in..." : "Sign in"}
                 </button>
             </form>
 

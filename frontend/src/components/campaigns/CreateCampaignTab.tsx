@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Sparkles, Plus, Target, Calendar as CalendarIcon, DollarSign, X, Bell, Mail, MessageSquare, Phone } from "lucide-react";
-import { sendTestEmail, sendTestSMS, sendTestWhatsApp } from "@/lib/api";
+import { sendTestEmail, sendTestSMS, sendTestWhatsApp, createCampaign, CampaignDraft } from "@/lib/api";
 import { AudienceOverlapStub } from "@/components/analytics/AudienceOverlapStub";
 import { StrategyComparator } from "@/components/campaigns/StrategyComparator";
-import { CampaignDraft } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export function CreateCampaignTab() {
     const [name, setName] = useState("");
@@ -108,7 +109,7 @@ export function CreateCampaignTab() {
 
             // Add the actual logs from the backend
             if (draft.agent_logs) {
-                setAgentLogs(prev => [...prev, ...draft.agent_logs]);
+                setAgentLogs(prev => [...prev, ...(draft.agent_logs || [])]);
             }
 
             // Wait a moment so user can read logs
@@ -132,6 +133,35 @@ export function CreateCampaignTab() {
             console.error("Agent Wizard Failed", error);
             setIsGenerating(false);
             alert("Failed to generate plan. Please try again.");
+        }
+    };
+
+
+    const router = useRouter();
+
+    const handleLaunch = async () => {
+        if (!name) {
+            toast.error("Please enter a campaign name");
+            return;
+        }
+
+        try {
+            await createCampaign({
+                title: name,
+                description: description || "No description",
+                status: "active",
+                budget: budget,
+                start_date: startDate ? new Date(startDate).toISOString() : new Date().toISOString(),
+                end_date: endDate ? new Date(endDate).toISOString() : undefined,
+                channels: JSON.stringify(selectedChannels),
+                audience_targeting: JSON.stringify({ audience, goals, brandColors })
+            });
+            toast.success("Campaign launched successfully!");
+            // Force a small delay or revalidation if needed, but push is enough
+            router.push("/campaigns");
+        } catch (err) {
+            toast.error("Failed to launch campaign");
+            console.error(err);
         }
     };
 
@@ -444,7 +474,10 @@ export function CreateCampaignTab() {
 
                     {/* Action Button */}
                     <div className="pt-4">
-                        <button className="w-full py-4 bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-700 hover:to-emerald-700 text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2">
+                        <button
+                            onClick={handleLaunch}
+                            className="w-full py-4 bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-700 hover:to-emerald-700 text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2"
+                        >
                             🚀 Launch Campaign
                         </button>
                     </div>

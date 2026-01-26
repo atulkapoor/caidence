@@ -3,8 +3,17 @@
 import { useState, useRef, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Send, Sparkles, Paperclip, User, Bot, Crown, ArrowRight } from "lucide-react";
+import { usePreferences } from "@/context/PreferencesContext";
+
+const QUICK_PROMPTS: Record<string, string[]> = {
+    "Technology": ["Draft a SaaS onboarding email", "Analyze churn metrics", "Feature announcement post", "Competitor battlecard"],
+    "Real Estate": ["Write a listing description", "Market update for buyers", "Open house checklist", "Neighborhood guide"],
+    "E-Commerce": ["Black Friday campaign ideas", "Abandoned cart email", "Product description generator", "Ad copy for Instagram"],
+    "Healthcare": ["Patient welcome packet", "Telehealth guidelines", "Wellness newsletter topic", "Appointment reminder script"]
+};
 
 export default function AIChatPage() {
+    const { industry } = usePreferences();
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<any[]>([]);
     const [sessionId, setSessionId] = useState<string | null>(null);
@@ -74,7 +83,7 @@ export default function AIChatPage() {
                             </div>
                             <div>
                                 <h2 className="font-bold text-slate-900">C(AI)DENCE Assistant</h2>
-                                <p className="text-xs text-slate-500 font-medium">Always active • Strategy Expert</p>
+                                <p className="text-xs text-slate-500 font-medium">Always active • {industry || "Strategy"} Expert</p>
                             </div>
                         </div>
                     </div>
@@ -86,7 +95,7 @@ export default function AIChatPage() {
                                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center shadow-inner">
                                     <Bot className="w-10 h-10 text-slate-400" />
                                 </div>
-                                <p className="font-bold text-lg text-slate-400">Start a conversation with C(AI)DENCE</p>
+                                <p className="font-bold text-lg text-slate-400">Start a conversation about {industry || "Marketing Strategy"}</p>
                             </div>
                         )}
 
@@ -153,7 +162,7 @@ export default function AIChatPage() {
                     <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                         <h3 className="font-bold text-slate-900 mb-3 text-sm">Quick Prompts</h3>
                         <div className="space-y-2">
-                            {["Draft a welcome email", "Analyze campaign ROI", "Suggest ad headlines", "Create social calendar"].map((prompt, i) => (
+                            {(QUICK_PROMPTS[industry] || ["Draft a welcome email", "Analyze campaign ROI", "Suggest ad headlines", "Create social calendar"]).map((prompt, i) => (
                                 <button key={i} onClick={() => setInput(prompt)} className="w-full text-left p-3 rounded-lg border border-slate-100 hover:border-teal-200 hover:bg-teal-50 transition-all text-xs font-medium text-slate-600 flex items-center justify-between group">
                                     {prompt}
                                     <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-teal-600" />

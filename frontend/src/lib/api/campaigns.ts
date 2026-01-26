@@ -8,8 +8,10 @@ export interface Campaign {
     progress?: number;
     budget?: string;
     spent?: string;
-    channels?: string[];
-    created_at: string;
+    start_date?: string;
+    end_date?: string;
+    channels?: string; // JSON string
+    audience_targeting?: string; // JSON string
 }
 
 export async function fetchCampaigns(): Promise<Campaign[]> {
@@ -18,7 +20,16 @@ export async function fetchCampaigns(): Promise<Campaign[]> {
     return res.json();
 }
 
-export async function createCampaign(data: { title: string; description?: string; status?: string }): Promise<Campaign> {
+export async function createCampaign(data: {
+    title: string;
+    description?: string;
+    status?: string;
+    budget?: string;
+    start_date?: string;
+    end_date?: string;
+    channels?: string;
+    audience_targeting?: string;
+}): Promise<Campaign> {
     const res = await fetch(`${API_BASE_URL}/campaigns/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

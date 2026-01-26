@@ -41,6 +41,13 @@ class Campaign(Base):
 
     owner = relationship("User", back_populates="campaigns")
 
+    # Expanded Fields for Real Implementation
+    budget = Column(Text, nullable=True)  # JSON or simple string (e.g. {"total": 5000, "allocation": {...}})
+    start_date = Column(DateTime(timezone=True), nullable=True)
+    end_date = Column(DateTime(timezone=True), nullable=True)
+    channels = Column(Text, nullable=True)  # JSON array of strings
+    audience_targeting = Column(Text, nullable=True)  # JSON object describing audience
+
 class ActivityLog(Base):
     __tablename__ = "activities"
 

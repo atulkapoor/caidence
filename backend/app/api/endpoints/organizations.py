@@ -9,6 +9,7 @@ from sqlalchemy.future import select
 
 from app.core.database import get_db
 from app.models import Organization, User
+from app.schemas import schemas
 from app.api.endpoints.auth import get_current_active_user
 from app.services.auth_service import is_super_admin, is_agency_level
 
@@ -173,3 +174,20 @@ async def get_organization_usage(
         total_campaigns=47,
         storage_used_mb=256.7
     )
+from app.schemas import schemas
+
+@router.get("/{org_id}/users", response_model=List[schemas.UserResponse])
+async def list_organization_users(
+    org_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    List users in an organization.
+    """
+    # Permission check
+    if not is_super_admin(current_user.role) and current_user.organization_id != org_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this organization's users")
+    
+    result = await db.execute(select(User).where(User.organization_id == org_id))
+    return result.scalars().all()

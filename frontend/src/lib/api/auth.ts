@@ -45,3 +45,28 @@ export async function register(data: RegisterData) {
 
     return res.json();
 }
+// ... existing imports
+
+export interface User {
+    id: number;
+    email: string;
+    full_name: string;
+    role: string;
+    organization_id: number;
+    is_active: boolean;
+    is_approved: boolean;
+}
+
+export async function fetchCurrentUser(): Promise<User> {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("No token found");
+
+    const res = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: {
+            "Authorization": `Bearer ${token}`
+        }
+    });
+
+    if (!res.ok) throw new Error("Failed to fetch user");
+    return res.json();
+}

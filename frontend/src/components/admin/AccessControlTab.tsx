@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { fetchAdminUsers, AdminUser } from "@/lib/api";
+import { fetchAdminUsers, fetchOrganizationUsers, AdminUser } from "@/lib/api";
 import { toast } from "sonner";
 import { Search, ChevronDown, ChevronRight, Check, X, Shield, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,6 +45,21 @@ export function AccessControlTab() {
             const data = await fetchAdminUsers();
             setUsers(data);
         } catch (error) {
+            // Fallback: If 403/Fail, try fetching org users (Agency Admin view)
+            try {
+                const userJson = localStorage.getItem("user");
+                if (userJson) {
+                    const currentUser = JSON.parse(userJson);
+                    if (currentUser.organization_id) {
+                        const orgUsers = await fetchOrganizationUsers(currentUser.organization_id);
+                        setUsers(orgUsers as ExtendedAdminUser[]);
+                        return;
+                    }
+                }
+            } catch (fbError) {
+                console.error("Fallback fetch failed", fbError);
+            }
+
             console.error(error);
             toast.error("Failed to load users");
         } finally {
@@ -148,7 +163,7 @@ export function AccessControlTab() {
                                         </div>
                                     </div>
                                     <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                        {(user.permissions?.filter(p => p.access_level === 'write').length || 0)} Modules Enabled
+                                        {user.role === 'super_admin' ? MODULES.length : (user.permissions?.filter(p => p.access_level === 'write').length || 0)} Modules Enabled
                                     </div>
                                 </div>
 
@@ -169,7 +184,8 @@ export function AccessControlTab() {
                                             // Simplification: We blindly toggle record.
 
                                             const perm = user.permissions?.find(p => p.module === mod.key);
-                                            const isEnabled = perm ? perm.access_level === 'write' : true; // Defaulting to true for demo UX
+                                            const isSuperAdmin = user.role === 'super_admin';
+                                            const isEnabled = perm ? perm.access_level === 'write' : isSuperAdmin;
 
                                             return (
                                                 <div key={mod.key} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg">
