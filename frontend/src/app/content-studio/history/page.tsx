@@ -1,7 +1,7 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { History, Search, Filter, ArrowLeft, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, PenTool } from "lucide-react";
+import { History, Search, Filter, ArrowLeft, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, PenTool, Calendar } from "lucide-react";
 import { fetchContentGenerations, ContentGeneration } from "@/lib/api";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -10,6 +10,8 @@ export default function ContentHistoryPage() {
     const [history, setHistory] = useState<ContentGeneration[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+    const [selectedType, setSelectedType] = useState<string | null>(null);
+    const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
 
     useEffect(() => {
         const loadHistory = async () => {
@@ -25,11 +27,31 @@ export default function ContentHistoryPage() {
 
     const platforms = ["LinkedIn", "Twitter", "Blog", "Email", "Facebook", "Instagram"];
 
+    // Extract unique content types from history for the filter dropdown
+    const contentTypes = Array.from(new Set(history.map(item => item.content_type).filter(Boolean)));
+
     const filteredHistory = history.filter(item => {
         const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.result?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesPlatform = selectedPlatform ? item.platform === selectedPlatform : true;
-        return matchesSearch && matchesPlatform;
+
+        let matchesType = true;
+        if (selectedType) {
+            matchesType = item.content_type === selectedType;
+        }
+
+        let matchesDate = true;
+        if (dateRange.start) {
+            matchesDate = new Date(item.created_at) >= new Date(dateRange.start);
+        }
+        if (dateRange.end && matchesDate) {
+            // Set end date to end of day
+            const endDate = new Date(dateRange.end);
+            endDate.setHours(23, 59, 59, 999);
+            matchesDate = new Date(item.created_at) <= endDate;
+        }
+
+        return matchesSearch && matchesPlatform && matchesType && matchesDate;
     });
 
     return (
@@ -48,30 +70,60 @@ export default function ContentHistoryPage() {
                     </nav>
 
                     {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                         <div className="space-y-1">
                             <h1 className="text-2xl font-bold text-slate-900">Content Library</h1>
                             <p className="text-sm text-slate-500">Manage and access all your generated content.</p>
                         </div>
 
-                        <div className="flex items-center gap-3">
-                            <div className="relative">
+                        <div className="flex flex-col sm:flex-row items-center gap-3">
+                            {/* Search */}
+                            <div className="relative w-full sm:w-auto">
                                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                 <input
                                     type="text"
                                     placeholder="Search content..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none w-64 shadow-sm"
+                                    className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none w-full sm:w-64 shadow-sm"
                                 />
                             </div>
-                            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 shadow-sm transition-colors">
-                                <Filter className="w-4 h-4" /> Filter
-                            </button>
+
+                            {/* Type Filter */}
+                            <select
+                                value={selectedType || ""}
+                                onChange={(e) => setSelectedType(e.target.value || null)}
+                                className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 outline-none focus:ring-2 focus:ring-violet-500 w-full sm:w-auto shadow-sm"
+                            >
+                                <option value="">All Types</option>
+                                {contentTypes.map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
+                            </select>
+
+                            {/* Date Filter */}
+                            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm w-full sm:w-auto">
+                                <Calendar className="w-4 h-4 text-slate-400" />
+                                <input
+                                    type="date"
+                                    value={dateRange.start}
+                                    onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                                    className="text-xs font-medium text-slate-600 outline-none bg-transparent w-24"
+                                    placeholder="Start"
+                                />
+                                <span className="text-slate-300">-</span>
+                                <input
+                                    type="date"
+                                    value={dateRange.end}
+                                    onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                                    className="text-xs font-medium text-slate-600 outline-none bg-transparent w-24"
+                                    placeholder="End"
+                                />
+                            </div>
                         </div>
                     </div>
 
-                    {/* Filters */}
+                    {/* Platform Filters */}
                     <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                         <button
                             onClick={() => setSelectedPlatform(null)}
@@ -103,6 +155,17 @@ export default function ContentHistoryPage() {
                                 </div>
                                 <h3 className="text-lg font-bold text-slate-900">No content found</h3>
                                 <p className="text-slate-500">Try adjusting your search or filters.</p>
+                                <button
+                                    onClick={() => {
+                                        setSearchQuery("");
+                                        setSelectedPlatform(null);
+                                        setSelectedType(null);
+                                        setDateRange({ start: "", end: "" });
+                                    }}
+                                    className="mt-4 text-violet-600 font-bold text-sm hover:underline"
+                                >
+                                    Clear all filters
+                                </button>
                             </div>
                         ) : (
                             filteredHistory.map((item) => (

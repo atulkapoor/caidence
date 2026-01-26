@@ -10,6 +10,7 @@ from app.models.models import (
     WorkflowRun,
     Presentation,
     ChatMessage,
+    UserPermission,
 )
 from app.models.organization import Organization
 from app.models.brand import Brand
@@ -29,4 +30,5 @@ __all__ = [
     "Organization",
     "Brand",
     "Creator",
+    "UserPermission",
 ]

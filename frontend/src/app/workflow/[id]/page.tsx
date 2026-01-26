@@ -312,10 +312,15 @@ export default function WorkflowDetailPage({ params }: PageProps) {
                                                                     className="w-full text-sm border-slate-200 rounded-lg py-2 px-3 bg-slate-50 focus:ring-indigo-500 focus:border-indigo-500"
                                                                 >
                                                                     <option value="ai_generate">AI Content Generation</option>
+                                                                    <option value="social_post">Post to Social Media</option>
                                                                     <option value="send_email">Send Email</option>
+                                                                    <option value="sms_send">Send SMS / WhatsApp</option>
+                                                                    <option value="crm_update">Update CRM Contact</option>
                                                                     <option value="slack_msg">Slack Notification</option>
+                                                                    <option value="http_request">HTTP Webhook / API Call</option>
                                                                     <option value="delay">Delay / Wait</option>
                                                                     <option value="condition">Conditional Logic</option>
+                                                                    <option value="approval">Request Approval</option>
                                                                 </select>
                                                             </div>
                                                         </div>

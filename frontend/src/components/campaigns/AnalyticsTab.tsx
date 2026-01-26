@@ -1,30 +1,15 @@
 import { useEffect, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
 import { TrendingUp, Users, DollarSign, Target } from "lucide-react";
-import { fetchCampaignAnalytics } from "@/lib/api";
+import { useCampaignAnalytics } from "@/hooks/useCampaignAnalytics";
 
 export function AnalyticsTab() {
-    const [data, setData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        async function load() {
-            try {
-                const stats = await fetchCampaignAnalytics();
-                setData(stats);
-            } catch (e) {
-                console.error(e);
-            } finally {
-                setLoading(false);
-            }
-        }
-        load();
-    }, []);
+    const { data, loading } = useCampaignAnalytics();
 
     if (loading) return <div className="p-10 text-center text-slate-400">Loading analytics...</div>;
     if (!data) return <div className="p-10 text-center text-slate-400">Failed to load data</div>;
 
-    const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff8042"];
+    const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)"];
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -57,8 +42,8 @@ export function AnalyticsTab() {
                             <AreaChart data={data.performance_chart}>
                                 <defs>
                                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#8884d8" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
+                                        <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
@@ -67,7 +52,7 @@ export function AnalyticsTab() {
                                 <Tooltip
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                 />
-                                <Area type="monotone" dataKey="value" stroke="#8884d8" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
+                                <Area type="monotone" dataKey="value" stroke="var(--chart-1)" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -84,7 +69,7 @@ export function AnalyticsTab() {
                                 <YAxis dataKey="name" type="category" width={60} axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 12, fontWeight: 500 }} />
                                 <Tooltip cursor={{ fill: '#F1F5F9' }} contentStyle={{ borderRadius: '12px' }} />
                                 <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={30}>
-                                    {data.channel_distribution.map((entry: any, index: number) => (
+                                    {data.channel_distribution.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Bar>

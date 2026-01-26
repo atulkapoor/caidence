@@ -1,7 +1,7 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Palette, Search, Filter, ArrowLeft, Download, Maximize2 } from "lucide-react";
+import { Palette, Search, Filter, ArrowLeft, Download, Maximize2, Calendar } from "lucide-react";
 import { fetchDesignAssets, DesignAsset } from "@/lib/api";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -10,6 +10,7 @@ export default function DesignHistoryPage() {
     const [history, setHistory] = useState<DesignAsset[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
+    const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
 
     useEffect(() => {
         const loadHistory = async () => {
@@ -29,7 +30,18 @@ export default function DesignHistoryPage() {
         const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.prompt.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesStyle = selectedStyle ? item.style === selectedStyle : true;
-        return matchesSearch && matchesStyle;
+
+        let matchesDate = true;
+        if (dateRange.start) {
+            matchesDate = new Date(item.created_at) >= new Date(dateRange.start);
+        }
+        if (dateRange.end && matchesDate) {
+            const endDate = new Date(dateRange.end);
+            endDate.setHours(23, 59, 59, 999);
+            matchesDate = new Date(item.created_at) <= endDate;
+        }
+
+        return matchesSearch && matchesStyle && matchesDate;
     });
 
     return (
@@ -48,26 +60,44 @@ export default function DesignHistoryPage() {
                     </nav>
 
                     {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                         <div className="space-y-1">
                             <h1 className="text-2xl font-bold text-slate-900">Design Library</h1>
                             <p className="text-sm text-slate-500">Manage and access all your generated visuals.</p>
                         </div>
 
-                        <div className="flex items-center gap-3">
-                            <div className="relative">
+                        <div className="flex flex-col sm:flex-row items-center gap-3">
+                            {/* Search */}
+                            <div className="relative w-full sm:w-auto">
                                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                 <input
                                     type="text"
                                     placeholder="Search visuals..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-rose-500 focus:border-transparent outline-none w-64 shadow-sm"
+                                    className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-rose-500 focus:border-transparent outline-none w-full sm:w-64 shadow-sm"
                                 />
                             </div>
-                            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 shadow-sm transition-colors">
-                                <Filter className="w-4 h-4" /> Filter
-                            </button>
+
+                            {/* Date Filter */}
+                            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm w-full sm:w-auto">
+                                <Calendar className="w-4 h-4 text-slate-400" />
+                                <input
+                                    type="date"
+                                    value={dateRange.start}
+                                    onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                                    className="text-xs font-medium text-slate-600 outline-none bg-transparent w-24"
+                                    placeholder="Start"
+                                />
+                                <span className="text-slate-300">-</span>
+                                <input
+                                    type="date"
+                                    value={dateRange.end}
+                                    onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                                    className="text-xs font-medium text-slate-600 outline-none bg-transparent w-24"
+                                    placeholder="End"
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -103,6 +133,16 @@ export default function DesignHistoryPage() {
                                 </div>
                                 <h3 className="text-lg font-bold text-slate-900">No visuals found</h3>
                                 <p className="text-slate-500">Try adjusting your search or filters.</p>
+                                <button
+                                    onClick={() => {
+                                        setSearchQuery("");
+                                        setSelectedStyle(null);
+                                        setDateRange({ start: "", end: "" });
+                                    }}
+                                    className="mt-4 text-rose-600 font-bold text-sm hover:underline"
+                                >
+                                    Clear all filters
+                                </button>
                             </div>
                         ) : (
                             filteredHistory.map((item) => (

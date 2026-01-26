@@ -2,20 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Users, Building, CreditCard, Activity, Search, Filter, MoreVertical, CheckCircle2, XCircle, Shield, UserPlus } from "lucide-react";
+import { Users, Building, CreditCard, Shield, UserPlus, Search, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AccessControlTab } from "@/components/admin/AccessControlTab";
 import { toast } from "sonner";
 import { fetchAdminUsers, approveUser, inviteUser, AdminUser } from "@/lib/api";
-
-// --- Types ---
-interface PlatformOverview {
-    total_organizations: number;
-    total_users: number;
-    total_brands: number;
-    pending_approvals: number;
-    mrr: number;
-    active_subscriptions: number;
-}
 
 // --- Types ---
 interface PlatformOverview {
@@ -52,7 +43,7 @@ export default function AdminPage() {
 
                     {/* Navigation Tabs */}
                     <div className="flex border-b border-slate-200">
-                        {["overview", "users", "organizations", "billing"].map((tab) => (
+                        {["overview", "users", "access", "organizations", "billing"].map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -63,7 +54,7 @@ export default function AdminPage() {
                                         : "border-transparent text-slate-500 hover:text-slate-700"
                                 )}
                             >
-                                {tab}
+                                {tab === "access" ? "Access Control" : tab}
                             </button>
                         ))}
                     </div>
@@ -72,6 +63,7 @@ export default function AdminPage() {
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {activeTab === "overview" && <AdminOverview />}
                         {activeTab === "users" && <UserManagement />}
+                        {activeTab === "access" && <AccessControlTab />}
                         {activeTab === "organizations" && <OrganizationManagement />}
                         {activeTab === "billing" && <BillingOverview />}
                     </div>
@@ -142,15 +134,10 @@ function UserManagement() {
     const loadUsers = async () => {
         setLoading(true);
         try {
-            // Check if mock mode or real
-            // For now, if fetch fails (e.g. auth error), we might fallback or show error
-            // ideally we just try-catch
             const data = await fetchAdminUsers();
             setUsers(data);
         } catch (error) {
             console.error(error);
-            // Fallback to mock if API fails (for demo purposes if auth not fully ready)
-            // But user asked for CRUD, so let's try to rely on API or show error
             toast.error("Failed to fetch users");
         } finally {
             setLoading(false);

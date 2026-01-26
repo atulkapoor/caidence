@@ -58,6 +58,14 @@
   --ring: hsl(262 83% 58%);
 
   --radius: 0.75rem;
+
+
+  /* Chart Colors */
+  --chart-1: hsl(262 83% 58%);
+  --chart-2: hsl(173 58% 39%);
+  --chart-3: hsl(197 37% 24%);
+  --chart-4: hsl(43 74% 66%);
+  --chart-5: hsl(27 87% 67%);
 }
 
 @layer base {
@@ -73,6 +81,13 @@
       radial-gradient(at 50% 0%, hsla(225, 39%, 97%, 1) 0, transparent 50%),
       radial-gradient(at 100% 0%, hsla(339, 49%, 97%, 1) 0, transparent 50%);
     background-attachment: fixed;
+  }
+
+  button,
+  [type='button'],
+  [type='submit'],
+  [type='reset'] {
+    cursor: pointer;
   }
 }
 

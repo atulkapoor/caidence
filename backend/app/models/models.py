@@ -27,6 +27,7 @@ class User(Base):
     campaigns = relationship("Campaign", back_populates="owner")
     activities = relationship("ActivityLog", back_populates="user")
     projects = relationship("Project", back_populates="owner")
+    permissions = relationship("UserPermission", back_populates="user", cascade="all, delete-orphan")
 
 class Campaign(Base):
     __tablename__ = "campaigns"
@@ -143,4 +144,26 @@ class ChatMessage(Base):
     content = Column(Text)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     user_id = Column(Integer, ForeignKey("users.id"))
+
+class UserPermission(Base):
+    __tablename__ = "user_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    module = Column(String)  # Key from Sidebar (e.g., 'workflow', 'crm')
+    access_level = Column(String, default="write") # "read", "write"
+    
+    user = relationship("User", back_populates="permissions")
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    user_id = Column(Integer, ForeignKey("users.id"))
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=True)
+    
+    user = relationship("User")
+    campaign = relationship("Campaign")
 

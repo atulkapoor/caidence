@@ -1,8 +1,11 @@
 "use client";
 
 import { Save } from "lucide-react";
+import { usePreferences } from "@/context/PreferencesContext";
 
 export function ProfileForm() {
+    const { industry, setIndustry } = usePreferences();
+
     return (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
             <h3 className="text-lg font-bold text-slate-900 mb-6">Personal Information</h3>
@@ -35,6 +38,20 @@ export function ProfileForm() {
                             defaultValue="C(AI)DENCE"
                             className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 transition-all font-medium"
                         />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-semibold text-slate-700">Industry Profile</label>
+                        <select
+                            value={industry}
+                            onChange={(e) => setIndustry(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 transition-all font-medium appearance-none"
+                        >
+                            <option value="Technology">Technology & SaaS</option>
+                            <option value="Real Estate">Real Estate & Construction</option>
+                            <option value="E-Commerce">E-Commerce & Retail</option>
+                            <option value="Healthcare">Healthcare & Wellness</option>
+                        </select>
                     </div>
 
                     <div className="space-y-2">

@@ -6,8 +6,13 @@ import { Plus, Search, Filter, Calendar as CalendarIcon, BarChart3, List, Layout
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
 import { AgentWizard } from "@/components/campaigns/AgentWizard";
-import { AnalyticsTab } from "@/components/campaigns/AnalyticsTab";
-import { CreateCampaignTab } from "@/components/campaigns/CreateCampaignTab";
+import { CreateCampaignTab } from "@/components/campaigns/CreateCampaignTab"; // Keep static if frequently used or light
+// import { AnalyticsTab } from "@/components/campaigns/AnalyticsTab";
+import dynamic from "next/dynamic";
+const AnalyticsTab = dynamic(() => import("@/components/campaigns/AnalyticsTab").then(mod => mod.AnalyticsTab), {
+    loading: () => <div className="p-10 text-center text-slate-400">Loading Analytics Module...</div>,
+    ssr: false
+});
 import { SocialCalendar } from "@/components/social/SocialCalendar";
 
 export default function CampaignPage() {

@@ -1,15 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import { searchInfluencers, InfluencerProfile } from "@/lib/api";
-import { Search, Filter, Camera, Mic, MapPin, Instagram, Youtube, Linkedin, Video, Sparkles, X, ChevronDown } from "lucide-react";
+import { searchInfluencers, InfluencerProfile, SearchFilters } from "@/lib/api";
+import { Search, Filter, Camera, Mic, MapPin, Instagram, Youtube, Linkedin, Video, Sparkles, X, ChevronDown, PlusCircle } from "lucide-react";
+import { CampaignSelector } from "@/components/campaigns/CampaignSelector";
+import { addInfluencerToCampaign } from "@/lib/api/campaigns";
+import { toast } from "sonner";
 
 export function InfluencerSearch() {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<InfluencerProfile[]>([]);
     const [loading, setLoading] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
-    const [activeFilters, setActiveFilters] = useState<{ reach?: number; platform?: string }>({});
+    const [activeFilters, setActiveFilters] = useState<SearchFilters>({});
+
+    const [selectedInfluencer, setSelectedInfluencer] = useState<string | null>(null);
+    const [isCampaignSelectorOpen, setIsCampaignSelectorOpen] = useState(false);
+
+    const handleAddToCampaign = (handle: string) => {
+        setSelectedInfluencer(handle);
+        setIsCampaignSelectorOpen(true);
+    };
+
+    const confirmAddToCampaign = async (campaignId: number) => {
+        if (!selectedInfluencer) return;
+        try {
+            await addInfluencerToCampaign(campaignId, selectedInfluencer);
+            toast.success(`Added ${selectedInfluencer} to campaign!`);
+            setIsCampaignSelectorOpen(false);
+            setSelectedInfluencer(null);
+        } catch (e) {
+            toast.error("Failed to add influencer");
+        }
+    };
 
     const handleSearch = async () => {
         if (!query.trim()) return;
@@ -235,9 +258,18 @@ export function InfluencerSearch() {
                                             </div>
                                         </div>
 
-                                        <button className="w-full py-3 bg-white border-2 border-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-all">
-                                            View Full Profile
-                                        </button>
+                                        <div className="flex gap-2">
+                                            <button className="flex-1 py-3 bg-white border-2 border-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-all">
+                                                View Profile
+                                            </button>
+                                            <button
+                                                onClick={() => handleAddToCampaign(profile.handle)}
+                                                className="flex items-center justify-center w-12 bg-indigo-50 border-2 border-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-100 hover:border-indigo-200 transition-all font-bold"
+                                                title="Add to Campaign"
+                                            >
+                                                <PlusCircle className="w-5 h-5" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -245,6 +277,11 @@ export function InfluencerSearch() {
                     </div>
                 )}
             </div>
-        </div>
-    );
+            <CampaignSelector
+                isOpen={isCampaignSelectorOpen}
+                onClose={() => setIsCampaignSelectorOpen(false)}
+                onSelect={confirmAddToCampaign}
+                title={`Add ${selectedInfluencer} to Campaign`}
+            />
+        </div>);
 }

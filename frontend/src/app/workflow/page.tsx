@@ -8,10 +8,81 @@ import { Workflow, Plus, Play, Activity } from "lucide-react";
 
 import { fetchWorkflows, createWorkflow, Workflow as WorkflowType } from "@/lib/api";
 import Link from "next/link";
+import { toast } from "sonner";
+
+const TEMPLATE_WORKFLOWS = [
+    {
+        name: "Lead Generation",
+        description: "Automated sequence to nurture leads across email and LinkedIn.",
+        steps_json: JSON.stringify([
+            { id: "1", name: "Scrape LinkedIn Profiles", type: "trigger" },
+            { id: "2", name: "Enrich Contact Data", type: "action" },
+            { id: "3", name: "Send Connection Request", type: "action" },
+            { id: "4", name: "Wait 2 Days", type: "delay" },
+            { id: "5", name: "Send Follow-up Email", type: "action" }
+        ])
+    },
+    {
+        name: "Content Distribution",
+        description: "Publish content to Twitter, LinkedIn, and Medium automatically.",
+        steps_json: JSON.stringify([
+            { id: "1", name: "New Blog Post Trigger", type: "trigger" },
+            { id: "2", name: "Generate Summary with AI", type: "action" },
+            { id: "3", name: "Create Twitter Thread", type: "action" },
+            { id: "4", name: "Post to LinkedIn", type: "action" }
+        ])
+    },
+    {
+        name: "Customer Onboarding",
+        description: "Welcome new users and guide them through setup.",
+        steps_json: JSON.stringify([
+            { id: "1", name: "New User Signup", type: "trigger" },
+            { id: "2", name: "Send Welcome Email", type: "action" },
+            { id: "3", name: "Create CRM Contact", type: "action" },
+            { id: "4", name: "Wait 3 Days", type: "delay" },
+            { id: "5", name: "Check Activation Status", type: "condition" },
+            { id: "6", name: "Send Tutorial Video", type: "action" }
+        ])
+    },
+    {
+        name: "Event Promotion",
+        description: "Drive registrations for your upcoming webinar or event.",
+        steps_json: JSON.stringify([
+            { id: "1", name: "Event Created", type: "trigger" },
+            { id: "2", name: "Post Announcement to LinkedIn", type: "action" },
+            { id: "3", name: "Send Invite Email to Segment", type: "action" },
+            { id: "4", name: "Wait 5 Days", type: "delay" },
+            { id: "5", name: "Send Reminder Email to Non-Openers", type: "action" }
+        ])
+    },
+    {
+        name: "Review Request",
+        description: "Automatically ask satisfied customers for reviews.",
+        steps_json: JSON.stringify([
+            { id: "1", name: "Order Completed", type: "trigger" },
+            { id: "2", name: "Wait 7 Days", type: "delay" },
+            { id: "3", name: "Send Review Request Email", type: "action" },
+            { id: "4", name: "If 5 Stars, Post to Socials", type: "condition" },
+            { id: "5", name: "If < 3 Stars, Create Support Ticket", type: "action" }
+        ])
+    },
+    {
+        name: "Re-engagement",
+        description: "Win back inactive users with special offers.",
+        steps_json: JSON.stringify([
+            { id: "1", name: "User Inactive for 30 Days", type: "trigger" },
+            { id: "2", name: "Send 'We Miss You' Email", type: "action" },
+            { id: "3", name: "Wait 3 Days", type: "delay" },
+            { id: "4", name: "Check Login Status", type: "condition" },
+            { id: "5", name: "Send deprecation warning or discount", type: "action" }
+        ])
+    }
+];
 
 export default function WorkflowPage() {
     const [activeTab, setActiveTab] = useState("my-workflows");
     const [workflows, setWorkflows] = useState<WorkflowType[]>([]);
+    const router = useRouter();
 
     useEffect(() => {
         const loadWorkflows = async () => {
@@ -25,8 +96,6 @@ export default function WorkflowPage() {
         loadWorkflows();
     }, []);
 
-    const router = useRouter();
-
     const handleCreate = async () => {
         try {
             const newWorkflow = await createWorkflow({
@@ -34,11 +103,25 @@ export default function WorkflowPage() {
                 description: "Draft workflow",
                 steps_json: "[]"
             });
-            // Redirect to the new workflow configuration
             router.push(`/workflow/${newWorkflow.id}`);
         } catch (error) {
             console.error("Failed to create workflow", error);
             alert("Failed to create workflow. Check console for details.");
+        }
+    };
+
+    const handleUseTemplate = async (template: typeof TEMPLATE_WORKFLOWS[0]) => {
+        try {
+            const newWorkflow = await createWorkflow({
+                name: template.name,
+                description: template.description,
+                steps_json: template.steps_json
+            });
+            toast.success("Workflow created from template!");
+            router.push(`/workflow/${newWorkflow.id}`);
+        } catch (error) {
+            console.error("Failed to create workflow from template", error);
+            toast.error("Failed to use template.");
         }
     };
 
@@ -53,7 +136,7 @@ export default function WorkflowPage() {
                     </div>
                     <button
                         onClick={handleCreate}
-                        className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 flex items-center gap-2 transition-all"
+                        className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 flex items-center gap-2 transition-all cursor-pointer"
                     >
                         <Plus className="w-5 h-5" />
                         Create Workflow
@@ -67,7 +150,7 @@ export default function WorkflowPage() {
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
-                                className={`px-8 py-2.5 rounded-xl text-sm font-bold capitalize transition-all ${activeTab === tab
+                                className={`px-8 py-2.5 rounded-xl text-sm font-bold capitalize transition-all cursor-pointer ${activeTab === tab
                                     ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20"
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
                                     }`}
@@ -87,7 +170,7 @@ export default function WorkflowPage() {
                                 </div>
                                 <h3 className="text-xl font-bold text-slate-900 mb-2">No workflows yet</h3>
                                 <p className="text-slate-500 mb-6">Create your first automated workflow to get started.</p>
-                                <button onClick={handleCreate} className="text-indigo-600 font-bold hover:underline">
+                                <button onClick={handleCreate} className="text-indigo-600 font-bold hover:underline cursor-pointer">
                                     Create New Workflow &rarr;
                                 </button>
                             </div>
@@ -102,7 +185,7 @@ export default function WorkflowPage() {
 
                             return (
                                 <Link href={`/workflow/${workflow.id}`} key={workflow.id} className="block group">
-                                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 h-full flex flex-col relative overflow-hidden">
+                                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 h-full flex flex-col relative overflow-hidden cursor-pointer">
 
                                         {/* Status Badge */}
                                         <div className="absolute top-4 right-4">
@@ -152,7 +235,7 @@ export default function WorkflowPage() {
                                                 <Activity className="w-3.5 h-3.5" />
                                                 {workflow.run_count} Executions
                                             </div>
-                                            <button className="text-indigo-600 font-bold group-hover:underline">
+                                            <button className="text-indigo-600 font-bold group-hover:underline cursor-pointer">
                                                 Configure &rarr;
                                             </button>
                                         </div>
@@ -163,23 +246,31 @@ export default function WorkflowPage() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {["Lead Generation", "Content Distribution", "Customer Onboarding", "Event Promotion", "Review Request", "Re-engagement"].map((template, i) => (
-                            <div key={i} className="bg-white p-7 rounded-3xl border border-slate-100 hover:border-indigo-100 hover:shadow-xl hover:shadow-indigo-500/5 transition-all cursor-pointer group flex flex-col h-full">
-                                <div className="w-14 h-14 bg-gradient-to-br from-pink-50 to-rose-50 text-pink-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
-                                    <Play className="w-7 h-7" />
+                        {TEMPLATE_WORKFLOWS.map((template, i) => {
+                            const stepCount = JSON.parse(template.steps_json).length;
+                            return (
+                                <div key={i} className="bg-white p-7 rounded-3xl border border-slate-100 hover:border-indigo-100 hover:shadow-xl hover:shadow-indigo-500/5 transition-all group flex flex-col h-full">
+                                    <div className="w-14 h-14 bg-gradient-to-br from-pink-50 to-rose-50 text-pink-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
+                                        <Play className="w-7 h-7" />
+                                    </div>
+                                    <h3 className="font-bold text-lg text-slate-900 mb-2">{template.name}</h3>
+                                    <p className="text-slate-500 text-sm mb-6 flex-1">
+                                        {template.description}
+                                    </p>
+                                    <div className="pt-4 border-t border-slate-50 flex items-center justify-between mt-auto">
+                                        <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-lg">
+                                            {stepCount} Steps
+                                        </span>
+                                        <button
+                                            onClick={() => handleUseTemplate(template)}
+                                            className="text-sm font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 px-4 py-2 rounded-lg shadow-md shadow-pink-500/20 group-hover:shadow-pink-500/40 hover:-translate-y-0.5 transition-all cursor-pointer"
+                                        >
+                                            Use Template
+                                        </button>
+                                    </div>
                                 </div>
-                                <h3 className="font-bold text-lg text-slate-900 mb-2">{template}</h3>
-                                <p className="text-slate-500 text-sm mb-6 flex-1">
-                                    Automated sequence to handle {template.toLowerCase()} across multiple channels efficiently.
-                                </p>
-                                <div className="pt-4 border-t border-slate-50 flex items-center justify-between mt-auto">
-                                    <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-lg">8 Steps</span>
-                                    <button className="text-sm font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 px-4 py-2 rounded-lg shadow-md shadow-pink-500/20 group-hover:shadow-pink-500/40 hover:-translate-y-0.5 transition-all">
-                                        Use Template
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 )}
             </div>

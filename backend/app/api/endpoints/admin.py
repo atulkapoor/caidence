@@ -9,7 +9,8 @@ from sqlalchemy.future import select
 from datetime import datetime
 
 from app.core.database import get_db
-from app.models import User, Organization, Brand, Creator
+from sqlalchemy.orm import selectinload
+from app.models import User, Organization, Brand, Creator, UserPermission
 from app.api.endpoints.auth import get_current_active_user
 from app.services.auth_service import is_super_admin, get_password_hash
 
@@ -28,6 +29,14 @@ class PlatformOverview(BaseModel):
     active_subscriptions: int
 
 
+class UserPermissionSchema(BaseModel):
+    module: str
+    access_level: str
+
+    class Config:
+        from_attributes = True
+
+
 class UserAdminResponse(BaseModel):
     id: int
     email: str
@@ -37,6 +46,7 @@ class UserAdminResponse(BaseModel):
     is_active: bool
     is_approved: bool
     created_at: Optional[datetime]
+    permissions: List[UserPermissionSchema] = []
 
     class Config:
         from_attributes = True
@@ -47,6 +57,11 @@ class UserRoleUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_approved: Optional[bool] = None
     organization_id: Optional[int] = None
+
+
+class UserPermissionUpdate(BaseModel):
+    module: str
+    access_level: str  # "read", "write", "none"
 
 
 class TeamInvite(BaseModel):
@@ -149,7 +164,7 @@ async def list_all_users(
     """
     List all users with optional filters.
     """
-    query = select(User)
+    query = select(User).options(selectinload(User.permissions))
     
     if role:
         query = query.where(User.role == role)
@@ -170,7 +185,7 @@ async def update_user(
     """
     Update user role, status, or approval.
     """
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).options(selectinload(User.permissions)).where(User.id == user_id))
     user = result.scalar_one_or_none()
     
     if not user:
@@ -188,6 +203,39 @@ async def update_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+@router.post("/users/{user_id}/permissions")
+async def update_user_permission(
+    user_id: int,
+    perm_data: UserPermissionUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_admin)
+):
+    """
+    Update or create a permission override for a specific module.
+    """
+    # Check if permission exists
+    result = await db.execute(
+        select(UserPermission).where(
+            UserPermission.user_id == user_id,
+            UserPermission.module == perm_data.module
+        )
+    )
+    existing_perm = result.scalar_one_or_none()
+
+    if existing_perm:
+        existing_perm.access_level = perm_data.access_level
+    else:
+        new_perm = UserPermission(
+            user_id=user_id,
+            module=perm_data.module,
+            access_level=perm_data.access_level
+        )
+        db.add(new_perm)
+    
+    await db.commit()
+    return {"message": "Permission updated"}
 
 
 @router.post("/invite", response_model=UserAdminResponse)

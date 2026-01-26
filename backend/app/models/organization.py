@@ -15,6 +15,8 @@ class Organization(Base):
     slug = Column(String, unique=True, nullable=False, index=True)
     logo_url = Column(String, nullable=True)
     plan_tier = Column(String, default="free")  # free, pro, enterprise
+    custom_domain = Column(String, unique=True, nullable=True) # e.g. reports.agency.com
+    branding_config = Column(JSON, nullable=True) # JSON for colors, fonts, login_bg
     settings = Column(JSON, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

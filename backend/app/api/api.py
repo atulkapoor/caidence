@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from app.api.endpoints import (
     dashboard, projects, chat, content, design, workflow, presentation, 
     campaigns, agent, communications, analytics, discovery, crm,
-    auth, organizations, brands, creators, admin, marcom
+    auth, organizations, brands, creators, admin, marcom, jobs
 )
 
 api_router = APIRouter()
@@ -29,4 +29,8 @@ api_router.include_router(brands.router, prefix="/brands", tags=["brands"])
 api_router.include_router(creators.router, prefix="/creators", tags=["creators"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(marcom.router, prefix="/marcom", tags=["marcom"])
+
+# Phase 23: Background Jobs
+api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
+
 

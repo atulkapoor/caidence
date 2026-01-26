@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description: "Autonomous marketing campaigns and content generation.",
 };
 
+import { PreferencesProvider } from "@/context/PreferencesContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,8 +29,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
-        <Toaster />
+        <PreferencesProvider>
+          {children}
+          <Toaster />
+        </PreferencesProvider>
       </body>
     </html>
   );

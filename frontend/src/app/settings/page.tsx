@@ -7,12 +7,14 @@ import PasswordForm from "@/components/settings/PasswordForm";
 import NotificationSettings from "@/components/settings/NotificationSettings";
 import BillingSettings from "@/components/settings/BillingSettings";
 import SocialAccountsSettings from "@/components/settings/SocialAccountsSettings";
-import { User, Share2, Shield, Bell, CheckCircle2 } from "lucide-react";
+import { User, Share2, Shield, Bell, CheckCircle2, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { DashboardSettings } from "@/components/settings/DashboardSettings";
 
 const TABS = [
     { name: "Profile Settings", icon: User },
+    { name: "Dashboard", icon: LayoutDashboard },
     { name: "Social Accounts", icon: Share2 },
     { name: "Notifications", icon: Bell },
     { name: "Security", icon: Shield },
@@ -49,7 +51,7 @@ export default function SettingsPage() {
 
                             {/* Horizontal Tabs */}
                             <div className="flex gap-8 border-b border-slate-100">
-                                {["Profile", "Password", "Notifications", "Billing", "Integrations"].map((tab) => (
+                                {["Profile", "Dashboard", "Password", "Notifications", "Billing", "Integrations"].map((tab) => (
                                     <button
                                         key={tab}
                                         onClick={() => setActiveTab(tab)}
@@ -75,6 +77,7 @@ export default function SettingsPage() {
                         {/* Main Settings Form */}
                         <div className="lg:col-span-2 space-y-6">
                             {activeTab === "Profile" && <ProfileForm />}
+                            {activeTab === "Dashboard" && <DashboardSettings />}
                             {activeTab === "Password" && <PasswordForm />}
                             {activeTab === "Notifications" && <NotificationSettings />}
                             {activeTab === "Billing" && <BillingSettings />}
