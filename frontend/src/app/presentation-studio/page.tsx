@@ -4,11 +4,12 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Presentation, Upload, PieChart, ChevronRight, FileText, Zap } from "lucide-react";
 import { fetchPresentations, generatePresentation, Presentation as PresentationType } from "@/lib/api";
 import { useEffect, useState } from "react";
+import { useTabState } from "@/hooks/useTabState";
 import Link from "next/link";
 import { CollateralGenerator } from "@/components/content/CollateralGenerator";
 
 export default function PresentationStudioPage() {
-    const [activeTab, setActiveTab] = useState("presentations");
+    const [activeTab, setActiveTab] = useTabState("presentations");
     const [recentPresentations, setRecentPresentations] = useState<PresentationType[]>([]);
 
     const loadPresentations = async () => {

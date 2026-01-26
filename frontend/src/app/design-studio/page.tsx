@@ -3,11 +3,13 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { generateDesign, fetchDesignAssets, DesignAsset } from "@/lib/api";
 import { useEffect, useState } from "react";
+import { useTabState } from "@/hooks/useTabState";
 // import Link from "next/link"; // Unused
 import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight } from "lucide-react";
 
 export default function DesignStudioPage() {
-    const [activeTab, setActiveTab] = useState<"generate" | "library">("generate");
+    // @ts-ignore
+    const [activeTab, setActiveTab] = useTabState("generate");
 
     // Generator State
     const [title, setTitle] = useState("New Visual");

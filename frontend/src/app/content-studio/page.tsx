@@ -5,6 +5,7 @@ import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebo
 import { toast } from "sonner";
 import { generateContent, fetchContentGenerations, ContentGeneration } from "@/lib/api";
 import { useEffect, useState } from "react";
+import { useTabState } from "@/hooks/useTabState";
 
 // Implementation of Typewriter effect component
 const TypewriterEffect = ({ text }: { text: string }) => {
@@ -172,7 +173,8 @@ ${prompt}
         setSelectedPlatforms(["LinkedIn"]);
     };
 
-    const [activeTab, setActiveTab] = useState<"generator" | "library">("generator");
+    // @ts-ignore
+    const [activeTab, setActiveTab] = useTabState("generator");
 
     // Filtered Creations
     const filteredCreations = recentCreations.filter(item => {

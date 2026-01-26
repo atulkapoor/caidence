@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTabState } from "@/hooks/useTabState";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { BarChart3, TrendingUp, Users, MousePointer, ArrowUpRight, Radio, Search } from "lucide-react";
 import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
@@ -8,7 +9,7 @@ import { SocialListeningDashboard } from "@/components/analytics/SocialListening
 import { toast } from "sonner";
 
 export default function AnalyticsPage() {
-    const [activeTab, setActiveTab] = useState("overview");
+    const [activeTab, setActiveTab] = useTabState("overview");
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         toast.success(`Date range updated: ${e.target.value}`);

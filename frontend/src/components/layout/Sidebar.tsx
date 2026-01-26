@@ -54,7 +54,7 @@ const navigationGroups = [
         items: [
             { name: "CRM", href: "/crm", icon: User, color: "text-amber-600", bg: "bg-amber-50" },
             { name: "Marcom", href: "/marcom", icon: Megaphone, color: "text-green-600", bg: "bg-green-50" },
-            { name: "creators", href: "/creators", icon: Users, color: "text-pink-600", bg: "bg-pink-50" },
+            { name: "Creators", href: "/creators", icon: Users, color: "text-pink-600", bg: "bg-pink-50" },
             { name: "Agency", href: "/agency", icon: Building2, color: "text-indigo-600", bg: "bg-indigo-50" },
         ]
     },
@@ -118,7 +118,7 @@ export function Sidebar() {
 
             {/* Pro Banner */}
             <div className="p-3 mt-auto border-t border-slate-100">
-                <Link href="/profile">
+                <Link href="/settings?tab=profile">
                     <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group">
                         <div className="h-9 w-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
                             AK

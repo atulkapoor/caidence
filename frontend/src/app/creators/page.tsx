@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTabState } from "@/hooks/useTabState";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Users, Plus, Search, Filter, MoreHorizontal, Link2, FileText, Instagram, Youtube } from "lucide-react";
 
@@ -20,7 +21,7 @@ interface Creator {
 export default function CreatorsPage() {
     const [creators, setCreators] = useState<Creator[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState("all");
+    const [activeTab, setActiveTab] = useTabState("all");
 
     useEffect(() => {
         // Mock data
@@ -99,8 +100,8 @@ export default function CreatorsPage() {
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 className={`px-4 py-2 rounded-lg font-bold text-sm capitalize transition-colors ${activeTab === tab
-                                        ? "bg-slate-900 text-white"
-                                        : "text-slate-500 hover:bg-slate-100"
+                                    ? "bg-slate-900 text-white"
+                                    : "text-slate-500 hover:bg-slate-100"
                                     }`}
                             >
                                 {tab}

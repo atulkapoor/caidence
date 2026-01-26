@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTabState } from "@/hooks/useTabState";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Workflow, Plus, Play, Activity } from "lucide-react";
@@ -80,7 +81,7 @@ const TEMPLATE_WORKFLOWS = [
 ];
 
 export default function WorkflowPage() {
-    const [activeTab, setActiveTab] = useState("my-workflows");
+    const [activeTab, setActiveTab] = useTabState("my-workflows");
     const [workflows, setWorkflows] = useState<WorkflowType[]>([]);
     const router = useRouter();
 

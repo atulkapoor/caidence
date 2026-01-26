@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTabState } from "@/hooks/useTabState";
 import { CampaignCard } from "@/components/campaigns/CampaignCard";
 import { Plus, Search, Filter, Calendar as CalendarIcon, BarChart3, List, LayoutGrid } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -18,7 +19,7 @@ import { SocialCalendar } from "@/components/social/SocialCalendar";
 export default function CampaignPage() {
     // Current valid tabs: "Campaign List", "Create Campaign", "Analytics", "Calendar"
     // Using simple string matching for state.
-    const [activeTab, setActiveTab] = useState("Campaign List");
+    const [activeTab, setActiveTab] = useTabState("Campaign List");
     const [campaigns, setCampaigns] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);

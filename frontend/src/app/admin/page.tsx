@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTabState } from "@/hooks/useTabState";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Users, Building, CreditCard, Shield, UserPlus, Search, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,7 @@ interface AdminOrg {
 
 // --- Main Page Component ---
 export default function AdminPage() {
-    const [activeTab, setActiveTab] = useState("overview");
+    const [activeTab, setActiveTab] = useTabState("overview");
 
     return (
         <DashboardLayout>
