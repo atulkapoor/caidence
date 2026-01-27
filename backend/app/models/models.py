@@ -11,6 +11,12 @@ class User(Base):
     hashed_password = Column(String, nullable=True)  # Nullable for legacy/invited users
     full_name = Column(String)
     
+    # Profile fields
+    company = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
+    industry = Column(String, nullable=True)
+    
     # Organization & Role
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     role = Column(String, default="viewer")  # super_admin, agency_admin, agency_member, brand_admin, brand_member, creator, viewer

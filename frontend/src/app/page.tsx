@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import {
     ArrowRight, Bot, Sparkles, LayoutTemplate, Zap, CheckCircle2, BarChart3,
     Target, Megaphone, TrendingUp, PlayCircle, Globe, Shield,
-    Briefcase, ShoppingBag, Building, Plus, Minus, ChevronDown, ChevronUp, Sliders
+    Briefcase, ShoppingBag, Building, Plus, Minus, ChevronDown, ChevronUp, Sliders,
+    Quote, Star, Link2, Cpu, Rocket
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -15,8 +17,10 @@ export default function LandingPage() {
     const [spend, setSpend] = useState(10000);
     const [cpa, setCpa] = useState(50);
     const [openFaq, setOpenFaq] = useState<number | null>(null);
+    const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
+        setIsMounted(true);
         // Auto-redirect if logged in
         const token = localStorage.getItem("token");
         if (token) {
@@ -48,6 +52,7 @@ export default function LandingPage() {
                         <Link href="#capabilities" className="hover:text-indigo-600 transition-colors">Capabilities</Link>
                         <Link href="#solutions" className="hover:text-indigo-600 transition-colors">Solutions</Link>
                         <Link href="#roi" className="hover:text-indigo-600 transition-colors">ROI</Link>
+                        <Link href="#pricing" className="hover:text-indigo-600 transition-colors">Pricing</Link>
                         <Link href="#faq" className="hover:text-indigo-600 transition-colors">FAQ</Link>
                     </div>
 
@@ -97,9 +102,7 @@ export default function LandingPage() {
 
                         <div className="flex items-center gap-4 text-sm font-bold text-slate-500 pt-4">
                             <div className="flex -space-x-2">
-                                {[1, 2, 3, 4].map(i => (
-                                    <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-slate-300"></div>
-                                ))}
+                                <Image src="/images/trusted-users.png" alt="Trusted marketers" width={180} height={40} className="h-10 w-auto" />
                             </div>
                             <p>Trusted by 10,000+ marketers</p>
                         </div>
@@ -108,71 +111,128 @@ export default function LandingPage() {
                     <div className="relative">
                         <div className="absolute inset-0 bg-gradient-to-tr from-indigo-600/20 to-transparent blur-2xl -z-10 rounded-full"></div>
                         <div className="bg-white rounded-3xl border border-slate-300 shadow-2xl shadow-slate-300/50 overflow-hidden relative group hover:scale-[1.02] transition-transform duration-500">
-                            <div className="bg-slate-100 border-b border-slate-300 p-4 flex items-center gap-2">
-                                <div className="flex gap-1.5">
-                                    <div className="w-3 h-3 rounded-full bg-slate-400"></div>
-                                    <div className="w-3 h-3 rounded-full bg-slate-400"></div>
-                                    <div className="w-3 h-3 rounded-full bg-slate-400"></div>
-                                </div>
-                                <div className="ml-4 px-3 py-1 bg-white rounded-md border border-slate-300 text-[10px] font-bold text-slate-500 flex-1 text-center">
-                                    app.cadence.ai/dashboard
-                                </div>
-                            </div>
-                            <div className="p-6 space-y-6">
-                                <div className="flex justify-between items-center">
-                                    <div className="h-8 w-32 bg-slate-200 rounded-lg"></div>
-                                    <div className="h-8 w-8 bg-indigo-200 rounded-lg"></div>
-                                </div>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="h-24 bg-indigo-50 rounded-xl border border-indigo-200 p-4">
-                                        <div className="w-8 h-8 bg-white rounded-lg mb-2 shadow-sm border border-indigo-100"></div>
-                                        <div className="h-4 w-16 bg-indigo-200 rounded"></div>
-                                    </div>
-                                    <div className="h-24 bg-slate-100 rounded-xl border border-slate-200 p-4"></div>
-                                    <div className="h-24 bg-slate-100 rounded-xl border border-slate-200 p-4"></div>
-                                </div>
-                                <div className="grid grid-cols-3 gap-6">
-                                    <div className="col-span-2 h-40 bg-slate-100 rounded-xl border border-slate-200 relative overflow-hidden">
-                                        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-indigo-200/50 to-transparent"></div>
-                                        <div className="absolute bottom-4 left-4 right-4 flex items-end gap-2 h-16">
-                                            {[40, 60, 45, 70, 50, 80, 65].map((h, i) => (
-                                                <div key={i} className="flex-1 bg-indigo-500 rounded-t-sm" style={{ height: `${h}%` }}></div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="col-span-1 h-40 bg-slate-100 rounded-xl border border-slate-200 p-4 space-y-2">
-                                        <div className="h-2 w-full bg-slate-300 rounded"></div>
-                                        <div className="h-2 w-3/4 bg-slate-300 rounded"></div>
-                                        <div className="h-2 w-1/2 bg-slate-300 rounded"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="absolute bottom-8 right-8 bg-white p-4 rounded-2xl shadow-xl border border-slate-200 flex items-center gap-3 animate-bounce">
-                                <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-                                    <TrendingUp className="w-5 h-5 text-emerald-700" />
-                                </div>
-                                <div>
-                                    <div className="text-xs font-bold text-slate-500 uppercase">ROI</div>
-                                    <div className="text-lg font-black text-slate-900">+428%</div>
-                                </div>
-                            </div>
+                            <Image
+                                src="/images/hero-dashboard.png"
+                                alt="C(AI)DENCE Dashboard"
+                                width={600}
+                                height={450}
+                                className="w-full h-auto"
+                                priority
+                            />
                         </div>
                     </div>
                 </div>
             </header>
 
-            {/* --- Logo Cloud --- */}
-            <section className="py-10 border-y border-slate-200 bg-slate-100">
-                <div className="max-w-7xl mx-auto px-6 text-center">
-                    <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-8">Powering next-gen marketing teams</p>
-                    <div className="flex flex-wrap justify-center gap-12 opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
-                        {["Acme Corp", "GlobalTech", "Nebula", "FoxRun", "Circle", "Trio"].map((name, i) => (
-                            <div key={i} className="text-xl font-black text-slate-400 flex items-center gap-2">
-                                <div className="w-6 h-6 bg-slate-400 rounded-full"></div> {name}
+            {/* --- HOW IT WORKS SECTION --- */}
+            <section className="py-24 px-6 bg-white">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-16">
+                        <span className="text-indigo-600 font-bold tracking-wider uppercase text-sm">Process</span>
+                        <h2 className="text-3xl md:text-5xl font-black text-slate-900 mt-2">From raw data to ROI in 3 steps</h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
+                        {/* Connecting Line (Desktop) */}
+                        <div className="hidden md:block absolute top-12 left-[16%] right-[16%] h-0.5 bg-gradient-to-r from-indigo-200 via-indigo-400 to-indigo-200 -z-10"></div>
+
+                        {[
+                            {
+                                step: "01",
+                                title: "Connect",
+                                description: "Link your ad accounts (Meta, Google, TikTok) and analytics sources in one click.",
+                                icon: Link2
+                            },
+                            {
+                                step: "02",
+                                title: "Analyze",
+                                description: "Our AI agents crawl specific competitors and your historical data to find winning patterns.",
+                                icon: Cpu
+                            },
+                            {
+                                step: "03",
+                                title: "Automate",
+                                description: "Launch optimized campaigns, auto-kill losing ads, and scale winners 24/7.",
+                                icon: Rocket
+                            }
+                        ].map((item, i) => (
+                            <div key={i} className="flex flex-col items-center text-center group">
+                                <div className="w-24 h-24 bg-white rounded-full border-4 border-indigo-50 flex items-center justify-center shadow-xl mb-6 relative z-10 group-hover:scale-110 transition-transform duration-300">
+                                    <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center text-white">
+                                        <item.icon className="w-8 h-8" />
+                                    </div>
+                                    <div className="absolute -top-2 -right-2 w-8 h-8 bg-slate-900 rounded-full flex items-center justify-center text-white font-black text-xs border-2 border-white">
+                                        {item.step}
+                                    </div>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-900 mb-3">{item.title}</h3>
+                                <p className="text-slate-600 font-medium leading-relaxed max-w-xs">{item.description}</p>
                             </div>
                         ))}
                     </div>
                 </div>
+            </section>
+
+            {/* --- INTEGRATION PARTNERS (Infinite Marquee) --- */}
+            <section className="py-16 border-y border-slate-200 bg-slate-50 overflow-hidden">
+                <div className="max-w-7xl mx-auto px-6 text-center mb-10">
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Seamless integrations with your favorite tools</p>
+                </div>
+
+                <div className="relative flex overflow-x-hidden group">
+                    <div className="animate-marquee whitespace-nowrap flex items-center gap-16 pr-16">
+                        {[
+                            { name: "Meta Ads", icon: "Meta" },
+                            { name: "Google Ads", icon: "Google" },
+                            { name: "Shopify", icon: "Shopify" },
+                            { name: "HubSpot", icon: "HubSpot" },
+                            { name: "Salesforce", icon: "Salesforce" },
+                            { name: "TikTok", icon: "TikTok" },
+                            { name: "Klaviyo", icon: "Klaviyo" },
+                            { name: "Slack", icon: "Slack" },
+                            { name: "Stripe", icon: "Stripe" },
+                            { name: "Zapier", icon: "Zapier" },
+                            { name: "WooCommerce", icon: "Woo" },
+                            { name: "BigCommerce", icon: "BigC" },
+                        ].map((integration, i) => (
+                            <div key={i} className="flex items-center gap-3 text-2xl font-black text-slate-400 grayscale hover:grayscale-0 hover:text-indigo-600 transition-all cursor-default">
+                                {/* Ideally utilize actual SVGs here, using text for now */}
+                                <span className="text-xl">⚡️</span> {integration.name}
+                            </div>
+                        ))}
+                    </div>
+                    {/* Duplicate for seamless loop */}
+                    <div className="animate-marquee whitespace-nowrap flex items-center gap-16 pr-16 absolute top-0 left-full">
+                        {[
+                            { name: "Meta Ads", icon: "Meta" },
+                            { name: "Google Ads", icon: "Google" },
+                            { name: "Shopify", icon: "Shopify" },
+                            { name: "HubSpot", icon: "HubSpot" },
+                            { name: "Salesforce", icon: "Salesforce" },
+                            { name: "TikTok", icon: "TikTok" },
+                            { name: "Klaviyo", icon: "Klaviyo" },
+                            { name: "Slack", icon: "Slack" },
+                            { name: "Stripe", icon: "Stripe" },
+                            { name: "Zapier", icon: "Zapier" },
+                            { name: "WooCommerce", icon: "Woo" },
+                            { name: "BigCommerce", icon: "BigC" },
+                        ].map((integration, i) => (
+                            <div key={`dup-${i}`} className="flex items-center gap-3 text-2xl font-black text-slate-400 grayscale hover:grayscale-0 hover:text-indigo-600 transition-all cursor-default">
+                                <span className="text-xl">⚡️</span> {integration.name}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <style jsx>{`
+                    .animate-marquee {
+                        animation: marquee 25s linear infinite;
+                    }
+                    @keyframes marquee {
+                        0% { transform: translateX(0); }
+                        100% { transform: translateX(-100%); }
+                    }
+                `}</style>
             </section>
 
             {/* --- SOLUTIONS TABS --- */}
@@ -193,8 +253,8 @@ export default function LandingPage() {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex items-center gap-2 px-8 py-4 rounded-xl font-bold transition-all border ${activeTab === tab.id
-                                        ? "bg-slate-900 text-white border-slate-900 shadow-lg scale-105"
-                                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
+                                    ? "bg-slate-900 text-white border-slate-900 shadow-lg scale-105"
+                                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
                                     }`}
                             >
                                 <tab.icon className="w-4 h-4" /> {tab.label}
@@ -230,10 +290,30 @@ export default function LandingPage() {
                                 </Link>
                             </div>
                             <div className="bg-white rounded-2xl shadow-xl border border-slate-200 aspect-video flex items-center justify-center relative overflow-hidden">
-                                {activeTab === "agencies" && <Briefcase className="w-24 h-24 text-indigo-100" />}
-                                {activeTab === "ecommerce" && <ShoppingBag className="w-24 h-24 text-pink-100" />}
-                                {activeTab === "enterprise" && <Building className="w-24 h-24 text-slate-100" />}
-                                <div className="absolute inset-0 bg-gradient-to-tr from-slate-900/5 to-transparent"></div>
+                                {activeTab === "agencies" && (
+                                    <Image
+                                        src="/images/solution-agencies.png"
+                                        alt="Agency Dashboard"
+                                        fill
+                                        className="object-cover"
+                                    />
+                                )}
+                                {activeTab === "ecommerce" && (
+                                    <Image
+                                        src="/images/solution-ecommerce.png"
+                                        alt="E-Commerce Dashboard"
+                                        fill
+                                        className="object-cover"
+                                    />
+                                )}
+                                {activeTab === "enterprise" && (
+                                    <Image
+                                        src="/images/solution-enterprise.png"
+                                        alt="Enterprise Dashboard"
+                                        fill
+                                        className="object-cover"
+                                    />
+                                )}
                             </div>
                         </div>
                     </div>
@@ -359,6 +439,61 @@ export default function LandingPage() {
                 </div>
             </section>
 
+            {/* --- TESTIMONIALS --- */}
+            <section className="py-24 px-6 bg-gradient-to-b from-slate-50 to-white">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-16">
+                        <span className="text-indigo-700 font-bold tracking-wider uppercase text-sm">Customer Stories</span>
+                        <h2 className="text-3xl md:text-5xl font-black text-slate-900 mt-2">Loved by marketing teams worldwide</h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {[
+                            {
+                                quote: "C(AI)DENCE reduced our campaign creation time by 80%. What used to take our team a week now happens in hours.",
+                                name: "Sarah Chen",
+                                role: "Head of Growth",
+                                company: "TechScale Inc.",
+                                stars: 5
+                            },
+                            {
+                                quote: "The AI agent understood our brand voice perfectly. It's like having a senior strategist working 24/7.",
+                                name: "Marcus Thompson",
+                                role: "CMO",
+                                company: "Elevate Commerce",
+                                stars: 5
+                            },
+                            {
+                                quote: "Finally, one platform that does it all. We consolidated 6 different tools into C(AI)DENCE and never looked back.",
+                                name: "Priya Sharma",
+                                role: "Marketing Director",
+                                company: "GlobalBrands Agency",
+                                stars: 5
+                            }
+                        ].map((testimonial, i) => (
+                            <div key={i} className="bg-white rounded-3xl p-8 border border-slate-200 shadow-lg hover:shadow-xl transition-shadow">
+                                <div className="flex gap-1 mb-4">
+                                    {[...Array(testimonial.stars)].map((_, j) => (
+                                        <Star key={j} className="w-5 h-5 text-amber-400 fill-amber-400" />
+                                    ))}
+                                </div>
+                                <Quote className="w-8 h-8 text-indigo-200 mb-4" />
+                                <p className="text-slate-700 text-lg font-medium leading-relaxed mb-6">"{testimonial.quote}"</p>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                                        {testimonial.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-slate-900">{testimonial.name}</div>
+                                        <div className="text-sm text-slate-500">{testimonial.role}, {testimonial.company}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
             {/* --- FAQ SECTION --- */}
             <section id="faq" className="py-24 px-6 bg-white border-t border-slate-200">
                 <div className="max-w-3xl mx-auto">
@@ -385,6 +520,140 @@ export default function LandingPage() {
                                 )}
                             </div>
                         ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* --- TESTIMONIALS SECTION --- */}
+            <section className="py-24 px-6 bg-white">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-16">
+                        <span className="text-indigo-700 font-bold tracking-wider uppercase text-sm">Testimonials</span>
+                        <h2 className="text-3xl md:text-5xl font-black text-slate-900 mt-2">Loved by growth teams</h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {[
+                            {
+                                quote: "C(AI)DENCE replaced our entire media buying agency. We're spending 40% less on ads while revenue is up 2x. It's actually insane.",
+                                author: "Sarah Jenkins",
+                                role: "CMO at StyleBox",
+                                company: "DTC Fashion"
+                            },
+                            {
+                                quote: "The competitor analysis feature alone is worth the subscription. It found a creative angle we hadn't thought of, and it became our best performer.",
+                                author: "Marcus Chen",
+                                role: "Founder",
+                                company: "TechFlow"
+                            },
+                            {
+                                quote: "Finally, an AI tool that doesn't just generate text but actually DOES the work. The autonomous agent manages our campaigns perfectly.",
+                                author: "Elena Rodriguez",
+                                role: "Head of Growth",
+                                company: "HealthPlus"
+                            }
+                        ].map((t, i) => (
+                            <div key={i} className="bg-slate-50 p-8 rounded-3xl border border-slate-100 hover:shadow-xl transition-all duration-300">
+                                <div className="flex text-indigo-500 mb-4">
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                        <Star key={star} className="w-5 h-5 fill-current" />
+                                    ))}
+                                </div>
+                                <p className="text-slate-700 text-lg font-medium italic mb-6">"{t.quote}"</p>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center font-bold text-slate-600">
+                                        {t.author.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-slate-900">{t.author}</div>
+                                        <div className="text-sm text-slate-500">{t.role}, {t.company}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* --- PRICING SECTION --- */}
+            <section id="pricing" className="py-24 px-6 bg-slate-50">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-16">
+                        <span className="text-indigo-700 font-bold tracking-wider uppercase text-sm">Pricing</span>
+                        <h2 className="text-3xl md:text-5xl font-black text-slate-900 mt-2">Simple, transparent pricing</h2>
+                        <p className="mt-4 text-lg text-slate-600 max-w-2xl mx-auto">Start free, scale as you grow. No hidden fees.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                        {[
+                            {
+                                name: "Starter",
+                                price: "$49",
+                                period: "/month",
+                                description: "Perfect for solopreneurs and small teams",
+                                features: ["1 Workspace", "5 Campaigns/month", "AI Chat Assistant", "Basic Analytics", "Email Support"],
+                                popular: false
+                            },
+                            {
+                                name: "Professional",
+                                price: "$149",
+                                period: "/month",
+                                description: "For growing agencies and e-commerce brands",
+                                features: ["5 Workspaces", "Unlimited Campaigns", "AI Strategy Agent", "Advanced Analytics", "Priority Support", "White-label Reports"],
+                                popular: true
+                            },
+                            {
+                                name: "Enterprise",
+                                price: "Custom",
+                                period: "",
+                                description: "For large teams with custom requirements",
+                                features: ["Unlimited Workspaces", "Custom Integrations", "Dedicated Success Manager", "SSO & Audit Logs", "SLA Guarantee", "Private Cloud Option"],
+                                popular: false
+                            }
+                        ].map((plan, i) => (
+                            <div key={i} className={`bg-white rounded-3xl p-8 border-2 ${plan.popular ? 'border-indigo-600 shadow-xl shadow-indigo-100 scale-105' : 'border-slate-200'} relative`}>
+                                {plan.popular && (
+                                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-indigo-600 text-white text-xs font-bold rounded-full">
+                                        Most Popular
+                                    </div>
+                                )}
+                                <h3 className="text-xl font-bold text-slate-900">{plan.name}</h3>
+                                <div className="mt-4 flex items-baseline gap-1">
+                                    <span className="text-4xl font-black text-slate-900">{plan.price}</span>
+                                    <span className="text-slate-500 font-medium">{plan.period}</span>
+                                </div>
+                                <p className="mt-2 text-sm text-slate-600">{plan.description}</p>
+                                <ul className="mt-6 space-y-3">
+                                    {plan.features.map((feature, j) => (
+                                        <li key={j} className="flex items-center gap-2 text-sm text-slate-700">
+                                            <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                                            {feature}
+                                        </li>
+                                    ))}
+                                </ul>
+                                <Link href="/register" className={`mt-8 block w-full py-3 text-center font-bold rounded-xl transition-all ${plan.popular ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                                    Get Started
+                                </Link>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* --- FINAL CTA --- */}
+            <section className="py-24 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+                <div className="max-w-4xl mx-auto text-center">
+                    <h2 className="text-3xl md:text-5xl font-black">Ready to transform your marketing?</h2>
+                    <p className="mt-6 text-xl text-indigo-100 max-w-2xl mx-auto">
+                        Join 10,000+ marketers who are already using C(AI)DENCE to automate campaigns, generate content, and scale their business.
+                    </p>
+                    <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
+                        <Link href="/register" className="px-8 py-4 bg-white text-indigo-600 font-bold rounded-2xl text-lg hover:bg-indigo-50 transition-all shadow-xl flex items-center justify-center gap-2">
+                            Start Free Trial <ArrowRight className="w-5 h-5" />
+                        </Link>
+                        <Link href="#" className="px-8 py-4 bg-transparent border-2 border-white/50 text-white font-bold rounded-2xl text-lg hover:bg-white/10 transition-all flex items-center justify-center gap-2">
+                            <PlayCircle className="w-5 h-5" /> Watch Demo
+                        </Link>
                     </div>
                 </div>
             </section>

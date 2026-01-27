@@ -22,9 +22,19 @@ async def lifespan(app: FastAPI):
         user = result.scalar_one_or_none()
         if not user:
             # Seed default user
-            demo_user = User(id=1, email="demo@example.com", full_name="Demo User", is_active=True)
+            demo_user = User(
+                id=1, 
+                email="admin@cadence.ai", 
+                full_name="Admin User", 
+                role="super_admin",
+                is_active=True,
+                is_approved=True
+            )
             session.add(demo_user)
             await session.commit()
+            
+            # Also ensure proper permissions if needed, but super_admin role should cover it
+
     yield
 
 app = FastAPI(

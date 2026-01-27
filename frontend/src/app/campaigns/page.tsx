@@ -39,7 +39,26 @@ export default function CampaignPage() {
             // @ts-ignore
             const { fetchCampaigns } = await import("@/lib/api");
             const data = await fetchCampaigns();
-            setCampaigns(data);
+            const processed = data.map((c: any) => {
+                let parsedChannels: string[] = [];
+                try {
+                    if (Array.isArray(c.channels)) {
+                        parsedChannels = c.channels;
+                    } else if (typeof c.channels === 'string') {
+                        const trimmed = c.channels.trim();
+                        if (trimmed.startsWith('[')) {
+                            const parsed = JSON.parse(trimmed);
+                            if (Array.isArray(parsed)) parsedChannels = parsed;
+                        } else if (trimmed) {
+                            parsedChannels = [trimmed];
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Error parsing channels:", c.channels);
+                }
+                return { ...c, channels: parsedChannels };
+            });
+            setCampaigns(processed);
         } catch (error) {
             console.error("Failed to load campaigns", error);
         } finally {

@@ -1,7 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from app.services.ai_service import AIService
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.core.database import get_db
+from app.models.models import User
 import json
 import random
 
@@ -22,11 +26,22 @@ class CampaignDraft(BaseModel):
     alternative_draft: Optional['CampaignDraft'] = None
 
 @router.post("/draft_campaign", response_model=CampaignDraft)
-async def draft_campaign(input: AgentInput):
+async def draft_campaign(input: AgentInput, db: AsyncSession = Depends(get_db)):
     """
     Generates a campaign draft based on high-level user inputs using the AI Service.
     Simulates a "Multi-Agent" workflow (Researcher -> Strategist -> Creative).
     """
+    # Fetch user profile for industry context
+    user_id = 1  # Default demo user
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+    
+    industry_context = ""
+    if user and user.industry:
+        industry_context = f"The client is in the {user.industry} industry. "
+    if user and user.company:
+        industry_context += f"Company: {user.company}. "
+    
     # 1. Agent Logs Simulation
     agent_logs = [
         "Researcher Agent: Analyzing current market trends for " + input.product,
@@ -38,9 +53,10 @@ async def draft_campaign(input: AgentInput):
         "Reviewer Agent: Validating plan against constraints."
     ]
 
-    # 2. Main Prompt for Plan A
+    # 2. Main Prompt for Plan A (with industry context)
     prompt = (
         f"Act as a team of expert marketing agents (Researcher, Strategist, Creative).\n"
+        f"{industry_context}"
         f"Goal: {input.goal}\n"
         f"Product/Topic: {input.product}\n"
         f"Target Audience: {input.audience}\n\n"

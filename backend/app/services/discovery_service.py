@@ -1,14 +1,89 @@
 
 import random
+import os
+import aiohttp
 from typing import List, Optional
 from app.schemas.schemas import InfluencerProfile, DiscoveryFilter
+from dotenv import load_dotenv
+
+load_dotenv()
+
+MODASH_API_KEY = os.getenv("MODASH_API_KEY")
+MODASH_BASE_URL = "https://api.modash.io/v1/influencer/search"
 
 class DiscoveryService:
     @staticmethod
     async def search_influencers(query: str, filters: Optional[DiscoveryFilter] = None) -> List[InfluencerProfile]:
         """
-        Simulates AI-powered search by matching 'content vibes' and voice.
-        In a real app, this would query a vector DB or external API like Modash/HypeAuditor.
+        Searches for influencers.
+        If a valid MODASH_API_KEY is present and not matching 'mock_', it calls the real Modash API.
+        Otherwise, it falls back to the deterministic mock generator.
+        """
+        # Check if we should use Real API
+        if MODASH_API_KEY and not MODASH_API_KEY.startswith("mock_"):
+            try:
+                return await DiscoveryService._search_modash_api(query, filters)
+            except Exception as e:
+                print(f"Modash API Error: {e}. Falling back to mock data.")
+                # Fallback to mock on error
+        
+        return await DiscoveryService._generate_mock_profiles(query, filters)
+
+    @staticmethod
+    async def _search_modash_api(query: str, filters: Optional[DiscoveryFilter]) -> List[InfluencerProfile]:
+        """
+        Internal method to call Modash API.
+        This is a simplified implementation mapping their complex filter structure.
+        """
+        headers = {
+            "Authorization": f"Bearer {MODASH_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # Construct Modash-compatible payload
+        # Note: This is a simplified mapping. Real Modash API uses complex filter objects.
+        payload = {
+            "filter": {
+                "keyword": query,
+                "network": "instagram" # Defaulting for this MVP
+            },
+            "limit": 10
+        }
+
+        if filters:
+             if filters.min_reach:
+                 # Modash specific path for followers
+                 pass 
+             if filters.location:
+                 pass
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(MODASH_BASE_URL, json=payload, headers=headers) as resp:
+                if resp.status != 200:
+                    raise Exception(f"Modash API returned {resp.status}")
+                
+                data = await resp.json()
+                profiles = []
+                for user in data.get("users", []):
+                    # Map Modash user to our schema
+                    profiles.append(InfluencerProfile(
+                        handle=f"@{user.get('username')}",
+                        platform="Instagram",
+                        avatar_color="#8338ec", # Default or extract from image url
+                        followers=user.get("followers", 0),
+                        engagement_rate=user.get("engagementRate", 0.0),
+                        content_style_match=["Authentic"], # Placeholder
+                        voice_analysis=["Trending"],
+                        image_recognition_tags=[],
+                        audience_demographics="Unknown",
+                        match_score=85 # Mocked relevance
+                    ))
+                return profiles
+
+    @staticmethod
+    async def _generate_mock_profiles(query: str, filters: Optional[DiscoveryFilter]) -> List[InfluencerProfile]:
+        """
+        Deterministic mock generator for demos and dev/test without API keys.
         """
         # Deterministic seed for consistency based on query length and filter params
         seed_value = len(query) + (filters.min_reach if filters and filters.min_reach else 0)
@@ -25,7 +100,9 @@ class DiscoveryService:
         
         for i in range(num_results):
             base_handle = query.split(" ")[0] if query else "creator"
-            handle = f"@{base_handle}_{random.randint(100, 999)}_{i}"
+            if len(base_handle) > 10: base_handle = base_handle[:10]
+            clean_handle = "".join(e for e in base_handle if e.isalnum())
+            handle = f"@{clean_handle}_{random.randint(100, 999)}_{i}"
             
             # Mock logic to generate "AI Analysis" tags
             profile_tags = random.sample(tags_pool, 3)

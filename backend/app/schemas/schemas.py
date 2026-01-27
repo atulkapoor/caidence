@@ -63,12 +63,23 @@ class UserResponse(BaseModel):
     id: int
     email: str
     full_name: Optional[str] = None
+    company: Optional[str] = None
+    location: Optional[str] = None
+    bio: Optional[str] = None
+    industry: Optional[str] = None
     role: str
-    organization_id: Optional[int]
+    organization_id: Optional[int] = None
     is_active: bool
     
     class Config:
         from_attributes = True
+
+class ProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    company: Optional[str] = None
+    location: Optional[str] = None
+    bio: Optional[str] = None
+    industry: Optional[str] = None
 
 # --- Dashboard Stats Schema ---
 class DashboardStats(BaseModel):
