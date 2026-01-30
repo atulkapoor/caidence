@@ -30,7 +30,7 @@ sudo -u cadence bash -c "cd $DEPLOY_DIR && source ../backend/venv/bin/activate &
 if [ $? -ne 0 ]; then
     echo -e "\n${RED}Start failed as 'cadence' user. Trying as root to see error...${NC}"
     cd "$DEPLOY_DIR"
-    # Load env manually
-    set -a; source ../.env; set +a
+    # Load env manually from production location
+    set -a; source /opt/cadence/.env; set +a
     npm start
 fi

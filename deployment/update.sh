@@ -99,6 +99,16 @@ log_info "Copying files from $SOURCE_DIR to $NEW_RELEASE_DIR..."
 # Ensure we copy contents, not the folder itself (trailing slash)
 rsync -av --exclude '.git' --exclude 'node_modules' --exclude 'venv' --exclude 'storage' "$SOURCE_DIR/" "$NEW_RELEASE_DIR/"
 
+# Validate Copy
+if [ ! -f "$NEW_RELEASE_DIR/frontend/package.json" ] || [ ! -f "$NEW_RELEASE_DIR/backend/requirements.txt" ]; then
+    log_error "Critical Files Missing in Check!"
+    log_error "Expected: package.json and requirements.txt"
+    log_error "Source was: $SOURCE_DIR"
+    log_error "Dest was: $NEW_RELEASE_DIR"
+    ls -R "$NEW_RELEASE_DIR"
+    exit 1
+fi
+
 # 2.1 Link .env EARLY (Crucial for Frontend Build)
 log_info "Linking .env file..."
 ln -sf "$APP_DIR/.env" "$NEW_RELEASE_DIR/backend/.env"
