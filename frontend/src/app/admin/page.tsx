@@ -28,7 +28,10 @@ interface AdminOrg {
 }
 
 // --- Main Page Component ---
-export default function AdminPage() {
+// --- Main Page Component ---
+import { Suspense } from "react";
+
+function AdminContent() {
     const [activeTab, setActiveTab] = useTabState("overview");
 
     return (
@@ -71,6 +74,14 @@ export default function AdminPage() {
                 </div>
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function AdminPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading admin panel...</div>}>
+            <AdminContent />
+        </Suspense>
     );
 }
 
