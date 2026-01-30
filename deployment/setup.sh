@@ -31,7 +31,9 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 APP_DIR="/opt/cadence"
-TEMPLATE_DIR="./templates"
+# Robustly find script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMPLATE_DIR="$SCRIPT_DIR/templates"
 
 # --- 1. System Dependencies ---
 log "Updating Apt and Installing Dependencies..."
@@ -78,8 +80,19 @@ DB_USER="cadence_user"
 DB_PASS="cadence_pass"
 DB_NAME="cadence_db"
 
-sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';" || true
-sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" || true
+# Check if user exists
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
+    sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
+else
+    log "User '$DB_USER' already exists."
+fi
+
+# Check if database exists
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
+    sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
+else
+    log "Database '$DB_NAME' already exists."
+fi
 success "Database Configured"
 
 # --- 5. Environment Config ---
