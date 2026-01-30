@@ -36,7 +36,7 @@ TEMPLATE_DIR="./templates"
 # --- 1. System Dependencies ---
 log "Updating Apt and Installing Dependencies..."
 apt-get update && apt-get upgrade -y
-apt-get install -y curl git ufw nginx postgresql postgresql-contrib certbot python3-certbot-nginx python3-venv python3-pip make build-essential acl
+apt-get install -y curl git ufw nginx postgresql postgresql-contrib certbot python3-certbot-nginx python3-venv python3-pip make build-essential acl php-cli php-fpm php-pgsql unzip
 
 # Install Node.js (Late Ubuntu versions have newer node, but let's ensure LTS)
 if ! command -v node &> /dev/null; then
@@ -90,6 +90,8 @@ if [ ! -f "$APP_DIR/.env" ]; then
 DATABASE_URL=postgresql+asyncpg://$DB_USER:$DB_PASS@localhost/$DB_NAME
 SECRET_KEY=$(openssl rand -hex 32)
 NEXT_PUBLIC_API_URL=https://your-domain.com/api
+FIRST_SUPERUSER=admin@cadence.ai
+FIRST_SUPERUSER_PASSWORD=$(openssl rand -hex 12)
 # Add other keys...
 EOF
     chown cadence:cadence "$APP_DIR/.env"
@@ -111,6 +113,16 @@ ln -sf /etc/nginx/sites-available/cadence /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl restart nginx
+
+
+# --- 6.1 Adminer Setup ---
+log "Setting up Adminer..."
+mkdir -p /opt/cadence/adminer
+if [ ! -f "/opt/cadence/adminer/adminer.php" ]; then
+    wget https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php -O /opt/cadence/adminer/adminer.php
+    chown -R www-data:www-data /opt/cadence/adminer
+fi
+success "Adminer Installed"
 
 success "Configuration Installed"
 
