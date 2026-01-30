@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
     
     # Initial Superuser Seeding
-    FIRST_SUPERUSER: str = "admin@cadence.ai"
+    FIRST_SUPERUSER: str = "admin@caidence.ai"
     FIRST_SUPERUSER_PASSWORD: str = "admin123" # Should be overridden in .env
     
     # LLM Provider Configuration

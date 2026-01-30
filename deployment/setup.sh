@@ -104,8 +104,8 @@ DATABASE_URL=postgresql+asyncpg://$DB_USER:$DB_PASS@localhost/$DB_NAME
 SECRET_KEY=$(openssl rand -hex 32)
 NEXT_PUBLIC_API_URL=https://dev.caidence.kclub.me/api
 ALLOWED_ORIGINS="http://localhost:3000,https://dev.caidence.kclub.me"
-FIRST_SUPERUSER=admin@cadence.ai
-FIRST_SUPERUSER_PASSWORD=$(openssl rand -hex 12)
+FIRST_SUPERUSER=admin@caidence.ai
+FIRST_SUPERUSER_PASSWORD=admin123
 # Add other keys...
 EOF
     chown cadence:cadence "$APP_DIR/.env"
@@ -151,12 +151,13 @@ success "Adminer Installed"
 success "Configuration Installed"
 
 # --- 7. Deployment ---
+# --- 7. Deployment ---
 log "Running initial deployment (via update.sh)..."
-chmod +x ./update.sh
-# ./update.sh # Uncomment to auto-deploy immediately if logic permits
+chmod +x "$SCRIPT_DIR/update.sh"
+# "$SCRIPT_DIR/update.sh" # Uncomment to auto-deploy immediately if logic permits
 
 success "Setup Complete!"
 echo -e "\n${GREEN}Next Steps:${NC}"
 echo "1. Edit $APP_DIR/.env with real secrets."
-echo "2. Run './update.sh' to deploy the application."
+echo "2. Run '$SCRIPT_DIR/update.sh' to deploy the application."
 echo "3. Setup SSL: 'certbot --nginx -d dev.caidence.kclub.me'"
