@@ -63,19 +63,35 @@ mkdir -p "$NEW_RELEASE_DIR"
 
 # 2. Get Latest Code
 log_info "Fetching latest code..."
-# Assuming git exists and is configured. If running in CI, artifacts might be copied here.
-# For this script, we assume a local copy or a git pull.
-if [ -d "$REPO_DIR" ]; then
+# Strategy: 
+# 1. If REPO_DIR has a .git folder, treat it as a git repo and pull updates.
+# 2. If REPO_DIR exists but no .git, assume it's a manual upload/copy and just sync.
+# 3. If REPO_DIR doesn't exist, assume we are running FROM the source (e.g. uploaded folder) and sync from current dir.
+
+SOURCE_DIR=""
+
+if [ -d "$REPO_DIR/.git" ]; then
+    log_info "Git repo detected at $REPO_DIR. Pulling changes..."
     cd "$REPO_DIR"
     git fetch --all
     git reset --hard origin/main
-    # Copy to release dir excluding .git
-    rsync -av --exclude '.git' "$REPO_DIR/" "$NEW_RELEASE_DIR/"
+    SOURCE_DIR="$REPO_DIR"
+elif [ -d "$REPO_DIR" ]; then
+    log_info "Local source directory detected at $REPO_DIR (No Git)."
+    SOURCE_DIR="$REPO_DIR"
 else
-    # Fallback: Copy from current location if repo not set up (e.g. initial install)
-    log_warn "Repo dir not found at $REPO_DIR. Copying from current location."
-    rsync -av --exclude '.git' --exclude 'deployment' --exclude 'venv' --exclude 'node_modules' . "$NEW_RELEASE_DIR/"
+    # Fallback: We might be running ./deployment/update.sh directly from the uploaded source
+    # Get the project root (parent of 'deployment' dir)
+    SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    log_warn "REPO_DIR ($REPO_DIR) not found."
+    log_info "Using current script location as source: $PROJECT_ROOT"
+    SOURCE_DIR="$PROJECT_ROOT"
 fi
+
+# Sync to release dir
+log_info "Copying files from $SOURCE_DIR to $NEW_RELEASE_DIR..."
+rsync -av --exclude '.git' --exclude 'node_modules' --exclude 'venv' --exclude 'storage' "$SOURCE_DIR/" "$NEW_RELEASE_DIR/"
 
 # 3. Setup Backend
 log_info "Building Backend..."
