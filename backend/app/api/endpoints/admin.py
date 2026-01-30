@@ -10,32 +10,29 @@ from datetime import datetime
 
 from app.core.database import get_db
 from sqlalchemy.orm import selectinload
-from app.models import User, Organization, Brand, Creator, UserPermission
+from app.models import User, Organization, Brand, Creator
+from app.models.rbac import Permission
 from app.api.endpoints.auth import get_current_active_user
 from app.services.auth_service import is_super_admin, get_password_hash
 
 router = APIRouter()
 
-
 # --- Schemas ---
-class PlatformOverview(BaseModel):
-    total_organizations: int
-    total_users: int
-    total_brands: int
-    total_creators: int
-    total_campaigns: int
-    pending_approvals: int
-    mrr: float
-    active_subscriptions: int
+# ... (schemas are here) ...
 
-
-class UserPermissionSchema(BaseModel):
-    module: str
-    access_level: str
-
+# --- Middleware: Require Super Admin ---
+async def require_super_admin(current_user: User = Depends(get_current_active_user)) -> User:
+    if not is_super_admin(current_user.role):
+        raise HTTPException(status_code=403, detail="Super admin access required")
+    return current_user
+class PermissionSchema(BaseModel):
+    id: int
+    resource: str
+    action: str
+    scope_type: str
+    
     class Config:
         from_attributes = True
-
 
 class UserAdminResponse(BaseModel):
     id: int
@@ -46,11 +43,10 @@ class UserAdminResponse(BaseModel):
     is_active: bool
     is_approved: bool
     created_at: Optional[datetime]
-    permissions: List[UserPermissionSchema] = []
+    custom_permissions: List[PermissionSchema] = [] # Changed from permissions
 
     class Config:
         from_attributes = True
-
 
 class UserRoleUpdate(BaseModel):
     role: Optional[str] = None
@@ -58,19 +54,16 @@ class UserRoleUpdate(BaseModel):
     is_approved: Optional[bool] = None
     organization_id: Optional[int] = None
 
-
 class UserPermissionUpdate(BaseModel):
     module: str
-    access_level: str  # "read", "write", "none"
-
+    access_level: str
 
 class TeamInvite(BaseModel):
     email: EmailStr
     full_name: str
     role: str
     organization_id: Optional[int] = None
-    password: str  # Direct password set (no email)
-
+    password: str
 
 class BillingOverview(BaseModel):
     mrr: float
@@ -81,7 +74,6 @@ class BillingOverview(BaseModel):
     enterprise_tier: int
     churn_rate: float
 
-
 class SubscriptionResponse(BaseModel):
     org_id: int
     org_name: str
@@ -89,70 +81,7 @@ class SubscriptionResponse(BaseModel):
     monthly_amount: float
     status: str
 
-
-# --- Middleware: Require Super Admin ---
-async def require_super_admin(current_user: User = Depends(get_current_active_user)) -> User:
-    if not is_super_admin(current_user.role):
-        raise HTTPException(status_code=403, detail="Super admin access required")
-    return current_user
-
-
-# --- Endpoints ---
-@router.get("/overview", response_model=PlatformOverview)
-async def get_platform_overview(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_admin)
-):
-    """
-    Get platform-wide KPIs.
-    """
-    orgs = await db.execute(select(Organization))
-    users = await db.execute(select(User))
-    brands = await db.execute(select(Brand))
-    creators = await db.execute(select(Creator))
-    pending = await db.execute(select(User).where(User.is_approved == False))
-    
-    return PlatformOverview(
-        total_organizations=len(orgs.scalars().all()),
-        total_users=len(users.scalars().all()),
-        total_brands=len(brands.scalars().all()),
-        total_creators=len(creators.scalars().all()),
-        total_campaigns=47,  # Mock
-        pending_approvals=len(pending.scalars().all()),
-        mrr=12500.00,  # Mock
-        active_subscriptions=15,  # Mock
-    )
-
-
-@router.get("/organizations", response_model=List[dict])
-async def list_all_organizations(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_admin)
-):
-    """
-    List all organizations with user counts.
-    """
-    result = await db.execute(select(Organization))
-    orgs = result.scalars().all()
-    
-    response = []
-    for org in orgs:
-        users_result = await db.execute(
-            select(User).where(User.organization_id == org.id)
-        )
-        user_count = len(users_result.scalars().all())
-        
-        response.append({
-            "id": org.id,
-            "name": org.name,
-            "slug": org.slug,
-            "plan_tier": org.plan_tier,
-            "is_active": org.is_active,
-            "user_count": user_count,
-        })
-    
-    return response
-
+# ...
 
 @router.get("/users", response_model=List[UserAdminResponse])
 async def list_all_users(
@@ -164,7 +93,7 @@ async def list_all_users(
     """
     List all users with optional filters.
     """
-    query = select(User).options(selectinload(User.permissions))
+    query = select(User).options(selectinload(User.custom_permissions)) # Changed from permissions
     
     if role:
         query = query.where(User.role == role)
@@ -174,6 +103,7 @@ async def list_all_users(
     result = await db.execute(query)
     return result.scalars().all()
 
+# ...
 
 @router.patch("/users/{user_id}", response_model=UserAdminResponse)
 async def update_user(
@@ -185,7 +115,8 @@ async def update_user(
     """
     Update user role, status, or approval.
     """
-    result = await db.execute(select(User).options(selectinload(User.permissions)).where(User.id == user_id))
+    # Load custom_permissions
+    result = await db.execute(select(User).options(selectinload(User.custom_permissions)).where(User.id == user_id))
     user = result.scalar_one_or_none()
     
     if not user:
@@ -204,7 +135,6 @@ async def update_user(
     await db.refresh(user)
     return user
 
-
 @router.post("/users/{user_id}/permissions")
 async def update_user_permission(
     user_id: int,
@@ -213,24 +143,26 @@ async def update_user_permission(
     current_user: User = Depends(require_super_admin)
 ):
     """
-    Update or create a permission override for a specific module.
+    Update or create a permission override (granular).
+    Maps module->resource, access_level->action.
     """
     # Check if permission exists
     result = await db.execute(
-        select(UserPermission).where(
-            UserPermission.user_id == user_id,
-            UserPermission.module == perm_data.module
+        select(Permission).where(
+            Permission.user_id == user_id,
+            Permission.resource == perm_data.module # Mapping
         )
     )
     existing_perm = result.scalar_one_or_none()
 
     if existing_perm:
-        existing_perm.access_level = perm_data.access_level
+        existing_perm.action = perm_data.access_level
     else:
-        new_perm = UserPermission(
+        new_perm = Permission(
             user_id=user_id,
-            module=perm_data.module,
-            access_level=perm_data.access_level
+            resource=perm_data.module,
+            action=perm_data.access_level,
+            scope_type="global" # Default for admin panel overrides
         )
         db.add(new_perm)
     

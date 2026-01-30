@@ -25,12 +25,12 @@ const MODULES = [
 ];
 
 interface UserPermission {
-    module: string;
-    access_level: string;
+    resource: string;
+    action: string;
 }
 
 interface ExtendedAdminUser extends AdminUser {
-    permissions?: UserPermission[];
+    custom_permissions?: UserPermission[];
 }
 
 export function AccessControlTab() {
@@ -71,42 +71,42 @@ export function AccessControlTab() {
         loadUsers();
     }, []);
 
-    const togglePermission = async (userId: number, moduleKey: string, currentAccess: string) => {
-        const newAccess = currentAccess === "write" ? "none" : "write";
+    const togglePermission = async (userId: number, resourceKey: string, currentAction: string) => {
+        const newAction = currentAction === "write" ? "none" : "write";
 
         // Optimistic UI update
         setUsers(prev => prev.map(u => {
             if (u.id !== userId) return u;
-            const perms = u.permissions || [];
-            const existingIdx = perms.findIndex(p => p.module === moduleKey);
+            const perms = u.custom_permissions || [];
+            const existingIdx = perms.findIndex(p => p.resource === resourceKey);
             let newPerms;
 
             if (existingIdx >= 0) {
                 newPerms = [...perms];
-                newPerms[existingIdx] = { ...newPerms[existingIdx], access_level: newAccess };
+                newPerms[existingIdx] = { ...newPerms[existingIdx], action: newAction };
             } else {
-                newPerms = [...perms, { module: moduleKey, access_level: newAccess }];
+                newPerms = [...perms, { resource: resourceKey, action: newAction }];
             }
-            return { ...u, permissions: newPerms };
+            return { ...u, custom_permissions: newPerms };
         }));
 
         try {
             // Call API
             const token = localStorage.getItem("token");
-            const response = await fetch(`http://localhost:8080/api/v1/admin/users/${userId}/permissions`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/admin/users/${userId}/permissions`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    module: moduleKey,
-                    access_level: newAccess
+                    module: resourceKey,
+                    access_level: newAction
                 })
             });
 
             if (!response.ok) throw new Error("Failed to update");
-            toast.success(`Permission updated for ${moduleKey}`);
+            toast.success(`Permission updated for ${resourceKey}`);
         } catch (error) {
             toast.error("Failed to save permission");
             loadUsers(); // Revert
@@ -163,7 +163,7 @@ export function AccessControlTab() {
                                         </div>
                                     </div>
                                     <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                        {user.role === 'super_admin' ? MODULES.length : (user.permissions?.filter(p => p.access_level === 'write').length || 0)} Modules Enabled
+                                        {user.role === 'super_admin' ? MODULES.length : (user.custom_permissions?.filter(p => p.action === 'write').length || 0)} Modules Enabled
                                     </div>
                                 </div>
 
@@ -183,9 +183,9 @@ export function AccessControlTab() {
                                             // BUT display needs to know the Role access.
                                             // Simplification: We blindly toggle record.
 
-                                            const perm = user.permissions?.find(p => p.module === mod.key);
+                                            const perm = user.custom_permissions?.find(p => p.resource === mod.key);
                                             const isSuperAdmin = user.role === 'super_admin';
-                                            const isEnabled = perm ? perm.access_level === 'write' : isSuperAdmin;
+                                            const isEnabled = perm ? perm.action === 'write' : isSuperAdmin;
 
                                             return (
                                                 <div key={mod.key} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg">

@@ -19,7 +19,11 @@ class User(Base):
     
     # Organization & Role
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
-    role = Column(String, default="viewer")  # super_admin, agency_admin, agency_member, brand_admin, brand_member, creator, viewer
+    
+    # RBAC Fields
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=True)
+    role = Column(String, default="viewer")  # Keeping for back-compat/quick check, sync with role_id
     
     # Status
     is_active = Column(Boolean, default=True)
@@ -30,10 +34,18 @@ class User(Base):
     
     # Relationships
     organization = relationship("Organization", back_populates="members")
+    team = relationship("Team", back_populates="members")
+    role_model = relationship("Role", back_populates="users") # Rename to avoid conflict with 'role' string
+    
+    # Legacy permission (to be deprecated)
+    # permissions = relationship("UserPermission", back_populates="user", cascade="all, delete-orphan")
+    
+    # New Granular Permissions
+    custom_permissions = relationship("Permission", back_populates="user", cascade="all, delete-orphan")
+    
     campaigns = relationship("Campaign", back_populates="owner")
     activities = relationship("ActivityLog", back_populates="user")
     projects = relationship("Project", back_populates="owner")
-    permissions = relationship("UserPermission", back_populates="user", cascade="all, delete-orphan")
 
 class Campaign(Base):
     __tablename__ = "campaigns"
@@ -158,15 +170,15 @@ class ChatMessage(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     user_id = Column(Integer, ForeignKey("users.id"))
 
-class UserPermission(Base):
-    __tablename__ = "user_permissions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    module = Column(String)  # Key from Sidebar (e.g., 'workflow', 'crm')
-    access_level = Column(String, default="write") # "read", "write"
-    
-    user = relationship("User", back_populates="permissions")
+# class UserPermission(Base):
+#     __tablename__ = "user_permissions"
+#
+#     id = Column(Integer, primary_key=True, index=True)
+#     user_id = Column(Integer, ForeignKey("users.id"))
+#     module = Column(String)  # Key from Sidebar (e.g., 'workflow', 'crm')
+#     access_level = Column(String, default="write") # "read", "write"
+#     
+#     user = relationship("User", back_populates="permissions")
 
 class Comment(Base):
     __tablename__ = "comments"

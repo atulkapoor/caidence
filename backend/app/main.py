@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.database import engine, Base
-import app.models.models # Import models to register them with Base
+import app.models # Import all models to register them with Base
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
                 id=1, 
                 email="admin@cadence.ai", 
                 full_name="Admin User", 
-                role="super_admin",
+                role="root",
                 is_active=True,
                 is_approved=True
             )

@@ -10,11 +10,14 @@ from app.models.models import (
     WorkflowRun,
     Presentation,
     ChatMessage,
-    UserPermission,
+    ChatMessage,
+    # UserPermission,
 )
 from app.models.organization import Organization
 from app.models.brand import Brand
 from app.models.creator import Creator
+from app.models.team import Team
+from app.models.rbac import Role, Permission
 
 __all__ = [
     "User",
@@ -30,5 +33,9 @@ __all__ = [
     "Organization",
     "Brand",
     "Creator",
-    "UserPermission",
+    "Creator",
+    # "UserPermission",
+    "Team",
+    "Role",
+    "Permission",
 ]

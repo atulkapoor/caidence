@@ -67,7 +67,9 @@ def decode_access_token(token: str) -> Optional[TokenData]:
 
 
 # --- Role Permissions ---
+# --- Role Permissions ---
 ROLE_HIERARCHY = {
+    "root": 110,
     "super_admin": 100,
     "agency_admin": 80,
     "agency_member": 60,
@@ -87,7 +89,7 @@ def has_permission(user_role: str, required_role: str) -> bool:
 
 def is_super_admin(role: str) -> bool:
     """Check if user is super admin."""
-    return role == "super_admin"
+    return role in ["root", "super_admin"]
 
 
 def is_agency_level(role: str) -> bool:

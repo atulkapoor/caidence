@@ -10,7 +10,7 @@ export interface AdminUser {
     is_active: boolean;
     is_approved: boolean;
     created_at: string;
-    permissions?: { module: string; access_level: string }[];
+    custom_permissions?: { resource: string; action: string; scope_type?: string }[];
 }
 
 export interface TeamInvite {

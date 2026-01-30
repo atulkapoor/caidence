@@ -48,7 +48,7 @@ class BrandResponse(BaseModel):
 
 
 # --- Endpoints ---
-@router.get("/", response_model=List[BrandResponse])
+@router.get("", response_model=List[BrandResponse])
 async def list_brands(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -67,7 +67,7 @@ async def list_brands(
     return []
 
 
-@router.post("/", response_model=BrandResponse)
+@router.post("", response_model=BrandResponse)
 async def create_brand(
     brand_data: BrandCreate,
     db: AsyncSession = Depends(get_db),

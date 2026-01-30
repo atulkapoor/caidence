@@ -25,3 +25,4 @@ class Organization(Base):
     # Relationships
     brands = relationship("Brand", back_populates="organization")
     members = relationship("User", back_populates="organization")
+    teams = relationship("Team", back_populates="organization")

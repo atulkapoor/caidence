@@ -1,0 +1,18 @@
+[Unit]
+Description=Cadence AI - Frontend
+After=network.target cadence-backend.service
+
+[Service]
+User=cadence
+Group=cadence
+WorkingDirectory=/opt/cadence/current/frontend
+EnvironmentFile=/opt/cadence/.env
+# Assuming 'npm start' runs the next start script
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+[Install]
+WantedBy=multi-user.target

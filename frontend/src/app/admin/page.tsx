@@ -268,7 +268,7 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
     const [formData, setFormData] = useState({
         email: "",
         full_name: "",
-        role: "viewer",
+        role: "super_admin",
         password: "TempPassword123!", // Default temp password
         organization_id: 1 // Default to org 1 for now
     });
@@ -320,10 +320,10 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                             value={formData.role}
                             onChange={e => setFormData({ ...formData, role: e.target.value })}
                         >
-                            <option value="viewer">Viewer</option>
-                            <option value="editor">Editor</option>
-                            <option value="agency_admin">Agency Admin</option>
                             <option value="super_admin">Super Admin</option>
+                            <option value="agency_admin">Admin</option>
+                            <option value="editor">Editor</option>
+                            <option value="viewer">Viewer</option>
                         </select>
                     </div>
                     <div>

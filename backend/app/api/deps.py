@@ -21,7 +21,10 @@ async def get_current_user(
     )
     token_data = decode_access_token(token)
     if token_data is None:
+        print(f"DEBUG: Token decode failed for: {token[:20]}...")
         raise credentials_exception
+    
+    print(f"DEBUG: Token decoded for user_id: {token_data.user_id}")
     
     result = await db.execute(select(User).where(User.id == token_data.user_id))
     user = result.scalar_one_or_none()
