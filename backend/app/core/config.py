@@ -37,7 +37,11 @@ class Settings(BaseSettings):
 
     def assemble_db_url(self) -> str:
         if self.DATABASE_URL:
-            return self.DATABASE_URL
+            url = self.DATABASE_URL
+            # Auto-fix sync driver scheme for async engine compatibility
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return url
         # Default to SQLite for easier local development if Postgres is not explicitly set in env
         return "sqlite+aiosqlite:///./sql_app.db"
 

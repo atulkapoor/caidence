@@ -87,7 +87,7 @@ if [ ! -f "$APP_DIR/.env" ]; then
     log "Creating default .env file..."
     cat > "$APP_DIR/.env" <<EOF
 # Production Environment Variables
-DATABASE_URL=postgresql://$DB_USER:$DB_PASS@localhost/$DB_NAME
+DATABASE_URL=postgresql+asyncpg://$DB_USER:$DB_PASS@localhost/$DB_NAME
 SECRET_KEY=$(openssl rand -hex 32)
 NEXT_PUBLIC_API_URL=https://your-domain.com/api
 # Add other keys...
