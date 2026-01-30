@@ -89,7 +89,8 @@ if [ ! -f "$APP_DIR/.env" ]; then
 # Production Environment Variables
 DATABASE_URL=postgresql+asyncpg://$DB_USER:$DB_PASS@localhost/$DB_NAME
 SECRET_KEY=$(openssl rand -hex 32)
-NEXT_PUBLIC_API_URL=https://your-domain.com/api
+NEXT_PUBLIC_API_URL=https://dev.caidence.kclub.me/api
+ALLOWED_ORIGINS="http://localhost:3000,https://dev.caidence.kclub.me"
 FIRST_SUPERUSER=admin@cadence.ai
 FIRST_SUPERUSER_PASSWORD=$(openssl rand -hex 12)
 # Add other keys...
@@ -135,4 +136,4 @@ success "Setup Complete!"
 echo -e "\n${GREEN}Next Steps:${NC}"
 echo "1. Edit $APP_DIR/.env with real secrets."
 echo "2. Run './update.sh' to deploy the application."
-echo "3. Setup SSL: 'certbot --nginx -d your-domain.com'"
+echo "3. Setup SSL: 'certbot --nginx -d dev.caidence.kclub.me'"
