@@ -15,9 +15,11 @@ set -e
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 log() { echo -e "${BLUE}[SETUP] $1${NC}"; }
+log_warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
 success() { echo -e "${GREEN}[OK] $1${NC}"; }
 error() { echo -e "${RED}[ERROR] $1${NC}"; }
 
