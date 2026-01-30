@@ -63,38 +63,50 @@ mkdir -p "$NEW_RELEASE_DIR"
 
 # 2. Get Latest Code
 log_info "Fetching latest code..."
-# Strategy: 
-# 1. If REPO_DIR has a .git folder, treat it as a git repo and pull updates.
-# 2. If REPO_DIR exists but no .git, assume it's a manual upload/copy and just sync.
-# 3. If REPO_DIR doesn't exist, assume we are running FROM the source (e.g. uploaded folder) and sync from current dir.
 
+# Strategy: 
+# 1. First, check if the script is running FROM a valid source location (e.g. user cloned repo and ran ./deployment/update.sh).
+# 2. If valid, use THAT as the source.
+# 3. Else, fall back to the config REPO_DIR (e.g. /opt/cadence/repo).
+
+SCRIPT_PATH=$(realpath "$0")
+SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
+PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 SOURCE_DIR=""
 
-if [ -d "$REPO_DIR/.git" ]; then
+if [ -d "$PROJECT_ROOT/backend" ] && [ -d "$PROJECT_ROOT/frontend" ]; then
+    log_info "Detected valid project structure at $PROJECT_ROOT."
+    SOURCE_DIR="$PROJECT_ROOT"
+elif [ -d "$REPO_DIR/.git" ]; then
     log_info "Git repo detected at $REPO_DIR. Pulling changes..."
     cd "$REPO_DIR"
     git fetch --all
     git reset --hard origin/main
     SOURCE_DIR="$REPO_DIR"
-elif [ -d "$REPO_DIR" ]; then
+elif [ -d "$REPO_DIR" ] && [ "$(ls -A $REPO_DIR)" ]; then
     log_info "Local source directory detected at $REPO_DIR (No Git)."
     SOURCE_DIR="$REPO_DIR"
 else
-    # Fallback: We might be running ./deployment/update.sh directly from the uploaded source
-    # Get the project root (parent of 'deployment' dir)
-    SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-    log_warn "REPO_DIR ($REPO_DIR) not found."
-    log_info "Using current script location as source: $PROJECT_ROOT"
-    SOURCE_DIR="$PROJECT_ROOT"
+    log_error "Could not determine source code location."
+    log_error "- Checked $PROJECT_ROOT (Script location) -> Invalid"
+    log_error "- Checked $REPO_DIR (Configured Repo Dir) -> Invalid or Empty"
+    exit 1
 fi
+
 
 # Sync to release dir
 log_info "Copying files from $SOURCE_DIR to $NEW_RELEASE_DIR..."
+# Ensure we copy contents, not the folder itself (trailing slash)
 rsync -av --exclude '.git' --exclude 'node_modules' --exclude 'venv' --exclude 'storage' "$SOURCE_DIR/" "$NEW_RELEASE_DIR/"
 
 # 3. Setup Backend
 log_info "Building Backend..."
+# Check if backend dir exists
+if [ ! -d "$NEW_RELEASE_DIR/backend" ]; then
+    log_error "Backend directory not found in $NEW_RELEASE_DIR! (Source was: $SOURCE_DIR)"
+    ls -la "$NEW_RELEASE_DIR"
+    exit 1
+fi
 cd "$NEW_RELEASE_DIR/backend"
 
 # Create venv
