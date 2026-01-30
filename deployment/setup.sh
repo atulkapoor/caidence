@@ -108,6 +108,16 @@ systemctl daemon-reload
 systemctl enable cadence-backend
 systemctl enable cadence-frontend
 
+# Determine PHP version for FPM socket
+PHP_VERSION=$(php -v | head -n 1 | cut -d " " -f 2 | cut -d "." -f 1,2)
+FPM_SOCKET="/run/php/php$PHP_VERSION-fpm.sock"
+log "Detected PHP version: $PHP_VERSION. Socket: $FPM_SOCKET"
+
+if [ -f "$TEMPLATE_DIR/nginx.conf" ]; then
+    log "Updating Nginx Config with correct PHP socket..."
+    sed -i "s|unix:/run/php/php.*-fpm.sock|unix:$FPM_SOCKET|g" "$TEMPLATE_DIR/nginx.conf"
+fi
+
 log "Installing Nginx Config..."
 cp "$TEMPLATE_DIR/nginx.conf" /etc/nginx/sites-available/cadence
 ln -sf /etc/nginx/sites-available/cadence /etc/nginx/sites-enabled/

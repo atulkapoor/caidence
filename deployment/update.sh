@@ -127,6 +127,9 @@ npm run build
 # 5. Database Migrations
 log_info "Running Database Migrations..."
 cd "$NEW_RELEASE_DIR/backend"
+# Link .env BEFORE migrations so Alembic settings can read it directly
+ln -sf "$APP_DIR/.env" "$NEW_RELEASE_DIR/backend/.env"
+
 # Ensure DB url is available
 if [ -z "$DATABASE_URL" ]; then
     log_warn "DATABASE_URL not found. Skipping migrations (or fail if critical)."
