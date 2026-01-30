@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -80,7 +80,7 @@ const TEMPLATE_WORKFLOWS = [
     }
 ];
 
-export default function WorkflowPage() {
+function WorkflowContent() {
     const [activeTab, setActiveTab] = useTabState("my-workflows");
     const [workflows, setWorkflows] = useState<WorkflowType[]>([]);
     const router = useRouter();
@@ -276,5 +276,13 @@ export default function WorkflowPage() {
                 )}
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function WorkflowPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading workflows...</div>}>
+            <WorkflowContent />
+        </Suspense>
     );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { BarChart3, TrendingUp, Users, MousePointer, ArrowUpRight, Radio, Search } from "lucide-react";
@@ -8,7 +8,7 @@ import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis
 import { SocialListeningDashboard } from "@/components/analytics/SocialListeningDashboard";
 import { toast } from "sonner";
 
-export default function AnalyticsPage() {
+function AnalyticsContent() {
     const [activeTab, setActiveTab] = useTabState("overview");
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -219,5 +219,13 @@ export default function AnalyticsPage() {
                 </div>
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function AnalyticsPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading analytics...</div>}>
+            <AnalyticsContent />
+        </Suspense>
     );
 }

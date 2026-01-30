@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Bot, UploadCloud, ChevronRight, Wand2, Loader2, AlertCircle } from "lucide-react";
 import { StrategyResult } from "@/components/ai-agent/StrategyResult";
@@ -18,7 +18,7 @@ const AGENT_PLACEHOLDERS: Record<string, { project: string; objective: string }>
 
 const API_Base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-export default function AIAgentPage() {
+function AIAgentContent() {
     const { industry } = usePreferences();
     const [step, setStep] = useState(1);
     const [dragging, setDragging] = useState(false);
@@ -149,6 +149,8 @@ export default function AIAgentPage() {
             </DashboardLayout>
         );
     }
+
+
 
     return (
         <DashboardLayout>
@@ -291,5 +293,13 @@ export default function AIAgentPage() {
                 )}
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function AIAgentPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading AI Agent...</div>}>
+            <AIAgentContent />
+        </Suspense>
     );
 }

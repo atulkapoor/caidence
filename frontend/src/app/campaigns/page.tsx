@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { CampaignCard } from "@/components/campaigns/CampaignCard";
 import { Plus, Search, Filter, Calendar as CalendarIcon, BarChart3, List, LayoutGrid } from "lucide-react";
@@ -16,7 +16,7 @@ const AnalyticsTab = dynamic(() => import("@/components/campaigns/AnalyticsTab")
 });
 import { SocialCalendar } from "@/components/social/SocialCalendar";
 
-export default function CampaignPage() {
+function CampaignContent() {
     // Current valid tabs: "Campaign List", "Create Campaign", "Analytics", "Calendar"
     // Using simple string matching for state.
     const [activeTab, setActiveTab] = useTabState("Campaign List");
@@ -287,5 +287,13 @@ export default function CampaignPage() {
                 />
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function CampaignPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading campaigns...</div>}>
+            <CampaignContent />
+        </Suspense>
     );
 }

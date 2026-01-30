@@ -2,12 +2,12 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { generateDesign, fetchDesignAssets, DesignAsset } from "@/lib/api";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 // import Link from "next/link"; // Unused
 import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight } from "lucide-react";
 
-export default function DesignStudioPage() {
+function DesignStudioContent() {
     // @ts-ignore
     const [activeTab, setActiveTab] = useTabState("generate");
 
@@ -602,5 +602,13 @@ export default function DesignStudioPage() {
             </div>
         </DashboardLayout>
     )
+}
+
+export default function DesignStudioPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
+            <DesignStudioContent />
+        </Suspense>
+    );
 }
 

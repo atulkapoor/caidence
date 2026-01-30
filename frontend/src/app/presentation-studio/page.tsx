@@ -3,12 +3,12 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Presentation, Upload, PieChart, ChevronRight, FileText, Zap } from "lucide-react";
 import { fetchPresentations, generatePresentation, Presentation as PresentationType } from "@/lib/api";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import Link from "next/link";
 import { CollateralGenerator } from "@/components/content/CollateralGenerator";
 
-export default function PresentationStudioPage() {
+function PresentationStudioContent() {
     const [activeTab, setActiveTab] = useTabState("presentations");
     const [recentPresentations, setRecentPresentations] = useState<PresentationType[]>([]);
 
@@ -165,5 +165,13 @@ export default function PresentationStudioPage() {
                 </div>
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function PresentationStudioPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
+            <PresentationStudioContent />
+        </Suspense>
     );
 }

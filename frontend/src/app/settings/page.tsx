@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 // import { useSearchParams } from "next/navigation"; // Not needed with useTabState
 import { useTabState } from "@/hooks/useTabState";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -15,7 +15,7 @@ import SocialAccountsSettings from "@/components/settings/SocialAccountsSettings
 import { DashboardSettings } from "@/components/settings/DashboardSettings"; // Renamed/reused as General Workspace
 import { Users, Plus } from "lucide-react"; // For new Members placeholder
 
-export default function SettingsPage() {
+function SettingsContent() {
     // const searchParams = useSearchParams(); // Removed, handled by useTabState
     // Use useTabState for full deep linking (read & write to URL)
     const [activeTab, setActiveTab] = useTabState("profile");
@@ -62,6 +62,14 @@ export default function SettingsPage() {
                 </div>
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function SettingsPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading settings...</div>}>
+            <SettingsContent />
+        </Suspense>
     );
 }
 

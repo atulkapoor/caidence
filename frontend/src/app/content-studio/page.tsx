@@ -4,7 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import { generateContent, fetchContentGenerations, ContentGeneration } from "@/lib/api";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 
 // Implementation of Typewriter effect component
@@ -26,7 +26,7 @@ const TypewriterEffect = ({ text }: { text: string }) => {
     return <div className="whitespace-pre-line leading-relaxed text-slate-700">{displayedText}</div>;
 };
 
-export default function ContentStudioPage() {
+function ContentStudioContent() {
     // Form State
     const [title, setTitle] = useState("");
     const [campaign, setCampaign] = useState("");
@@ -581,5 +581,13 @@ ${prompt}
                 </div>
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function ContentStudioPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
+            <ContentStudioContent />
+        </Suspense>
     );
 }

@@ -2,7 +2,7 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ArrowLeft, Play, Clock, CheckCircle, AlertCircle, Terminal, FileJson, Settings, Layers, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -19,7 +19,7 @@ interface Step {
     config: Record<string, unknown>;
 }
 
-export default function WorkflowDetailPage({ params }: PageProps) {
+function WorkflowDetailContent({ params }: PageProps) {
     const router = useRouter();
     const [resolvedParams, setResolvedParams] = useState<{ id: string } | null>(null);
     const [workflow, setWorkflow] = useState<Workflow | null>(null);
@@ -438,5 +438,13 @@ export default function WorkflowDetailPage({ params }: PageProps) {
                 </div>
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function WorkflowDetailPage({ params }: PageProps) {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading workflow...</div>}>
+            <WorkflowDetailContent params={params} />
+        </Suspense>
     );
 }

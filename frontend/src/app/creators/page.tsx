@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Users, Plus, Search, Filter, MoreHorizontal, Link2, FileText, Instagram, Youtube } from "lucide-react";
@@ -18,7 +18,7 @@ interface Creator {
     affiliate_code?: string;
 }
 
-export default function CreatorsPage() {
+function CreatorsContent() {
     const [creators, setCreators] = useState<Creator[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useTabState("all");
@@ -190,5 +190,13 @@ export default function CreatorsPage() {
                 </div>
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function CreatorsPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading creators...</div>}>
+            <CreatorsContent />
+        </Suspense>
     );
 }
