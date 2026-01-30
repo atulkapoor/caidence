@@ -99,6 +99,18 @@ log_info "Copying files from $SOURCE_DIR to $NEW_RELEASE_DIR..."
 # Ensure we copy contents, not the folder itself (trailing slash)
 rsync -av --exclude '.git' --exclude 'node_modules' --exclude 'venv' --exclude 'storage' "$SOURCE_DIR/" "$NEW_RELEASE_DIR/"
 
+# 2.1 Link .env EARLY (Crucial for Frontend Build)
+log_info "Linking .env file..."
+ln -sf "$APP_DIR/.env" "$NEW_RELEASE_DIR/backend/.env"
+ln -sf "$APP_DIR/.env" "$NEW_RELEASE_DIR/frontend/.env.local" # Next.js uses .env.local
+
+# Trigger load of env vars for this script's session too (if not already)
+if [ -f "$APP_DIR/.env" ]; then
+    set -a
+    source "$APP_DIR/.env"
+    set +a
+fi
+
 # 3. Setup Backend
 log_info "Building Backend..."
 # Check if backend dir exists
@@ -127,8 +139,7 @@ npm run build
 # 5. Database Migrations
 log_info "Running Database Migrations..."
 cd "$NEW_RELEASE_DIR/backend"
-# Link .env BEFORE migrations so Alembic settings can read it directly
-ln -sf "$APP_DIR/.env" "$NEW_RELEASE_DIR/backend/.env"
+# .env is already linked from Step 2.1
 
 # Ensure DB url is available
 if [ -z "$DATABASE_URL" ]; then
@@ -141,10 +152,6 @@ fi
 
 # 6. Atomic Switch
 log_info "Switching Symlink..."
-# Link .env
-ln -sf "$APP_DIR/.env" "$NEW_RELEASE_DIR/backend/.env"
-ln -sf "$APP_DIR/.env" "$NEW_RELEASE_DIR/frontend/.env.local" # Next.js uses .env.local
-
 # Atomic symlink swap
 ln -sfn "$NEW_RELEASE_DIR" "$CURRENT_SYMLINK"
 
