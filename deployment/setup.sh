@@ -132,6 +132,12 @@ if [ -f "$TEMPLATE_DIR/nginx.conf" ]; then
 fi
 
 log "Installing Nginx Config..."
+# Check for existing SSL to warn user
+if grep -q "ssl_certificate" /etc/nginx/sites-enabled/cadence 2>/dev/null; then
+    log_warn "Existing SSL configuration detected! Overwriting with template..."
+    log_warn "YOU MUST RUN 'certbot' AGAIN AFTER THIS TO RESTORE HTTPS ACCESS!"
+fi
+
 cp "$TEMPLATE_DIR/nginx.conf" /etc/nginx/sites-available/cadence
 ln -sf /etc/nginx/sites-available/cadence /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
