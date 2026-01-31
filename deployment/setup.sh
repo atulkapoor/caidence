@@ -134,16 +134,35 @@ if [ -f "$TEMPLATE_DIR/nginx.conf" ]; then
 fi
 
 log "Installing Nginx Config..."
-# Check for existing SSL to warn user
+
+# 6.0 Checks for existing SSL to prevent overwrite
+# If we see "ssl_certificate" in the active config, we assume SSL is set up and we SHOULD NOT overwrite it with HTTP-only template.
 if grep -q "ssl_certificate" /etc/nginx/sites-enabled/cadence 2>/dev/null; then
-    log_warn "Existing SSL configuration detected! Overwriting with template..."
-    log_warn "YOU MUST RUN 'certbot' AGAIN AFTER THIS TO RESTORE HTTPS ACCESS!"
+    log_warn "Existing SSL configuration detected! Skipping template overwrite to preserve HTTPS."
+    log_warn "If you need to update Nginx config, edit /etc/nginx/sites-available/cadence manually."
+else
+    # No SSL detected, proceed with standard template copy
+    log "No active SSL config found. Installing standard HTTP template..."
+    cp "$TEMPLATE_DIR/nginx.conf" /etc/nginx/sites-available/cadence
+    ln -sf /etc/nginx/sites-available/cadence /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default
+    
+    # Reload to apply HTTP config before Certbot
+    nginx -t && systemctl restart nginx
+    
+    # 6.0.1 Auto-Run Certbot (SSL)
+    log "Running Certbot to enable HTTPS..."
+    DOMAIN="dev.caidence.kclub.me"
+    EMAIL="admin@caidence.ai"
+    
+    if certbot --nginx -d "$DOMAIN" -n --agree-tos -m "$EMAIL" --redirect; then
+        success "SSL Certificate installed successfully!"
+    else
+        log_warn "Certbot failed. You may need to run 'certbot --nginx' manually."
+    fi
 fi
 
-cp "$TEMPLATE_DIR/nginx.conf" /etc/nginx/sites-available/cadence
-ln -sf /etc/nginx/sites-available/cadence /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-nginx -t
+# Final Restart
 systemctl restart nginx
 
 

@@ -143,6 +143,10 @@ log_info "Building Frontend..."
 cd "$NEW_RELEASE_DIR/frontend"
 
 # Install deps & Build
+# Fix for "Cannot find module next/dist/compiled/cookie"
+log_info "Cleaning npm cache and installing dependencies..."
+npm cache clean --force
+rm -rf node_modules .next
 npm ci --legacy-peer-deps
 npm run build
 
