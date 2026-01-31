@@ -25,7 +25,7 @@ async def seed_org():
             print(f"Organization exists: {org.name} (ID: {org.id})")
             
         # Assign admin to this org
-        result = await session.execute(select(User).where(User.email == "admin@cadence.ai"))
+        result = await session.execute(select(User).where(User.email == "admin@caidence.ai"))
         user = result.scalar_one_or_none()
         
         if user:
