@@ -21,6 +21,13 @@ else
     echo "Docker is already installed."
 fi
 
+# 1.1 Stop conflicting services
+if systemctl is-active --quiet postgresql; then
+    echo "Stopping system PostgreSQL to free up port 5432..."
+    sudo systemctl stop postgresql
+    sudo systemctl disable postgresql
+fi
+
 # 2. Setup Environment
 APP_DIR="/var/www/cadence" # Changing to standard var/www or stick to /opt?
 # Let's stick to current structure to minimize friction
