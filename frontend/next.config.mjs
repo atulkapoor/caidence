@@ -3,9 +3,11 @@ const nextConfig = {
     eslint: {
         ignoreDuringBuilds: true,
     },
+    transpilePackages: ["@react-pdf/renderer"],
     typescript: {
         ignoreBuildErrors: true,
     },
+    output: "standalone",
     async rewrites() {
         return [
             {
