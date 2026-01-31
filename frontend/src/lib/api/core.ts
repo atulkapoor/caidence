@@ -1,5 +1,5 @@
 
-export const API_BASE_URL = "/api";
+export const API_BASE_URL = "/api/v1";
 
 // --- Auth Helper ---
 export async function getAuthHeaders(): Promise<HeadersInit> {
