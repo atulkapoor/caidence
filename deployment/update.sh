@@ -37,15 +37,21 @@ log_error() { echo -e "${RED}[ERROR] $1${NC}"; }
 cleanup_and_fail() {
     log_error "Deployment failed! Triggering rollback..."
     
-    # Removes the incomplete release directory
+    # 1. Revert Symlink if we switched it
+    if [ -n "$PREVIOUS_RELEASE" ] && [ -d "$PREVIOUS_RELEASE" ] && [ "$PREVIOUS_RELEASE" != "$NEW_RELEASE_DIR" ]; then
+        log_warn "Reverting symlink to previous release: $PREVIOUS_RELEASE"
+        ln -sfn "$PREVIOUS_RELEASE" "$CURRENT_SYMLINK"
+    fi
+
+    # 2. Restart services to ensure stable state (with old code)
+    log_info "Restarting current services..."
+    systemctl restart cadence-backend cadence-frontend || true
+
+    # 3. Remove the incomplete release directory
     if [ -d "$NEW_RELEASE_DIR" ]; then
         log_warn "Removing failed release directory: $NEW_RELEASE_DIR"
         rm -rf "$NEW_RELEASE_DIR"
     fi
-
-    # Restart services to ensure stable state (in case they stopped)
-    log_info "Restarting current services..."
-    systemctl restart cadence-backend cadence-frontend || true
 
     log_error "Rollback complete. System state restored."
     exit 1
@@ -56,6 +62,8 @@ trap 'cleanup_and_fail' ERR
 
 # --- Main Deployment Flow ---
 log_info "Starting deployment: $TIMESTAMP"
+# Track previous release for rollback
+PREVIOUS_RELEASE=$(readlink -f "$CURRENT_SYMLINK" 2>/dev/null || echo "")
 
 # 1. Prepare Release Directory
 log_info "Creating release directory..."
@@ -144,10 +152,10 @@ cd "$NEW_RELEASE_DIR/frontend"
 
 # Install deps & Build
 # Fix for "Cannot find module next/dist/compiled/cookie"
-log_info "Cleaning npm cache and installing dependencies..."
+log_info "Cleaning npm cache and installing dependencies (Fresh Install)..."
 npm cache clean --force
-rm -rf node_modules .next
-npm ci --legacy-peer-deps
+rm -rf node_modules .next package-lock.json
+npm install --legacy-peer-deps
 npm run build
 
 # 5. Database Migrations
