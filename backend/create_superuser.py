@@ -2,7 +2,7 @@ import asyncio
 from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models import User
-from app.core.security import get_password_hash
+from app.services.auth_service import get_password_hash
 from app.models.rbac import Role
 
 async def create_superuser():
