@@ -141,7 +141,7 @@ class AIService:
         
         # Direct Ollama API call (default or fallback)
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 payload = {
                     "model": model,
                     "prompt": prompt,
@@ -174,15 +174,33 @@ class AIService:
 
     @staticmethod
     async def generate_image(style: str, prompt: str) -> str:
-        """Simulates Image Generation (text-only models don't generate images)."""
-        # Placeholder - would integrate Stable Diffusion, DALL-E, etc.
-        styles = {
-            "Photorealistic": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b",
-            "3D Render": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe",
-            "Minimalist": "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85",
-            "Cyberpunk": "https://images.unsplash.com/photo-1515630278258-407f66498911"
+        """Generates an image via Stable Diffusion (AI Worker)."""
+        ai_worker_url = os.getenv("AI_WORKER_URL", "http://ai_worker:8001")
+        
+        # Enhanced prompt based on style
+        style_modifiers = {
+            "Photorealistic": "photorealistic, 8k, detailed, unreal engine 5",
+            "3D Render": "3d render, blender, octave render, clay",
+            "Minimalist": "minimalist, flat design, vector art",
+            "Cyberpunk": "cyberpunk, neon, futuristic, high tech"
         }
-        return styles.get(style, "https://via.placeholder.com/1024x1024")
+        
+        final_prompt = f"{prompt}, {style_modifiers.get(style, '')}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client: # Long timeout for generation
+                res = await client.post(
+                    f"{ai_worker_url}/generate",
+                    json={"prompt": final_prompt, "steps": 1} 
+                )
+                res.raise_for_status()
+                data = res.json()
+                base64_img = data.get("image_base64")
+                return f"data:image/png;base64,{base64_img}"
+        except Exception as e:
+            logger.error(f"Image generation failed: {e}")
+            # Fallback to placeholder if worker is down
+            return "https://via.placeholder.com/1024x1024?text=Generation+Failed"
 
     @staticmethod
     async def generate_presentation_slides(source_type: str, title: str) -> str:
@@ -323,7 +341,7 @@ class AIService:
         
         # Direct Ollama chat API
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 payload = {
                     "model": model,
                     "messages": messages,

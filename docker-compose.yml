@@ -9,6 +9,9 @@ services:
       - ./backend/.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/cadence_ai
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - AI_WORKER_URL=http://ai_worker:8001
+      - LLM_MODEL=lfm2.5-thinking:latest
     restart: always
     depends_on:
       - db
@@ -41,5 +44,20 @@ services:
     ports:
       - 8080:8080
 
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: always
+
+  ai_worker:
+    build: ./ai_worker
+    ports:
+      - "8001:8001"
+    restart: always
+
 volumes:
   postgres_data:
+  ollama_models:
