@@ -489,6 +489,12 @@ function DesignStudioContent() {
                                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                                 <img
                                                     src={asset.image_url}
+                                                    onError={(e) => {
+                                                        // @ts-ignore
+                                                        e.target.src = "https://via.placeholder.com/400x300?text=Image+Error";
+                                                        // @ts-ignore
+                                                        e.target.className = "w-full h-full object-cover grayscale opacity-50";
+                                                    }}
                                                     alt={asset.title}
                                                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                                                 />

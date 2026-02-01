@@ -142,7 +142,7 @@ class StrategyResponse(BaseModel):
 @router.post("/generate", response_model=StrategyResponse)
 async def generate_strategy(
     input: StrategyInput,
-    db: Session = Depends(deps.get_db),
+    db: AsyncSession = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
     """
@@ -171,8 +171,8 @@ async def generate_strategy(
         owner_id=current_user.id
     )
     db.add(new_project)
-    db.commit()
-    db.refresh(new_project)
+    await db.commit()
+    await db.refresh(new_project)
 
     return StrategyResponse(
         project_id=new_project.id,

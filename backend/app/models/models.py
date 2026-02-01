@@ -116,7 +116,7 @@ class DesignAsset(Base):
     style = Column(String)
     aspect_ratio = Column(String)
     prompt = Column(Text)
-    image_url = Column(String) # For now, store mocked or S3 URL
+    image_url = Column(Text) # Base64 is large
     brand_colors = Column(String, nullable=True) # Check if this causes migration issues
     reference_image = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

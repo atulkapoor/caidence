@@ -7,13 +7,22 @@ export interface ChatMessage {
 }
 
 export async function sendChatMessage(message: string, session_id?: string): Promise<{ response: string; session_id: string }> {
-    const res = await fetch(`${API_BASE_URL}/chat/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, session_id }),
-    });
-    if (!res.ok) throw new Error("Failed to send message");
-    return res.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes timeout
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/chat/message`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message, session_id }),
+            signal: controller.signal
+        });
+
+        if (!res.ok) throw new Error("Failed to send message");
+        return res.json();
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 export async function fetchChatHistory(session_id: string): Promise<ChatMessage[]> {
