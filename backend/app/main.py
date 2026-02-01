@@ -34,6 +34,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add ProxyHeadersMiddleware to trust headers from the proxy (Traefik/Nginx/Next.js)
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to C(AI)DENCE Dashboard API"}
