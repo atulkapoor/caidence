@@ -6,6 +6,12 @@ import { fetchPresentationById, Presentation, generatePresentation } from "@/lib
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const PresentationPDFDownload = dynamic(() => import("@/components/content/PresentationPDF"), {
+    ssr: false,
+    loading: () => <button className="px-4 py-2 border bg-white border-slate-200 text-slate-400 rounded-xl text-sm font-bold">Loading PDF...</button>
+});
 
 interface PageProps {
     params: { id: string };
@@ -130,10 +136,19 @@ export default function PresentationDetailPage({ params }: PageProps) {
                         </div>
 
                         <div className="flex gap-2">
-                            <button className="flex items-center gap-2 px-4 py-2 border bg-white border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all">
-                                <Download className="w-4 h-4" />
-                                Export PDF
-                            </button>
+                            {slides.length > 0 && (
+                                <PresentationPDFDownload
+                                    data={{
+                                        title: presentation.title,
+                                        created_at: presentation.created_at,
+                                        slides: slides.map((s: any) => ({
+                                            title: s.title || "Untitled Slide",
+                                            content: s.content || ""
+                                        }))
+                                    }}
+                                    fileName={`${presentation.title.replace(/\s+/g, "_")}.pdf`}
+                                />
+                            )}
 
                             <button
                                 onClick={handleEdit}

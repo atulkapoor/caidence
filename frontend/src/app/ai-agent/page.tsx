@@ -90,15 +90,28 @@ function AIAgentContent() {
 
         } catch (error) {
             console.error(error);
-            toast.error("Error generating strategy. Using mock fallback.");
+            toast.message("Backend unreachable. Using Demo Mode.", {
+                description: "Using generated sample strategy for demonstration.",
+            });
             // Fallback for demo if backend fails or auth missing
             setResult({
-                project_id: 0,
+                project_id: 101, // Use a non-zero ID for realism
                 strategy: {
-                    target_audience: [{ name: "Demo Persona", description: "Fallback data due to connection error." }],
-                    key_channels: ["LinkedIn", "Email"],
-                    content_ideas: [{ title: "Demo Idea", format: "Blog", description: "Fallback idea." }],
-                    strategic_recommendations: ["Retry connection", "Check backend logs"]
+                    target_audience: [
+                        { name: "Urban Professionals", description: "Age 25-40, Tech-savvy, High disposable income." },
+                        { name: "Early Adopters", description: "Interested in the latest trends and innovations." }
+                    ],
+                    key_channels: ["LinkedIn", "Instagram", "Email Newsletter"],
+                    content_ideas: [
+                        { title: "Behind the Scenes", format: "Video Series", description: "Showcase the development process and team." },
+                        { title: "User Success Stories", format: "Case Studies", description: "Highlight beneficial impact on early users." },
+                        { title: "Feature Spotlight", format: "Carousel", description: "Deep dive into specific unique features." }
+                    ],
+                    strategic_recommendations: [
+                        "Launch a referral program to leverage early adopters.",
+                        "Collaborate with micro-influencers in the niche.",
+                        "Focus on community building via LinkedIn groups."
+                    ]
                 }
             });
         } finally {

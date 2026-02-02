@@ -1,4 +1,4 @@
-import { API_BASE_URL, getAuthHeaders } from "./core";
+import { API_BASE_URL, authenticatedFetch } from "./core";
 
 export interface Brand {
     id: number;
@@ -19,17 +19,14 @@ export interface BrandCreate {
 }
 
 export async function fetchBrands(): Promise<Brand[]> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/brands/`, { headers });
+    const res = await authenticatedFetch(`${API_BASE_URL}/brands/`);
     if (!res.ok) throw new Error("Failed to fetch brands");
     return res.json();
 }
 
 export async function createBrand(data: BrandCreate): Promise<Brand> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/brands/`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/brands/`, {
         method: "POST",
-        headers,
         body: JSON.stringify(data),
     });
     if (!res.ok) {

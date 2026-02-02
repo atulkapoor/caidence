@@ -1,4 +1,4 @@
-import { API_BASE_URL, getAuthHeaders } from "./core";
+import { API_BASE_URL, authenticatedFetch } from "./core";
 
 export interface Presentation {
     id: number;
@@ -10,24 +10,20 @@ export interface Presentation {
 }
 
 export async function fetchPresentations(): Promise<Presentation[]> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/presentation/`, { headers });
+    const res = await authenticatedFetch(`${API_BASE_URL}/presentation/`);
     if (!res.ok) throw new Error("Failed to fetch presentations");
     return res.json();
 }
 
 export async function fetchPresentationById(id: number): Promise<Presentation> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/presentation/${id}`, { headers });
+    const res = await authenticatedFetch(`${API_BASE_URL}/presentation/${id}`);
     if (!res.ok) throw new Error(`Failed to fetch presentation with id ${id}`);
     return res.json();
 }
 
 export async function generatePresentation(data: { title: string; source_type: string }): Promise<Presentation> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/presentation/generate`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/presentation/generate`, {
         method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error("Failed to generate presentation");

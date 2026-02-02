@@ -45,7 +45,7 @@ export function Topbar() {
                 </Link>
                 <Link href="/settings?tab=profile" className="flex items-center gap-2 pl-2">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-slate-900 to-slate-700 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-slate-900/20">
-                        AR
+                        AK
                     </div>
                 </Link>
                 <button

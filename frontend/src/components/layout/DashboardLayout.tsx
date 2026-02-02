@@ -1,14 +1,24 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { useRouter } from "next/navigation";
 
 interface DashboardLayoutProps {
     children: ReactNode;
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+    const router = useRouter();
+
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+            router.push("/login");
+        }
+    }, [router]);
+
     return (
         <div className="flex h-screen bg-background text-foreground overflow-hidden">
             {/* Sidebar */}

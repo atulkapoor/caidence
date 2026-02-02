@@ -1,5 +1,4 @@
-import { API_BASE_URL } from "./core";
-import { getAuthHeaders } from "./core";
+import { API_BASE_URL, authenticatedFetch } from "./core";
 
 export interface AdminUser {
     id: number;
@@ -22,17 +21,14 @@ export interface TeamInvite {
 }
 
 export async function fetchAdminUsers(): Promise<AdminUser[]> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/admin/users`, { headers });
+    const res = await authenticatedFetch(`${API_BASE_URL}/admin/users`);
     if (!res.ok) throw new Error("Failed to fetch users");
     return res.json();
 }
 
 export async function approveUser(userId: number): Promise<AdminUser> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/admin/users/${userId}`, {
         method: "PATCH",
-        headers,
         body: JSON.stringify({ is_approved: true }),
     });
     if (!res.ok) throw new Error("Failed to approve user");
@@ -40,10 +36,8 @@ export async function approveUser(userId: number): Promise<AdminUser> {
 }
 
 export async function inviteUser(data: TeamInvite): Promise<AdminUser> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/admin/invite`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/admin/invite`, {
         method: "POST",
-        headers,
         body: JSON.stringify(data),
     });
     if (!res.ok) {
