@@ -60,11 +60,51 @@ class Campaign(Base):
     owner = relationship("User", back_populates="campaigns")
 
     # Expanded Fields for Real Implementation
-    budget = Column(Text, nullable=True)  # JSON or simple string (e.g. {"total": 5000, "allocation": {...}})
+    # Expanded Fields for Real Implementation
+    budget = Column(Text, nullable=True)
     start_date = Column(DateTime(timezone=True), nullable=True)
     end_date = Column(DateTime(timezone=True), nullable=True)
-    channels = Column(Text, nullable=True)  # JSON array of strings
-    audience_targeting = Column(Text, nullable=True)  # JSON object describing audience
+    channels = Column(Text, nullable=True)
+    audience_targeting = Column(Text, nullable=True)
+
+    # Relationships
+    influencers = relationship("Influencer", secondary="campaign_influencers", back_populates="campaigns")
+    events = relationship("CampaignEvent", back_populates="campaign")
+    comments = relationship("Comment", back_populates="campaign") 
+
+class Influencer(Base):
+    __tablename__ = "influencers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    handle = Column(String, unique=True, index=True)
+    platform = Column(String)  # Instagram, TikTok, YouTube
+    followers = Column(Integer)
+    avatar_url = Column(String, nullable=True)
+    engagement_rate = Column(String, nullable=True) # Stored as string to preserve Formatting or floats
+    metrics_json = Column(Text, nullable=True) # Richer data: reliability, detailed demographics
+    
+    campaigns = relationship("Campaign", secondary="campaign_influencers", back_populates="influencers")
+
+class CampaignInfluencer(Base):
+    __tablename__ = "campaign_influencers"
+
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"), primary_key=True)
+    influencer_id = Column(Integer, ForeignKey("influencers.id"), primary_key=True)
+    status = Column(String, default="selected") # selected, contacted, hired, rejected
+    joined_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class CampaignEvent(Base):
+    __tablename__ = "campaign_events"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"))
+    type = Column(String, index=True) # launch, click, view, conversion
+    value = Column(Integer, default=1) # For varying weights (e.g. sale value)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    campaign = relationship("Campaign", back_populates="events")
+
 
 class ActivityLog(Base):
     __tablename__ = "activities"

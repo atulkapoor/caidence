@@ -26,3 +26,16 @@ async def search_by_image(file: UploadFile = File(...)):
         return profiles
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/influencers/{handle}", response_model=InfluencerProfile)
+async def get_influencer_profile(handle: str):
+    """
+    Get detailed profile for a specific influencer.
+    """
+    try:
+        profile = await DiscoveryService.get_profile(handle)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Influencer not found")
+        return profile
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

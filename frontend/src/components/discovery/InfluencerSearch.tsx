@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { searchInfluencers, InfluencerProfile, SearchFilters } from "@/lib/api";
+import { searchInfluencers, getInfluencerProfile, InfluencerProfile, SearchFilters } from "@/lib/api";
 import { Search, Filter, Camera, Mic, MapPin, Instagram, Youtube, Linkedin, Video, Sparkles, X, ChevronDown, PlusCircle } from "lucide-react";
+import { InfluencerProfileModal } from "./InfluencerProfileModal";
 import { CampaignSelector } from "@/components/campaigns/CampaignSelector";
 import { addInfluencerToCampaign } from "@/lib/api/campaigns";
 import { toast } from "sonner";
@@ -15,7 +16,19 @@ export function InfluencerSearch() {
     const [activeFilters, setActiveFilters] = useState<SearchFilters>({});
 
     const [selectedInfluencer, setSelectedInfluencer] = useState<string | null>(null);
+    const [selectedProfile, setSelectedProfile] = useState<InfluencerProfile | null>(null);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isCampaignSelectorOpen, setIsCampaignSelectorOpen] = useState(false);
+
+    const handleViewProfile = async (handle: string) => {
+        try {
+            const profile = await getInfluencerProfile(handle);
+            setSelectedProfile(profile);
+            setIsProfileOpen(true);
+        } catch (error) {
+            toast.error("Failed to load profile");
+        }
+    };
 
     const handleAddToCampaign = (handle: string) => {
         setSelectedInfluencer(handle);
@@ -259,7 +272,10 @@ export function InfluencerSearch() {
                                         </div>
 
                                         <div className="flex gap-2">
-                                            <button className="flex-1 py-3 bg-white border-2 border-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-all">
+                                            <button
+                                                onClick={() => handleViewProfile(profile.handle)}
+                                                className="flex-1 py-3 bg-white border-2 border-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-all"
+                                            >
                                                 View Profile
                                             </button>
                                             <button
@@ -282,6 +298,12 @@ export function InfluencerSearch() {
                 onClose={() => setIsCampaignSelectorOpen(false)}
                 onSelect={confirmAddToCampaign}
                 title={`Add ${selectedInfluencer} to Campaign`}
+            />
+
+            <InfluencerProfileModal
+                isOpen={isProfileOpen}
+                onClose={() => setIsProfileOpen(false)}
+                profile={selectedProfile}
             />
         </div>);
 }

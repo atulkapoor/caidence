@@ -21,8 +21,45 @@ class Campaign(CampaignBase):
     updated_at: Optional[datetime] = None
     owner_id: int
 
+    owner_id: int
+
     class Config:
         from_attributes = True
+
+# --- Influencer & Campaign Extensions ---
+class InfluencerBase(BaseModel):
+    handle: str
+    platform: str
+    followers: int
+    avatar_url: Optional[str] = None
+    engagement_rate: Optional[str] = None
+    metrics_json: Optional[str] = None
+
+class InfluencerCreate(InfluencerBase):
+    pass
+
+class Influencer(InfluencerBase):
+    id: int
+    
+    class Config:
+        from_attributes = True
+
+class CampaignEventBase(BaseModel):
+    type: str
+    value: int = 1
+    metadata_json: Optional[str] = None
+
+class CampaignEvent(CampaignEventBase):
+    id: int
+    created_at: datetime
+    campaign_id: int
+    
+    class Config:
+        from_attributes = True
+
+class CampaignFullResponse(Campaign):
+    influencers: List[Influencer] = []
+    events: List[CampaignEvent] = []
 
 # --- Project Schemas ---
 class ProjectBase(BaseModel):

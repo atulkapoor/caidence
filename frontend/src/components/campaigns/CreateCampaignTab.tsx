@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Sparkles, Plus, Target, Calendar as CalendarIcon, DollarSign, X, Bell, Mail, MessageSquare, Phone } from "lucide-react";
-import { sendTestEmail, sendTestSMS, sendTestWhatsApp, createCampaign, CampaignDraft } from "@/lib/api";
+import { sendTestEmail, sendTestSMS, sendTestWhatsApp, createCampaign, launchCampaign, enhanceDescription, addInfluencerToCampaign, CampaignDraft } from "@/lib/api";
 import { AudienceOverlapStub } from "@/components/analytics/AudienceOverlapStub";
 import { StrategyComparator } from "@/components/campaigns/StrategyComparator";
 import { useRouter } from "next/navigation";
@@ -23,6 +23,10 @@ export function CreateCampaignTab() {
     const [brandColors, setBrandColors] = useState<string[]>([]);
     const [newColor, setNewColor] = useState("");
 
+    // Influencers
+    const [influencerHandles, setInfluencerHandles] = useState<string[]>([]);
+    const [newInfluencer, setNewInfluencer] = useState("");
+
     const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
 
     const toggleChannel = (channel: string) => {
@@ -44,6 +48,31 @@ export function CreateCampaignTab() {
         if (newColor.trim()) {
             setBrandColors([...brandColors, newColor.trim()]);
             setNewColor("");
+        }
+    };
+
+    const handleAddInfluencer = () => {
+        const handle = newInfluencer.trim().replace(/^@/, ''); // Remove @ if present
+        if (handle && !influencerHandles.includes(handle)) {
+            setInfluencerHandles([...influencerHandles, handle]);
+            setNewInfluencer("");
+        }
+    };
+
+    // Description Enhancement
+    const [isEnhancing, setIsEnhancing] = useState(false);
+    const handleEnhanceDescription = async () => {
+        if (!description) return;
+        setIsEnhancing(true);
+        try {
+            const enhanced = await enhanceDescription(description);
+            setDescription(enhanced);
+            toast.success("Description enhanced!");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to enhance description");
+        } finally {
+            setIsEnhancing(false);
         }
     };
 
@@ -146,16 +175,33 @@ export function CreateCampaignTab() {
         }
 
         try {
-            await createCampaign({
+            const newCampaign = await createCampaign({
                 title: name,
                 description: description || "No description",
-                status: "active",
+                status: "draft", // Create as draft first
                 budget: budget,
                 start_date: startDate ? new Date(startDate).toISOString() : new Date().toISOString(),
                 end_date: endDate ? new Date(endDate).toISOString() : undefined,
                 channels: JSON.stringify(selectedChannels),
                 audience_targeting: JSON.stringify({ audience, goals, brandColors })
             });
+
+            // Add Influencers
+            if (influencerHandles.length > 0) {
+                try {
+                    await Promise.all(influencerHandles.map(handle =>
+                        addInfluencerToCampaign(newCampaign.id, handle)
+                    ));
+                    toast.success(`Added ${influencerHandles.length} influencers`);
+                } catch (err) {
+                    console.error("Error adding influencers", err);
+                    toast.error("Some influencers could not be added");
+                }
+            }
+
+            // Trigger Launch Event
+            await launchCampaign(newCampaign.id);
+
             toast.success("Campaign launched successfully!");
             // Force a small delay or revalidation if needed, but push is enough
             router.push("/campaigns");
@@ -284,9 +330,13 @@ export function CreateCampaignTab() {
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                             />
-                            <button className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 hover:bg-indigo-100 transition-colors">
-                                <Sparkles className="w-3 h-3" />
-                                Enhance Description
+                            <button
+                                onClick={handleEnhanceDescription}
+                                disabled={isEnhancing || !description}
+                                className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+                            >
+                                <Sparkles className={`w-3 h-3 ${isEnhancing ? 'animate-spin' : ''}`} />
+                                {isEnhancing ? "Enhancing..." : "Enhance Description"}
                             </button>
                         </div>
                     </div>
@@ -359,6 +409,41 @@ export function CreateCampaignTab() {
                         <div className="mt-4">
                             <AudienceOverlapStub channels={selectedChannels} />
                         </div>
+                    </div>
+
+                    {/* Influencers Selection */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold text-slate-700">Influencers & Creators</label>
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">@</span>
+                                <input
+                                    className="w-full p-3 pl-8 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all outline-none"
+                                    placeholder="instagram_handle"
+                                    value={newInfluencer}
+                                    onChange={(e) => setNewInfluencer(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddInfluencer()}
+                                />
+                            </div>
+                            <button
+                                onClick={handleAddInfluencer}
+                                className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200"
+                            >
+                                Add
+                            </button>
+                        </div>
+                        {influencerHandles.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                                {influencerHandles.map((handle, i) => (
+                                    <span key={i} className="flex items-center gap-1 px-3 py-1 bg-purple-50 text-purple-700 text-sm font-medium rounded-full border border-purple-100">
+                                        @{handle}
+                                        <button onClick={() => setInfluencerHandles(list => list.filter((_, idx) => idx !== i))} className="hover:text-purple-900 ml-1">
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Dates */}

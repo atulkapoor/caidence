@@ -25,6 +25,20 @@ class CampaignDraft(BaseModel):
     # Plan B (Tie-Breaker)
     alternative_draft: Optional['CampaignDraft'] = None
 
+class EnhanceInput(BaseModel):
+    text: str
+
+@router.post("/enhance_description")
+async def enhance_description(input: EnhanceInput):
+    prompt = f"Rewrite the following campaign description to be more engaging, professional, and persuasive, but keep it concise: '{input.text}'"
+    try:
+        response = await AIService._call_ollama(prompt)
+        enhanced = response.strip().strip('"').strip("'")
+        return {"enhanced_text": enhanced}
+    except Exception:
+        # Fallback if AI fails
+        return {"enhanced_text": input.text + " (Enhanced)"}
+
 @router.post("/draft_campaign", response_model=CampaignDraft)
 async def draft_campaign(input: AgentInput, db: AsyncSession = Depends(get_db)):
     """

@@ -13,6 +13,41 @@ MODASH_BASE_URL = "https://api.modash.io/v1/influencer/search"
 
 class DiscoveryService:
     @staticmethod
+    async def get_profile(handle: str) -> Optional[InfluencerProfile]:
+        """
+        Fetches a single influencer profile by handle.
+        """
+        if MODASH_API_KEY and not MODASH_API_KEY.startswith("mock_"):
+             # In real impl, fetch specific user from Modash
+             pass
+        
+        # Deterministic mock based on handle
+        seed_value = sum(ord(c) for c in handle)
+        random.seed(seed_value)
+        
+        platforms = ["Instagram", "TikTok", "YouTube", "LinkedIn"]
+        styles = ["High Energy", "Minimalist", "Educational", "Cinematic", "Raw/Vlog", "Professional"]
+        voices = ["Authoritative", "Relatable", "Fast-paced", "Humorous", "Inspirational", "Analytic"]
+        tags_pool = ["Outdoors", "Luxury", "Tech Gadgets", "Fashion", "Food", "Travel", "Fitness", "Decor"]
+        
+        profile_tags = random.sample(tags_pool, 3)
+        profile_style = random.sample(styles, 2)
+        profile_voice = random.sample(voices, 2)
+        
+        return InfluencerProfile(
+            handle=handle,
+            platform=random.choice(platforms),
+            avatar_color=f"hsl({random.randint(0, 360)}, 70%, 50%)",
+            followers=random.randint(10000, 5000000),
+            engagement_rate=round(random.uniform(1.5, 12.0), 1),
+            content_style_match=profile_style,
+            voice_analysis=profile_voice,
+            image_recognition_tags=profile_tags,
+            audience_demographics=f"{random.choice(['18-24', '25-34', '35-44'])}, {random.choice(['Female', 'Male', 'Mixed'])}",
+            match_score=random.randint(75, 99)
+        )
+
+    @staticmethod
     async def search_influencers(query: str, filters: Optional[DiscoveryFilter] = None) -> List[InfluencerProfile]:
         """
         Searches for influencers.

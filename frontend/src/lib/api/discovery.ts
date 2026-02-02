@@ -29,3 +29,9 @@ export async function searchInfluencers(query: string, filters?: SearchFilters):
     if (!res.ok) throw new Error("Failed to search influencers");
     return res.json();
 }
+
+export async function getInfluencerProfile(handle: string): Promise<InfluencerProfile> {
+    const res = await fetch(`${API_BASE_URL}/discovery/influencers/${encodeURIComponent(handle)}`);
+    if (!res.ok) throw new Error("Failed to fetch influencer profile");
+    return res.json();
+}

@@ -55,6 +55,17 @@ export async function generateCampaignPlan(goal: string, product: string, audien
     return res.json();
 }
 
+export async function enhanceDescription(text: string): Promise<string> {
+    const res = await fetch(`${API_BASE_URL}/agent/enhance_description`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error("Failed to enhance description");
+    const data = await res.json();
+    return data.enhanced_text;
+}
+
 export async function fetchStrategyHistory(): Promise<Strategy[]> {
     // Mock API call
     return new Promise((resolve) => {
