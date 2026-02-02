@@ -41,26 +41,51 @@ export default function AIChatPage() {
     const handleSend = async () => {
         if ((!input.trim() && !selectedFile) || isLoading) return;
 
-        const userMsg = input;
+        let userMsg = input;
         const attachedFile = selectedFile; // Capture current file
+
+        // Client-side file reading for context
+        if (attachedFile) {
+            const isText = attachedFile.type.startsWith('text/') ||
+                attachedFile.name.endsWith('.md') ||
+                attachedFile.name.endsWith('.csv') ||
+                attachedFile.name.endsWith('.json') ||
+                attachedFile.name.endsWith('.ts') ||
+                attachedFile.name.endsWith('.tsx') ||
+                attachedFile.name.endsWith('.py');
+
+            if (isText) {
+                try {
+                    const text = await attachedFile.text();
+                    userMsg = `${userMsg}\n\n[Attached File: ${attachedFile.name}]\n\`\`\`\n${text.substring(0, 20000)}\n\`\`\``; // Limit context
+                } catch (e) {
+                    console.error("Failed to read file", e);
+                }
+            } else {
+                userMsg = `${userMsg} [Attached File: ${attachedFile.name} (Content not read - binary format)]`;
+            }
+        }
 
         setInput("");
         setSelectedFile(null); // Clear file after sending
         setIsLoading(true);
 
         // Optimistic Update
-        const content = attachedFile
-            ? `[Attached: ${attachedFile.name}] ${userMsg}`
-            : userMsg;
+        const displayContent = attachedFile
+            ? `[Attached: ${attachedFile.name}] ${input}`
+            : input;
 
-        const newMsg = { role: "user", content };
+        const newMsg = { role: "user", content: displayContent }; // Show short version in UI
+        const apiMsg = { role: "user", content: userMsg }; // Send full content to API
+
         setMessages(prev => [...prev, newMsg]);
 
         try {
             // @ts-ignore
             const { sendChatMessage } = await import("@/lib/api");
-            // Note: passing file content is not yet supported by backend, just sending text for now
-            const res = await sendChatMessage(content, sessionId || undefined);
+
+            // Send full content (including file text) to backend
+            const res = await sendChatMessage(userMsg, sessionId || undefined);
 
             if (!sessionId) {
                 setSessionId(res.session_id);
@@ -103,7 +128,7 @@ export default function AIChatPage() {
                             </div>
                         </div>
                         {/* Search Bar */}
-                        <div className="relative hidden md:block">
+                        <div className="relative block">
                             <input
                                 type="text"
                                 placeholder="Search chat..."

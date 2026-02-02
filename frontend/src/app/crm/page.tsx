@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { fetchRelationships, generateXRayReport, RelationshipProfile } from "@/lib/api";
 import { User, FileText, Download, TrendingUp, DollarSign, Calendar, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 export default function CRMPage() {
     const [relationships, setRelationships] = useState<RelationshipProfile[]>([]);
@@ -26,17 +27,21 @@ export default function CRMPage() {
     }, []);
 
     const handleGenerateReport = async (handle: string) => {
+        const toastId = toast.loading(`Generating X-Ray Report for ${handle}...`);
         try {
-            alert(`Generating X-Ray Report for ${handle}... (Mock PDF Download)`);
-            await generateXRayReport(handle);
-            // In a real app, this would trigger a file download
-        } catch (err) {
+            const res = await generateXRayReport(handle);
+            toast.success(`Report generated! (${res.download_url})`, { id: toastId });
+        } catch (err: any) {
             console.error(err);
+            toast.error(`Failed to generate report: ${err.message}`, { id: toastId });
         }
     };
 
     const handleExport = () => {
-        if (relationships.length === 0) return;
+        if (relationships.length === 0) {
+            toast.error("No data to export");
+            return;
+        }
 
         const headers = ["Handle", "Platform", "Status", "Total Spend", "Avg ROI", "Last Contact"];
         const csvContent = [
@@ -60,6 +65,7 @@ export default function CRMPage() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        toast.success("Export downloaded");
     };
 
     const filteredRelationships = relationships.filter(rel =>

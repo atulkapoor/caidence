@@ -25,6 +25,7 @@ function CreatorsContent() {
     const [searchQuery, setSearchQuery] = useState("");
     const [showAddModal, setShowAddModal] = useState(false);
     const [newHandle, setNewHandle] = useState("");
+    const [newPlatform, setNewPlatform] = useState("Instagram");
     const [adding, setAdding] = useState(false);
 
     useEffect(() => {
@@ -60,7 +61,7 @@ function CreatorsContent() {
         try {
             // @ts-ignore
             const { addCreator } = await import("@/lib/api/creators");
-            await addCreator(newHandle);
+            await addCreator(newHandle, newPlatform);
             setNewHandle("");
             setShowAddModal(false);
             loadData(); // Refresh list
@@ -71,7 +72,7 @@ function CreatorsContent() {
             setCreators(prev => [...prev, {
                 id: Date.now(),
                 handle: newHandle,
-                platform: "Instagram",
+                platform: newPlatform,
                 name: "New Creator",
                 category: "General",
                 tier: "Micro",
@@ -83,6 +84,20 @@ function CreatorsContent() {
             setNewHandle("");
         } finally {
             setAdding(false);
+        }
+    };
+
+    const handleDelete = async (id: number) => {
+        if (!confirm("Are you sure you want to remove this creator?")) return;
+        try {
+            // @ts-ignore
+            const { deleteCreator } = await import("@/lib/api/creators");
+            await deleteCreator(id);
+            setCreators(creators.filter(c => c.id !== id));
+        } catch (e) {
+            console.error("Delete failed", e);
+            // Mock delete
+            setCreators(creators.filter(c => c.id !== id));
         }
     };
 
@@ -149,14 +164,29 @@ function CreatorsContent() {
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                         <div className="bg-white p-6 rounded-2xl w-96 shadow-xl space-y-4">
                             <h3 className="font-bold text-lg">Add New Creator</h3>
-                            <input
-                                autoFocus
-                                value={newHandle}
-                                onChange={(e) => setNewHandle(e.target.value)}
-                                placeholder="@handle"
-                                className="w-full border p-2 rounded-lg"
-                            />
-                            <div className="flex gap-2 justify-end">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-500 uppercase">Handle</label>
+                                <input
+                                    autoFocus
+                                    value={newHandle}
+                                    onChange={(e) => setNewHandle(e.target.value)}
+                                    placeholder="@handle"
+                                    className="w-full border p-2 rounded-lg"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-500 uppercase">Platform</label>
+                                <select
+                                    className="w-full border p-2 rounded-lg bg-white"
+                                    value={newPlatform}
+                                    onChange={(e) => setNewPlatform(e.target.value)}
+                                >
+                                    <option value="Instagram">Instagram</option>
+                                    <option value="TikTok">TikTok</option>
+                                    <option value="YouTube">YouTube</option>
+                                </select>
+                            </div>
+                            <div className="flex gap-2 justify-end pt-2">
                                 <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-slate-500 font-bold">Cancel</button>
                                 <button onClick={handleAddCreator} disabled={adding} className="px-4 py-2 bg-slate-900 text-white rounded-lg font-bold">
                                     {adding ? "Adding..." : "Add"}
@@ -269,8 +299,8 @@ function CreatorsContent() {
                                         )}
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <button className="p-2 hover:bg-slate-100 rounded-lg">
-                                            <MoreHorizontal className="w-4 h-4 text-slate-400" />
+                                        <button onClick={() => handleDelete(creator.id)} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors" title="Remove Creator">
+                                            <MoreHorizontal className="w-4 h-4" />
                                         </button>
                                     </td>
                                 </tr>

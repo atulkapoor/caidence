@@ -113,8 +113,35 @@ function ContentStudioContent() {
         }
     };
 
+    const handleEnhance = async () => {
+        if (!prompt) return;
+        const toastId = toast.loading("Enhancing brief...");
+        try {
+            const { getAuthHeaders } = await import("@/lib/api");
+            // We can reuse the agent endpoint or a new one. Agent endpoint exists: /api/v1/agent/enhance_description
+            const headers = await getAuthHeaders();
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/agent/enhance_description`, {
+                method: "POST",
+                headers: { ...headers, "Content-Type": "application/json" },
+                body: JSON.stringify({ text: prompt })
+            });
+
+            if (!res.ok) throw new Error("Enhancement failed");
+
+            const data = await res.json();
+            setPrompt(data.enhanced_text);
+            toast.success("Brief enhanced!", { id: toastId });
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to enhance text", { id: toastId });
+        }
+    };
+
     const handleGenerate = async () => {
-        if (!prompt || !title) return;
+        if (!prompt || !title) {
+            toast.error("Please provide a Title and Content Brief");
+            return;
+        }
         setIsGenerating(true);
         setCurrentResponses([]);
 
@@ -147,8 +174,10 @@ ${prompt}
             }
 
             await loadHistory();
-        } catch (error) {
+            toast.success("Content generated successfully!");
+        } catch (error: any) {
             console.error("Generation failed", error);
+            toast.error(`Generation failed: ${error.message || "Unknown error"}`);
         } finally {
             setIsGenerating(false);
         }
@@ -405,7 +434,7 @@ ${prompt}
                                                     <div className={`w-2 h-2 rounded-full ${webSearch ? 'bg-green-500' : 'bg-slate-300'}`}></div>
                                                     <span className="text-xs font-bold text-slate-600">Web Search {webSearch ? 'ON' : 'OFF'}</span>
                                                 </div>
-                                                <button className="flex items-center gap-1 px-3 py-1.5 bg-violet-50 text-violet-600 text-xs font-bold rounded-lg hover:bg-violet-100"><Wand2 className="w-3 h-3" /> Enhance</button>
+                                                <button onClick={handleEnhance} disabled={!prompt} className="flex items-center gap-1 px-3 py-1.5 bg-violet-50 text-violet-600 text-xs font-bold rounded-lg hover:bg-violet-100 disabled:opacity-50"><Wand2 className="w-3 h-3" /> Enhance</button>
                                             </div>
                                         </div>
                                     </section>

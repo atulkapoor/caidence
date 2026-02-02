@@ -341,7 +341,7 @@ export default function LandingPage() {
                                     <input
                                         type="range" min="1000" max="100000" step="1000"
                                         value={spend} onChange={(e) => setSpend(parseInt(e.target.value))}
-                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                                        className="w-full cursor-pointer accent-indigo-500"
                                     />
                                 </div>
                                 <div>
@@ -352,7 +352,7 @@ export default function LandingPage() {
                                     <input
                                         type="range" min="10" max="200" step="5"
                                         value={cpa} onChange={(e) => setCpa(parseInt(e.target.value))}
-                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                                        className="w-full cursor-pointer accent-indigo-500"
                                     />
                                 </div>
                             </div>

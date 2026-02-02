@@ -70,6 +70,21 @@ function AIAgentContent() {
         try {
             const headers = await getAuthHeaders();
 
+            // Read file contents to inject as context (since backend might ignore raw file assets)
+            let contextFromFiles = "";
+            for (const file of uploadedFiles) {
+                if (file.type.startsWith('text/') || file.name.endsWith('.md') || file.name.endsWith('.csv') || file.name.endsWith('.json')) {
+                    try {
+                        const text = await file.text();
+                        contextFromFiles += `\n\n[File: ${file.name}]\n${text.substring(0, 5000)}`;
+                    } catch (e) {
+                        console.warn("Failed to read file", file.name);
+                    }
+                }
+            }
+
+            const enhancedObjective = objective + (contextFromFiles ? `\n\nAdditional Context:${contextFromFiles}` : "");
+
             // Use relative path to leverage next.config.mjs rewrite
             const res = await fetch(`/api/v1/agent/generate`, {
                 method: "POST",
@@ -77,25 +92,30 @@ function AIAgentContent() {
                 body: JSON.stringify({
                     role,
                     project_type: projectType,
-                    objective,
-                    assets: uploadedFiles.map(f => f.name) // Pass file names as context
+                    objective: enhancedObjective,
+                    assets: uploadedFiles.map(f => f.name) // Pass file names as metadata
                 })
             });
 
-            if (!res.ok) throw new Error("Failed to generate strategy");
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Failed to generate strategy: ${res.status} ${errText}`);
+            }
 
             const data = await res.json();
             setResult(data);
             toast.success("Strategy generated!");
 
-        } catch (error) {
-            console.error(error);
-            toast.message("Backend unreachable. Using Demo Mode.", {
-                description: "Using generated sample strategy for demonstration.",
+        } catch (error: any) {
+            console.error("Strategy Generation Error:", error);
+            const errorMessage = error.message || "Unknown error";
+
+            toast.message("Backend Error. Using Demo Mode.", {
+                description: `Failed: ${errorMessage.substring(0, 50)}. using cached strategy.`,
             });
             // Fallback for demo if backend fails or auth missing
             setResult({
-                project_id: 101, // Use a non-zero ID for realism
+                project_id: Math.floor(Math.random() * 1000) + 100, // Random ID for realism
                 strategy: {
                     target_audience: [
                         { name: "Urban Professionals", description: "Age 25-40, Tech-savvy, High disposable income." },

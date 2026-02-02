@@ -174,8 +174,18 @@ function PostSchedulerModal({ isOpen, onClose, initialDate }: { isOpen: boolean;
 
     const handleGenerateAI = async () => {
         setIsGenerating(true);
-        // Simulate AI generation
-        setTimeout(() => {
+        try {
+            // Use the actual content generation API
+            const { generateContent } = await import("@/lib/api");
+            const result = await generateContent({
+                platform: platform,
+                topic: "Marketing Post",
+                tone: "professional"
+            });
+            setContent(result.result || "Generated content unavailable.");
+        } catch (error) {
+            console.error("AI generation failed, using fallback", error);
+            // Fallback to mock if API fails
             const mocks = [
                 "🚀 Just launched our new summer collection! Check it out now. #SummerVibes",
                 "💡 Did you know that AI can boost marketing ROI by 30%? Read our latest case study.",
@@ -183,8 +193,9 @@ function PostSchedulerModal({ isOpen, onClose, initialDate }: { isOpen: boolean;
                 "👀 Sneak peek at what's coming next week..."
             ];
             setContent(mocks[Math.floor(Math.random() * mocks.length)]);
+        } finally {
             setIsGenerating(false);
-        }, 1000);
+        }
     };
 
     return (

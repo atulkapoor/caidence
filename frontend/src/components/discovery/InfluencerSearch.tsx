@@ -151,10 +151,10 @@ export function InfluencerSearch() {
                         />
                         <div className="absolute right-3 flex gap-2">
                             {/* Mock AI Inputs */}
-                            <button className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="Search by Inspiration Image">
+                            <button onClick={() => toast.info("Visual Search is coming soon!")} className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="Search by Inspiration Image">
                                 <Camera className="w-5 h-5" />
                             </button>
-                            <button className="p-3 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-all" title="Search by Voice Tone">
+                            <button onClick={() => toast.info("Voice Search is coming soon!")} className="p-3 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-all" title="Search by Voice Tone">
                                 <Mic className="w-5 h-5" />
                             </button>
                             <div className="w-px h-8 bg-slate-200 my-auto mx-1"></div>

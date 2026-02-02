@@ -20,15 +20,24 @@ export async function fetchCreators(): Promise<Creator[]> {
     return res.json();
 }
 
-export async function addCreator(handle: string): Promise<Creator> {
+export async function addCreator(handle: string, platform: string = "Instagram"): Promise<Creator> {
     const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/creators`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ handle }),
+        body: JSON.stringify({ handle, platform }),
     });
     if (!res.ok) throw new Error("Failed to add creator");
     return res.json();
+}
+
+export async function deleteCreator(id: number): Promise<void> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/creators/${id}`, {
+        method: "DELETE",
+        headers
+    });
+    if (!res.ok) throw new Error("Failed to delete creator");
 }
 
 export async function generateAffiliateCode(creatorId: number): Promise<{ code: string }> {
