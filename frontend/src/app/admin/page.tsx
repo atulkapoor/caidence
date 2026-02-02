@@ -7,25 +7,9 @@ import { Users, Building, CreditCard, Shield, UserPlus, Search, MoreVertical } f
 import { cn } from "@/lib/utils";
 import { AccessControlTab } from "@/components/admin/AccessControlTab";
 import { toast } from "sonner";
-import { fetchAdminUsers, fetchOrganizationUsers, approveUser, inviteUser, AdminUser } from "@/lib/api";
+import { fetchAdminUsers, fetchOrganizationUsers, approveUser, inviteUser, AdminUser, fetchPlatformOverview, fetchAdminOrganizations, PlatformOverview, AdminOrg } from "@/lib/api";
 
-// --- Types ---
-interface PlatformOverview {
-    total_organizations: number;
-    total_users: number;
-    total_brands: number;
-    pending_approvals: number;
-    mrr: number;
-    active_subscriptions: number;
-}
-
-interface AdminOrg {
-    id: number;
-    name: string;
-    plan_tier: string;
-    user_count: number;
-    is_active: boolean;
-}
+// Types are now imported from @/lib/api
 
 // --- Main Page Component ---
 // --- Main Page Component ---
@@ -92,18 +76,17 @@ function AdminOverview() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Mock data fetch - replace with API call
-        setTimeout(() => {
-            setStats({
-                total_organizations: 12,
-                total_users: 145,
-                total_brands: 34,
-                pending_approvals: 3,
-                mrr: 12500,
-                active_subscriptions: 15
-            });
-            setLoading(false);
-        }, 1000);
+        const loadStats = async () => {
+            try {
+                const data = await fetchPlatformOverview();
+                setStats(data);
+            } catch (error) {
+                console.error("Failed to fetch platform overview", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadStats();
     }, []);
 
     if (loading) return <div className="p-12 text-center text-slate-500 font-medium">Loading platform stats...</div>;
@@ -289,8 +272,7 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
     useEffect(() => {
         const loadOrgs = async () => {
             try {
-                // @ts-ignore
-                const orgs = await fetchOrganizations();
+                const orgs = await fetchAdminOrganizations();
                 setOrganizations(orgs);
                 if (orgs.length > 0) {
                     setFormData(prev => ({ ...prev, organization_id: orgs[0].id }));
@@ -407,8 +389,7 @@ function OrganizationManagement() {
     useEffect(() => {
         const loadOrgs = async () => {
             try {
-                // @ts-ignore
-                const data = await fetchOrganizations();
+                const data = await fetchAdminOrganizations();
                 setOrgs(data);
             } catch (error) {
                 console.error("Failed to load orgs", error);

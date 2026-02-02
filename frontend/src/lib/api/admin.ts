@@ -46,3 +46,32 @@ export async function inviteUser(data: TeamInvite): Promise<AdminUser> {
     }
     return res.json();
 }
+
+export interface PlatformOverview {
+    total_organizations: number;
+    total_users: number;
+    total_brands: number;
+    pending_approvals: number;
+    mrr: number;
+    active_subscriptions: number;
+}
+
+export interface AdminOrg {
+    id: number;
+    name: string;
+    plan_tier: string;
+    user_count: number;
+    is_active: boolean;
+}
+
+export async function fetchPlatformOverview(): Promise<PlatformOverview> {
+    const res = await authenticatedFetch(`${API_BASE_URL}/admin/overview`);
+    if (!res.ok) throw new Error("Failed to fetch platform overview");
+    return res.json();
+}
+
+export async function fetchAdminOrganizations(): Promise<AdminOrg[]> {
+    const res = await authenticatedFetch(`${API_BASE_URL}/organizations`);
+    if (!res.ok) throw new Error("Failed to fetch organizations");
+    return res.json();
+}

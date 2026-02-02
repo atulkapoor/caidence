@@ -25,6 +25,15 @@ async def require_super_admin(current_user: User = Depends(get_current_active_us
     if not is_super_admin(current_user.role):
         raise HTTPException(status_code=403, detail="Super admin access required")
     return current_user
+class PlatformOverviewResponse(BaseModel):
+    total_organizations: int
+    total_users: int
+    total_brands: int
+    pending_approvals: int
+    mrr: float
+    active_subscriptions: int
+
+
 class PermissionSchema(BaseModel):
     id: int
     resource: str
@@ -82,6 +91,56 @@ class SubscriptionResponse(BaseModel):
     status: str
 
 # ...
+
+@router.get("/overview", response_model=PlatformOverviewResponse)
+async def get_platform_overview(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_admin)
+):
+    """
+    Get platform overview statistics.
+    """
+    from sqlalchemy import func
+    
+    # Count all users
+    total_users_result = await db.execute(select(func.count(User.id)))
+    total_users = total_users_result.scalar() or 0
+    
+    # Count pending approvals
+    pending_result = await db.execute(
+        select(func.count(User.id)).where(User.is_approved == False)
+    )
+    pending_approvals = pending_result.scalar() or 0
+    
+    # Count organizations
+    total_orgs_result = await db.execute(select(func.count(Organization.id)))
+    total_organizations = total_orgs_result.scalar() or 0
+    
+    # Count brands
+    total_brands_result = await db.execute(select(func.count(Brand.id)))
+    total_brands = total_brands_result.scalar() or 0
+    
+    # Count active subscriptions (active organizations)
+    active_subs_result = await db.execute(
+        select(func.count(Organization.id)).where(Organization.is_active == True)
+    )
+    active_subscriptions = active_subs_result.scalar() or 0
+    
+    # Calculate MRR based on plan tiers
+    orgs_result = await db.execute(select(Organization))
+    orgs = orgs_result.scalars().all()
+    plan_prices = {"free": 0, "pro": 99, "enterprise": 499}
+    mrr = sum(plan_prices.get(org.plan_tier, 0) for org in orgs if org.is_active)
+    
+    return PlatformOverviewResponse(
+        total_organizations=total_organizations,
+        total_users=total_users,
+        total_brands=total_brands,
+        pending_approvals=pending_approvals,
+        mrr=float(mrr),
+        active_subscriptions=active_subscriptions
+    )
+
 
 @router.get("/users", response_model=List[UserAdminResponse])
 async def list_all_users(

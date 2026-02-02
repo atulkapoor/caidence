@@ -82,15 +82,23 @@ export default function CRMPage() {
                 <div className="grid grid-cols-4 gap-6 mb-8">
                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                         <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Active Relationships</div>
-                        <div className="text-3xl font-black text-slate-900">12</div>
+                        <div className="text-3xl font-black text-slate-900">
+                            {relationships.filter(r => r.relationship_status === 'Active').length}
+                        </div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                         <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Total Spend (YTD)</div>
-                        <div className="text-3xl font-black text-slate-900">$142k</div>
+                        <div className="text-3xl font-black text-slate-900">
+                            ${relationships.reduce((sum, r) => sum + r.total_spend, 0).toLocaleString()}
+                        </div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                         <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Avg. ROI Multiple</div>
-                        <div className="text-3xl font-black text-emerald-600">3.4x</div>
+                        <div className="text-3xl font-black text-emerald-600">
+                            {relationships.length > 0
+                                ? (relationships.reduce((sum, r) => sum + r.avg_roi, 0) / relationships.length).toFixed(1)
+                                : '0'}x
+                        </div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center bg-indigo-50 border-indigo-100">
                         <button onClick={handleExport} className="flex flex-col items-center gap-2 text-indigo-700 font-bold hover:scale-105 transition-transform">
