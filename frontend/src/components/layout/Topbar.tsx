@@ -32,10 +32,18 @@ export function Topbar() {
     const getPageTitle = (path: string) => {
         if (path.includes("/campaigns")) return "Campaign Planner";
         if (path.includes("/ai-agent")) return "AI Agent";
+        if (path.includes("/ai-chat")) return "AI Chat";
         if (path.includes("/analytics")) return "Analytics Suite";
         if (path.includes("/content-studio")) return "Content Studio";
         if (path.includes("/design-studio")) return "Design Studio";
+        if (path.includes("/presentation-studio")) return "Presentation Studio";
         if (path.includes("/workflow")) return "Workflows";
+        if (path.includes("/discovery")) return "Discovery";
+        if (path.includes("/crm")) return "CRM";
+        if (path.includes("/marcom")) return "Marcom";
+        if (path.includes("/creators")) return "Creator Hub";
+        if (path.includes("/agency")) return "Agency Portal";
+        if (path.includes("/admin")) return "Admin Console";
         if (path.includes("/settings")) return "Settings";
         return "Dashboard";
     };
