@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./core";
+import { API_BASE_URL, getAuthHeaders } from "./core";
 
 export interface DesignAsset {
     id: number;
@@ -13,9 +13,10 @@ export interface DesignAsset {
 }
 
 export async function generateDesign(data: { title: string; style: string; aspect_ratio: string; prompt: string; brand_colors?: string; reference_image?: string }): Promise<DesignAsset> {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/design/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error("Failed to generate design");

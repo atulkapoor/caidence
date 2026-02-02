@@ -73,7 +73,7 @@ export function Sidebar() {
 
     return (
         <div className="flex h-full w-[260px] flex-col bg-white border-r border-slate-300">
-            <div className="flex h-16 items-center px-5 border-b border-slate-300">
+            <Link href="/dashboard" className="flex h-16 items-center px-5 border-b border-slate-300 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center gap-2 font-bold text-xl text-slate-900">
                     <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-200">
                         C
@@ -83,7 +83,7 @@ export function Sidebar() {
                         <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-widest mt-0.5">Intelligence</span>
                     </div>
                 </div>
-            </div>
+            </Link>
 
             <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
                 <nav className="space-y-6 px-3">

@@ -7,6 +7,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import Link from "next/link";
 import { CollateralGenerator } from "@/components/content/CollateralGenerator";
+import { toast } from "sonner";
 
 function PresentationStudioContent() {
     const [activeTab, setActiveTab] = useTabState("presentations");
@@ -98,7 +99,24 @@ function PresentationStudioContent() {
                                 {/* Main Action Area */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
                                     {/* Upload Option */}
-                                    <div className="bg-white p-8 rounded-3xl shadow-xl shadow-cyan-900/5 border border-slate-200 hover:border-cyan-400 hover:shadow-cyan-500/10 transition-all cursor-pointer group text-left">
+                                    <div
+                                        onClick={() => document.getElementById('report-upload')?.click()}
+                                        className="bg-white p-8 rounded-3xl shadow-xl shadow-cyan-900/5 border border-slate-200 hover:border-cyan-400 hover:shadow-cyan-500/10 transition-all cursor-pointer group text-left relative">
+
+                                        <input
+                                            type="file"
+                                            id="report-upload"
+                                            accept=".pdf,.csv,.xlsx,.docx"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                if (e.target.files && e.target.files[0]) {
+                                                    const file = e.target.files[0];
+                                                    toast.info(`Analyzing ${file.name}...`);
+                                                    handleGenerate();
+                                                }
+                                            }}
+                                        />
+
                                         <div className="w-14 h-14 bg-cyan-50 text-cyan-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                                             <Upload className="w-7 h-7" />
                                         </div>
@@ -107,7 +125,6 @@ function PresentationStudioContent() {
                                             Drag & drop PDF, CSV, or Excel files. We&apos;ll analyze the content and structure a presentation.
                                         </p>
                                         <button
-                                            onClick={handleGenerate}
                                             className="w-full py-3 border-2 border-slate-100 text-slate-600 rounded-xl font-bold group-hover:bg-cyan-600 group-hover:border-cyan-600 group-hover:text-white transition-all"
                                         >
                                             Select File

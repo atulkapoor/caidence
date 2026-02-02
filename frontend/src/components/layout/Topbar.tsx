@@ -4,8 +4,22 @@ import { Bell, Search, UserCircle, Rocket, LogOut } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { usePathname } from "next/navigation";
+
 export function Topbar() {
     const router = useRouter();
+    const pathname = usePathname();
+
+    const getPageTitle = (path: string) => {
+        if (path.includes("/campaigns")) return "Campaign Planner";
+        if (path.includes("/ai-agent")) return "AI Agent";
+        if (path.includes("/analytics")) return "Analytics Suite";
+        if (path.includes("/content-studio")) return "Content Studio";
+        if (path.includes("/design-studio")) return "Design Studio";
+        if (path.includes("/workflow")) return "Workflows";
+        if (path.includes("/settings")) return "Settings";
+        return "Dashboard";
+    };
 
     const handleLogout = () => {
         localStorage.removeItem("token");
@@ -15,7 +29,7 @@ export function Topbar() {
     return (
         <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
             <div>
-                <h1 className="text-lg font-semibold text-slate-900">Dashboard</h1>
+                <h1 className="text-lg font-semibold text-slate-900">{getPageTitle(pathname)}</h1>
                 <p className="text-xs text-muted-foreground">AI Marketing Intelligence Suite</p>
             </div>
 

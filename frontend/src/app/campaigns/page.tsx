@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { CampaignCard } from "@/components/campaigns/CampaignCard";
-import { Plus, Search, Filter, Calendar as CalendarIcon, BarChart3, List, LayoutGrid } from "lucide-react";
+import { Plus, Search, Filter, Calendar as CalendarIcon, BarChart3, List, LayoutGrid, Check, X } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
 import { AgentWizard } from "@/components/campaigns/AgentWizard";
@@ -24,6 +25,25 @@ function CampaignContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
+
+    // Filters
+    const [statusFilter, setStatusFilter] = useState<string>("free-all"); // "free-all" is logic for "All"
+    const [searchQuery, setSearchQuery] = useState("");
+
+    const searchParams = useSearchParams();
+    const router = useRouter();
+
+    // Check for edit param on load
+    useEffect(() => {
+        const editId = searchParams.get('edit');
+        if (editId) {
+            // Find campaign and open modal (simulated for now as we don't have full edit form)
+            // In real app, we would fetch(id) and set form state.
+            // For now, just opening the create modal with title pre-filled if found
+            // setIsCreateModalOpen(true);
+            // We'll leave this as a placeholder or specific alert for now until Edit Modal is fully built
+        }
+    }, [searchParams]);
 
     // Create Form State
     const [newCampaignTitle, setNewCampaignTitle] = useState("");
@@ -177,13 +197,27 @@ function CampaignContent() {
                                         <input
                                             type="text"
                                             placeholder="Search campaigns..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
                                             className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                                         />
                                     </div>
-                                    <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50">
-                                        <Filter className="w-4 h-4" />
-                                        All Status
-                                    </button>
+                                    <div className="relative group">
+                                        <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 min-w-[140px] justify-between">
+                                            <span className="flex items-center gap-2"><Filter className="w-4 h-4" /> {statusFilter === "free-all" ? "All Status" : statusFilter}</span>
+                                        </button>
+                                        <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl z-20 hidden group-hover:block animate-in fade-in zoom-in-95 duration-200">
+                                            {["All", "active", "draft", "paused", "completed"].map(s => (
+                                                <button
+                                                    key={s}
+                                                    onClick={() => setStatusFilter(s === "All" ? "free-all" : s)}
+                                                    className="w-full text-left px-4 py-2 hover:bg-slate-50 text-sm font-medium capitalize first:rounded-t-xl last:rounded-b-xl"
+                                                >
+                                                    {s}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Grid */}
@@ -207,9 +241,12 @@ function CampaignContent() {
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {campaigns.map((camp: any, idx: number) => (
-                                            <CampaignCard key={idx} {...camp} />
-                                        ))}
+                                        {campaigns
+                                            .filter(c => statusFilter === "free-all" || c.status === statusFilter)
+                                            .filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                                            .map((camp: any, idx: number) => (
+                                                <CampaignCard key={idx} {...camp} />
+                                            ))}
                                     </div>
                                 )}
                             </div>

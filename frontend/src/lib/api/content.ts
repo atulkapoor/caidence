@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./core";
+import { API_BASE_URL, getAuthHeaders } from "./core";
 
 export interface ContentGeneration {
     id: number;
@@ -17,9 +17,10 @@ let mockGenerations: ContentGeneration[] = [
 ];
 
 export async function generateContent(data: any): Promise<ContentGeneration> {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/content/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error("Failed to generate content");

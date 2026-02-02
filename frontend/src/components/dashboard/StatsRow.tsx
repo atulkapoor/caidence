@@ -1,5 +1,6 @@
 import { Target, Share2, PenTool, MessageSquare } from "lucide-react";
 import { DashboardStats } from "@/lib/api";
+import Link from "next/link";
 
 interface StatsRowProps {
     stats: DashboardStats | null;
@@ -16,6 +17,7 @@ export function StatsRow({ stats }: StatsRowProps) {
             color: "text-blue-600",
             bg: "bg-blue-500",
             iconBg: "bg-blue-500",
+            href: "/campaigns"
         },
         {
             label: "AI WORKFLOWS",
@@ -26,6 +28,7 @@ export function StatsRow({ stats }: StatsRowProps) {
             color: "text-purple-600",
             bg: "bg-purple-500",
             iconBg: "bg-purple-500",
+            href: "/workflow"
         },
         {
             label: "CONTENT GENERATED",
@@ -36,6 +39,7 @@ export function StatsRow({ stats }: StatsRowProps) {
             color: "text-emerald-600",
             bg: "bg-emerald-500",
             iconBg: "bg-emerald-500",
+            href: "/content-studio"
         },
         {
             label: "AI CONVERSATIONS",
@@ -46,13 +50,18 @@ export function StatsRow({ stats }: StatsRowProps) {
             color: "text-orange-600",
             bg: "bg-orange-500",
             iconBg: "bg-orange-500",
+            href: "/ai-chat"
         },
     ];
 
     return (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {displayStats.map((stat) => (
-                <div key={stat.label} className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-sm border border-slate-100 transition-all hover:shadow-md">
+                <Link
+                    href={stat.href}
+                    key={stat.label}
+                    className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-sm border border-slate-100 transition-all hover:shadow-md block hover:-translate-y-1 duration-200"
+                >
                     <div className="flex items-start justify-between">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">{stat.label}</p>
@@ -70,7 +79,7 @@ export function StatsRow({ stats }: StatsRowProps) {
                             {stat.trend}
                         </span>
                     </div>
-                </div>
+                </Link>
             ))}
         </div>
     );

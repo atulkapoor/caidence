@@ -82,15 +82,29 @@ export function SocialCalendar({ campaigns = [] }: SocialCalendarProps) {
 
     // Event custom styling
     const eventStyleGetter = (event: SocialPost) => {
-        const colorClass = platformColors[event.platform] || "bg-slate-100 border-slate-200 text-slate-700";
-        // We can't return tailwind classes directly to 'style', but we can return configuration
-        // react-big-calendar expects a style object. 
-        // We will just return basic style and rely on 'className' if supported or inline style.
-        // Actually react-big-calendar supports 'className' in eventPropGetter.
+        // Map platform to explicit colors for safer rendering in RBC
+        const styleMap: any = {
+            twitter: { bg: '#f0f9ff', color: '#0369a1', border: '#bae6fd' }, // sky-50, sky-700, sky-200
+            linkedin: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }, // blue-50, blue-700, blue-200
+            instagram: { bg: '#fdf2f8', color: '#be185d', border: '#fbcfe8' }, // pink-50, pink-700, pink-200
+            facebook: { bg: '#eff6ff', color: '#1e40af', border: '#2563eb' }, // blue-50, blue-800, blue-600
+            campaign: { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' }  // emerald-50, emerald-700, emerald-200
+        };
+
+        const theme = styleMap[event.platform] || styleMap.twitter;
+
         return {
-            className: `${colorClass} border text-xs font-bold rounded-md shadow-sm`,
             style: {
-                backgroundColor: 'transparent', // Override default
+                backgroundColor: theme.bg,
+                color: theme.color,
+                borderColor: theme.border,
+                borderWidth: '1px',
+                borderStyle: 'solid',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                padding: '2px 4px',
+                boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)'
             }
         };
     };
@@ -156,6 +170,22 @@ function PostSchedulerModal({ isOpen, onClose, initialDate }: { isOpen: boolean;
     const [content, setContent] = useState("");
     const [platform, setPlatform] = useState<SocialPost['platform']>("twitter");
     const [date, setDate] = useState(initialDate ? moment(initialDate).format("YYYY-MM-DDTHH:mm") : moment().format("YYYY-MM-DDTHH:mm"));
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    const handleGenerateAI = async () => {
+        setIsGenerating(true);
+        // Simulate AI generation
+        setTimeout(() => {
+            const mocks = [
+                "🚀 Just launched our new summer collection! Check it out now. #SummerVibes",
+                "💡 Did you know that AI can boost marketing ROI by 30%? Read our latest case study.",
+                "🎉 Celebrating 10k followers! Thank you all for the support.",
+                "👀 Sneak peek at what's coming next week..."
+            ];
+            setContent(mocks[Math.floor(Math.random() * mocks.length)]);
+            setIsGenerating(false);
+        }, 1000);
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -197,7 +227,13 @@ function PostSchedulerModal({ isOpen, onClose, initialDate }: { isOpen: boolean;
                         />
                         <div className="flex justify-between items-center text-xs text-slate-400 px-1">
                             <span>{content.length} characters</span>
-                            <button className="text-indigo-600 font-bold hover:underline">Generate with AI</button>
+                            <button
+                                onClick={handleGenerateAI}
+                                disabled={isGenerating}
+                                className="text-indigo-600 font-bold hover:underline disabled:opacity-50 flex items-center gap-1"
+                            >
+                                {isGenerating ? "Generating..." : "Generate with AI"}
+                            </button>
                         </div>
                     </div>
 

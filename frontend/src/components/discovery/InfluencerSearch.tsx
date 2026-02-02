@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { searchInfluencers, getInfluencerProfile, InfluencerProfile, SearchFilters } from "@/lib/api";
 import { Search, Filter, Camera, Mic, MapPin, Instagram, Youtube, Linkedin, Video, Sparkles, X, ChevronDown, PlusCircle } from "lucide-react";
 import { InfluencerProfileModal } from "./InfluencerProfileModal";
@@ -14,6 +14,35 @@ export function InfluencerSearch() {
     const [loading, setLoading] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
     const [activeFilters, setActiveFilters] = useState<SearchFilters>({});
+
+    // Auto-search when filters change
+    useEffect(() => {
+        if (Object.keys(activeFilters).length > 0 || query) {
+            // Debounce or just call? For now direct call is fine if filters change rarely.
+            // We need to extract the search logic to avoid stale state if using a function not in dependency.
+            // But handleSearch uses current state 'query' and 'activeFilters'.
+            // If we call it here, it uses the state from the render scope.
+            // We need to be careful.
+
+            // Let's just create an internal search function that accepts params to be safe.
+            const performSearch = async () => {
+                setLoading(true);
+                try {
+                    const data = await searchInfluencers(query, activeFilters);
+                    setResults(data);
+                    setHasSearched(true);
+                } catch (err) {
+                    console.error(err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            if (Object.keys(activeFilters).length > 0) {
+                performSearch();
+            }
+        }
+    }, [activeFilters]); // Only when filters change
 
     const [selectedInfluencer, setSelectedInfluencer] = useState<string | null>(null);
     const [selectedProfile, setSelectedProfile] = useState<InfluencerProfile | null>(null);
@@ -48,11 +77,10 @@ export function InfluencerSearch() {
     };
 
     const handleSearch = async () => {
-        if (!query.trim()) return;
+        if (!query.trim() && Object.keys(activeFilters).length === 0) return;
         setLoading(true);
         setHasSearched(false);
         try {
-            // Pass activeFilters if backend supports it in future
             const data = await searchInfluencers(query, activeFilters);
             setResults(data);
             setHasSearched(true);
@@ -63,13 +91,34 @@ export function InfluencerSearch() {
         }
     };
 
+    // Trigger search when filters change (with debounce or effect in real app, but direct call here for transparency)
+    // We'll use useEffect to watch filters? Or just call handleSearch inside toggleFilter?
+    // Using useEffect is cleaner for this reactive pattern.
+
+    // Actually, to avoid infinite loops or complexity, let's just update toggleFilter to call search.
+    // BUT activeFilters state update is async.
+    // So we should use useEffect.
+
+    // Let's defer that refactor and just fix the "Search" button logic first + empty query.
+    // Wait, the user said "Filters not working". If they click filters and nothing happens, that's bad.
+    // So auto-trigger is desired.
+
     const toggleFilter = (key: keyof typeof activeFilters, value: any) => {
         setActiveFilters(prev => {
-            if (prev[key] === value) {
-                const { [key]: _, ...rest } = prev;
-                return rest;
+            const newFilters = { ...prev };
+            if (newFilters[key] === value) {
+                delete newFilters[key]; // Toggle off
+            } else {
+                newFilters[key] = value; // Toggle on
             }
-            return { ...prev, [key]: value };
+            // Trigger search with new filters immediately (we can't wait for state update in this closure if we call handleSearch now)
+            // So we define a helper or rely on useEffect. 
+            // Let's use a one-off async call here to searchInfluencers directly or assume the user clicks search.
+            // If I change the Search button logic, at least they CAN search.
+            // But good UX = auto search.
+
+            // Let's try to just update state, and then rely on the user clicking search OR add a useEffect.
+            return newFilters;
         });
     }
 

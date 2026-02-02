@@ -26,7 +26,7 @@ function WorkflowDetailContent({ params }: PageProps) {
     const [history, setHistory] = useState<WorkflowRun[]>([]);
     const [loading, setLoading] = useState(true);
     // @ts-ignore
-    const [activeTab, setActiveTab] = useTabState("history");
+    const [activeTab, setActiveTab] = useTabState("config");
     const [isRunning, setIsRunning] = useState(false);
 
     // State for the visual builder

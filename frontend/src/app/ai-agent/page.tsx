@@ -56,6 +56,9 @@ function AIAgentContent() {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<any>(null);
 
+    // Asset State
+    const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+
     const handleGenerate = async () => {
         if (!projectType || !objective) {
             toast.error("Please fill in all fields");
@@ -80,7 +83,7 @@ function AIAgentContent() {
                     role,
                     project_type: projectType,
                     objective,
-                    assets: [] // Mocked asset list for now
+                    assets: uploadedFiles.map(f => f.name) // Pass file names as context
                 })
             });
 
@@ -120,7 +123,19 @@ function AIAgentContent() {
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         setDragging(false);
-        toast.info("File upload simulation: Files received.");
+
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const newFiles = Array.from(e.dataTransfer.files);
+            setUploadedFiles(prev => [...prev, ...newFiles]);
+            toast.success(`Uploaded ${newFiles.length} files`);
+        }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const newFiles = Array.from(e.target.files);
+            setUploadedFiles(prev => [...prev, ...newFiles]);
+        }
     };
 
     const [activeTab, setActiveTab] = useTabState("new");
@@ -262,17 +277,35 @@ function AIAgentContent() {
                                         onDragOver={handleDragOver}
                                         onDragLeave={handleDragLeave}
                                         onDrop={handleDrop}
+                                        onClick={() => document.getElementById('asset-upload')?.click()}
                                         className={`
-                                            border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer
+                                            border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer relative
                                             ${dragging ? "border-indigo-500 bg-indigo-50" : "border-slate-300 hover:border-indigo-400 hover:bg-slate-50"}
                                         `}
                                     >
+                                        <input
+                                            type="file"
+                                            id="asset-upload"
+                                            multiple
+                                            className="hidden"
+                                            onChange={handleFileSelect}
+                                        />
                                         <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
                                             <UploadCloud className="w-6 h-6" />
                                         </div>
                                         <h3 className="font-bold text-slate-900 mb-1">Upload Campaign Assets</h3>
                                         <p className="text-sm text-slate-500 mb-4">Drag & drop files or click to browse</p>
                                         <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">Supports PDF, JPG, PNG, DOCX</div>
+
+                                        {uploadedFiles.length > 0 && (
+                                            <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                                                {uploadedFiles.map((f, i) => (
+                                                    <span key={i} className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-1 rounded-lg">
+                                                        {f.name}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
