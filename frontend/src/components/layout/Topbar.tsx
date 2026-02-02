@@ -2,13 +2,32 @@
 
 import { Bell, Search, UserCircle, Rocket, LogOut } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 
 export function Topbar() {
     const router = useRouter();
     const pathname = usePathname();
+    const [userInitials, setUserInitials] = useState("??");
+
+    useEffect(() => {
+        const userJson = localStorage.getItem("user");
+        if (userJson) {
+            try {
+                const userData = JSON.parse(userJson);
+                const fullName = userData.full_name || "";
+                const initials = fullName
+                    .split(" ")
+                    .map((n: string) => n[0])
+                    .join("")
+                    .toUpperCase()
+                    .slice(0, 2);
+                setUserInitials(initials || "??");
+            } catch (e) {
+                console.error("Failed to parse user data", e);
+            }
+        }
+    }, []);
 
     const getPageTitle = (path: string) => {
         if (path.includes("/campaigns")) return "Campaign Planner";
@@ -23,6 +42,7 @@ export function Topbar() {
 
     const handleLogout = () => {
         localStorage.removeItem("token");
+        localStorage.removeItem("user");
         router.push("/login");
     };
 
@@ -45,7 +65,7 @@ export function Topbar() {
                 </Link>
                 <Link href="/settings?tab=profile" className="flex items-center gap-2 pl-2">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-slate-900 to-slate-700 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-slate-900/20">
-                        AK
+                        {userInitials}
                     </div>
                 </Link>
                 <button

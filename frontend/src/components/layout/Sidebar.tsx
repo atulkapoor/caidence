@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import {
     LayoutDashboard,
     Bot,
@@ -23,6 +24,11 @@ import {
     Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface UserInfo {
+    full_name: string;
+    email: string;
+}
 
 const navigationGroups = [
     {
@@ -70,6 +76,31 @@ const navigationGroups = [
 
 export function Sidebar() {
     const pathname = usePathname();
+    const [user, setUser] = useState<UserInfo | null>(null);
+
+    useEffect(() => {
+        const userJson = localStorage.getItem("user");
+        if (userJson) {
+            try {
+                const userData = JSON.parse(userJson);
+                setUser({
+                    full_name: userData.full_name || "User",
+                    email: userData.email || ""
+                });
+            } catch (e) {
+                console.error("Failed to parse user data", e);
+            }
+        }
+    }, []);
+
+    const getInitials = (name: string) => {
+        return name
+            .split(" ")
+            .map(n => n[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2);
+    };
 
     return (
         <div className="flex h-full w-[260px] flex-col bg-white border-r border-slate-300">
@@ -120,16 +151,16 @@ export function Sidebar() {
                 </nav>
             </div>
 
-            {/* Pro Banner */}
+            {/* User Profile Banner */}
             <div className="p-3 mt-auto border-t border-slate-100">
                 <Link href="/settings?tab=profile">
                     <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group">
                         <div className="h-9 w-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-                            AK
+                            {user ? getInitials(user.full_name) : "??"}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate">Atul Kapoor</p>
-                            <p className="text-xs text-slate-500 truncate">atul@example.com</p>
+                            <p className="text-sm font-bold text-slate-900 truncate">{user?.full_name || "Loading..."}</p>
+                            <p className="text-xs text-slate-500 truncate">{user?.email || ""}</p>
                         </div>
                         <Settings className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
                     </div>
