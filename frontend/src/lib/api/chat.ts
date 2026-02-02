@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./core";
+import { API_BASE_URL, getAuthHeaders } from "./core";
 
 export interface ChatMessage {
     role: "user" | "assistant";
@@ -11,9 +11,10 @@ export async function sendChatMessage(message: string, session_id?: string): Pro
     const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes timeout
 
     try {
+        const headers = await getAuthHeaders();
         const res = await fetch(`${API_BASE_URL}/chat/message`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { ...headers, "Content-Type": "application/json" },
             body: JSON.stringify({ message, session_id }),
             signal: controller.signal
         });
@@ -26,7 +27,8 @@ export async function sendChatMessage(message: string, session_id?: string): Pro
 }
 
 export async function fetchChatHistory(session_id: string): Promise<ChatMessage[]> {
-    const res = await fetch(`${API_BASE_URL}/chat/history/${session_id}`);
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/chat/history/${session_id}`, { headers });
     if (!res.ok) throw new Error("Failed to fetch chat history");
     return res.json();
 }

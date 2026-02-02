@@ -9,6 +9,7 @@ import Link from "next/link";
 export default function CRMPage() {
     const [relationships, setRelationships] = useState<RelationshipProfile[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         const loadData = async () => {
@@ -33,6 +34,38 @@ export default function CRMPage() {
             console.error(err);
         }
     };
+
+    const handleExport = () => {
+        if (relationships.length === 0) return;
+
+        const headers = ["Handle", "Platform", "Status", "Total Spend", "Avg ROI", "Last Contact"];
+        const csvContent = [
+            headers.join(","),
+            ...relationships.map(r => [
+                r.handle,
+                r.platform,
+                r.relationship_status,
+                r.total_spend,
+                r.avg_roi,
+                r.last_contact
+            ].join(","))
+        ].join("\n");
+
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `crm_export_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    const filteredRelationships = relationships.filter(rel =>
+        rel.handle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        rel.platform.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     return (
         <DashboardLayout>
@@ -60,7 +93,7 @@ export default function CRMPage() {
                         <div className="text-3xl font-black text-emerald-600">3.4x</div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center bg-indigo-50 border-indigo-100">
-                        <button className="flex flex-col items-center gap-2 text-indigo-700 font-bold">
+                        <button onClick={handleExport} className="flex flex-col items-center gap-2 text-indigo-700 font-bold hover:scale-105 transition-transform">
                             <Download className="w-6 h-6" />
                             Download Full Export
                         </button>
@@ -72,7 +105,12 @@ export default function CRMPage() {
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                         <h2 className="font-bold text-slate-900">Influencer Portfolio</h2>
                         <div className="flex gap-2">
-                            <input placeholder="Search handle..." className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-slate-50" />
+                            <input
+                                placeholder="Search handle..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
                         </div>
                     </div>
 
@@ -90,7 +128,7 @@ export default function CRMPage() {
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
                                 <tr><td colSpan={6} className="p-8 text-center text-slate-400">Loading relationships...</td></tr>
-                            ) : relationships.map((rel) => (
+                            ) : filteredRelationships.map((rel) => (
                                 <tr key={rel.handle} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">

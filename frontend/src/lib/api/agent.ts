@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./core";
+import { API_BASE_URL, getAuthHeaders } from "./core";
 
 export interface CampaignDraft {
     title: string;
@@ -46,9 +46,10 @@ let MOCK_HISTORY: Strategy[] = [
 ];
 
 export async function generateCampaignPlan(goal: string, product: string, audience: string): Promise<CampaignDraft> {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/agent/draft_campaign`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ goal, product, audience }),
     });
     if (!res.ok) throw new Error("Failed to generate campaign details");
@@ -56,9 +57,10 @@ export async function generateCampaignPlan(goal: string, product: string, audien
 }
 
 export async function enhanceDescription(text: string): Promise<string> {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/agent/enhance_description`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
     });
     if (!res.ok) throw new Error("Failed to enhance description");

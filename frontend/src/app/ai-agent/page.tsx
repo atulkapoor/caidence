@@ -8,6 +8,7 @@ import { StrategyHistory } from "@/components/ai-agent/StrategyHistory";
 import { useTabState } from "@/hooks/useTabState";
 import { toast } from "sonner";
 import { usePreferences } from "@/context/PreferencesContext";
+import { getAuthHeaders } from "@/lib/api";
 
 const AGENT_PLACEHOLDERS: Record<string, { project: string; objective: string }> = {
     "Technology": { project: "e.g. SaaS Product Launch", objective: "Describe product capabilities, user pain points, and launch goals..." },
@@ -67,18 +68,12 @@ function AIAgentContent() {
 
         setLoading(true);
         try {
-            // We assume token is stored in localStorage by Auth flow
-            const token = localStorage.getItem("token");
-            const headers: any = {
-                "Content-Type": "application/json",
-            };
-            if (token) {
-                headers["Authorization"] = `Bearer ${token}`;
-            }
+            const headers = await getAuthHeaders();
 
-            const res = await fetch(`${API_Base}/api/v1/agent/generate`, {
+            // Use relative path to leverage next.config.mjs rewrite
+            const res = await fetch(`/api/v1/agent/generate`, {
                 method: "POST",
-                headers: headers,
+                headers: { ...headers, "Content-Type": "application/json" },
                 body: JSON.stringify({
                     role,
                     project_type: projectType,

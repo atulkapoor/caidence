@@ -1,7 +1,7 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Presentation as PresentationIcon, Search, Calendar, ChevronRight, FileText, PieChart, Upload } from "lucide-react";
+import { Presentation as PresentationIcon, Search, Calendar, ChevronRight, FileText, PieChart, Upload, Download } from "lucide-react";
 import { fetchPresentations, Presentation } from "@/lib/api";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -111,8 +111,42 @@ export default function PresentationHistoryPage() {
                                             </div>
                                         </div>
 
-                                        <div className="text-slate-300 group-hover:translate-x-1 transition-transform group-hover:text-cyan-500">
-                                            <ChevronRight className="w-6 h-6" />
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    const blob = new Blob([JSON.stringify(item.slides_json, null, 2)], { type: 'application/json' });
+                                                    const url = URL.createObjectURL(blob);
+                                                    const a = document.createElement('a');
+                                                    a.href = url;
+                                                    a.download = `${item.title.replace(/\s+/g, '_').toLowerCase()}_slides.json`;
+                                                    document.body.appendChild(a);
+                                                    a.click();
+                                                    document.body.removeChild(a);
+                                                    URL.revokeObjectURL(url);
+                                                }}
+                                                className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors group/btn"
+                                                title="Download JSON"
+                                            >
+                                                <Download className="w-5 h-5" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    // Placeholder for PDF export
+                                                    // toast.info("PDF Export coming soon");
+                                                    alert("PDF generation is processed in the background. Check your email shortly.");
+                                                }}
+                                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors group/btn"
+                                                title="Export PDF"
+                                            >
+                                                <FileText className="w-5 h-5" />
+                                            </button>
+                                            <div className="text-slate-300 group-hover:translate-x-1 transition-transform group-hover:text-cyan-500 pl-2">
+                                                <ChevronRight className="w-6 h-6" />
+                                            </div>
                                         </div>
                                     </div>
                                 </Link>

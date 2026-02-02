@@ -281,9 +281,26 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
         full_name: "",
         role: "super_admin",
         password: "TempPassword123!", // Default temp password
-        organization_id: 1 // Default to org 1 for now
+        organization_id: 0
     });
     const [loading, setLoading] = useState(false);
+    const [organizations, setOrganizations] = useState<AdminOrg[]>([]);
+
+    useEffect(() => {
+        const loadOrgs = async () => {
+            try {
+                // @ts-ignore
+                const orgs = await fetchOrganizations();
+                setOrganizations(orgs);
+                if (orgs.length > 0) {
+                    setFormData(prev => ({ ...prev, organization_id: orgs[0].id }));
+                }
+            } catch (e) {
+                console.error("Failed to load orgs", e);
+            }
+        };
+        loadOrgs();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -338,6 +355,19 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                         </select>
                     </div>
                     <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Organization</label>
+                        <select
+                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={formData.organization_id}
+                            onChange={e => setFormData({ ...formData, organization_id: Number(e.target.value) })}
+                        >
+                            <option value={0} disabled>Select Organization</option>
+                            {organizations.map(org => (
+                                <option key={org.id} value={org.id}>{org.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Temporary Password</label>
                         <input
                             required
@@ -371,48 +401,64 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 }
 
 function OrganizationManagement() {
-    const orgs: AdminOrg[] = [
-        { id: 1, name: "Acme Corp", plan_tier: "enterprise", user_count: 12, is_active: true },
-        { id: 2, name: "Startup Inc", plan_tier: "pro", user_count: 5, is_active: true },
-        { id: 3, name: "Dev Studio", plan_tier: "free", user_count: 1, is_active: true },
-    ];
+    const [orgs, setOrgs] = useState<AdminOrg[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadOrgs = async () => {
+            try {
+                // @ts-ignore
+                const data = await fetchOrganizations();
+                setOrgs(data);
+            } catch (error) {
+                console.error("Failed to load orgs", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadOrgs();
+    }, []);
 
     return (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100">
                 <h3 className="font-bold text-lg text-slate-900">Organizations</h3>
             </div>
-            <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500 border-b border-slate-100">
-                    <tr>
-                        <th className="px-6 py-4 font-bold text-xs uppercase">Name</th>
-                        <th className="px-6 py-4 font-bold text-xs uppercase">Plan</th>
-                        <th className="px-6 py-4 font-bold text-xs uppercase">Users</th>
-                        <th className="px-6 py-4 font-bold text-xs uppercase text-right">Status</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {orgs.map((org) => (
-                        <tr key={org.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-6 py-4 font-bold text-slate-900">{org.name}</td>
-                            <td className="px-6 py-4">
-                                <span className={cn(
-                                    "inline-flex items-center px-2 py-1 rounded-md text-xs font-bold capitalize",
-                                    org.plan_tier === "enterprise" ? "bg-purple-100 text-purple-700" :
-                                        org.plan_tier === "pro" ? "bg-blue-100 text-blue-700" :
-                                            "bg-slate-100 text-slate-600"
-                                )}>
-                                    {org.plan_tier}
-                                </span>
-                            </td>
-                            <td className="px-6 py-4 text-slate-600 font-medium">{org.user_count}</td>
-                            <td className="px-6 py-4 text-right">
-                                <span className="text-emerald-600 font-bold text-xs">Active</span>
-                            </td>
+            {loading ? (
+                <div className="p-12 text-center text-slate-500">Loading organizations...</div>
+            ) : (
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-500 border-b border-slate-100">
+                        <tr>
+                            <th className="px-6 py-4 font-bold text-xs uppercase">Name</th>
+                            <th className="px-6 py-4 font-bold text-xs uppercase">Plan</th>
+                            <th className="px-6 py-4 font-bold text-xs uppercase">Users</th>
+                            <th className="px-6 py-4 font-bold text-xs uppercase text-right">Status</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {orgs.map((org) => (
+                            <tr key={org.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-6 py-4 font-bold text-slate-900">{org.name}</td>
+                                <td className="px-6 py-4">
+                                    <span className={cn(
+                                        "inline-flex items-center px-2 py-1 rounded-md text-xs font-bold capitalize",
+                                        org.plan_tier === "enterprise" ? "bg-purple-100 text-purple-700" :
+                                            org.plan_tier === "pro" ? "bg-blue-100 text-blue-700" :
+                                                "bg-slate-100 text-slate-600"
+                                    )}>
+                                        {org.plan_tier}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4 text-slate-600 font-medium">{org.user_count}</td>
+                                <td className="px-6 py-4 text-right">
+                                    <span className="text-emerald-600 font-bold text-xs">Active</span>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
         </div>
     );
 }

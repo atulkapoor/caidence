@@ -20,6 +20,10 @@ export default function AIChatPage() {
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
@@ -28,27 +32,35 @@ export default function AIChatPage() {
         scrollToBottom();
     }, [messages]);
 
-    // Initialize session or load from local storage if we wanted to persist across reloads
-    // For now, start fresh or use a fixed ID for "Default Session"
-    useEffect(() => {
-        // Typically load last session or start new
-    }, []);
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setSelectedFile(e.target.files[0]);
+        }
+    };
 
     const handleSend = async () => {
-        if (!input.trim() || isLoading) return;
+        if ((!input.trim() && !selectedFile) || isLoading) return;
 
         const userMsg = input;
+        const attachedFile = selectedFile; // Capture current file
+
         setInput("");
+        setSelectedFile(null); // Clear file after sending
         setIsLoading(true);
 
         // Optimistic Update
-        const newMsg = { role: "user", content: userMsg };
+        const content = attachedFile
+            ? `[Attached: ${attachedFile.name}] ${userMsg}`
+            : userMsg;
+
+        const newMsg = { role: "user", content };
         setMessages(prev => [...prev, newMsg]);
 
         try {
             // @ts-ignore
             const { sendChatMessage } = await import("@/lib/api");
-            const res = await sendChatMessage(userMsg, sessionId || undefined);
+            // Note: passing file content is not yet supported by backend, just sending text for now
+            const res = await sendChatMessage(content, sessionId || undefined);
 
             if (!sessionId) {
                 setSessionId(res.session_id);
@@ -62,6 +74,10 @@ export default function AIChatPage() {
             setIsLoading(false);
         }
     };
+
+    const filteredMessages = messages.filter(msg =>
+        msg.content.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -86,6 +102,19 @@ export default function AIChatPage() {
                                 <p className="text-xs text-slate-500 font-medium">Always active • {industry || "Strategy"} Expert</p>
                             </div>
                         </div>
+                        {/* Search Bar */}
+                        <div className="relative hidden md:block">
+                            <input
+                                type="text"
+                                placeholder="Search chat..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-3 pr-8 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 w-48 bg-white"
+                            />
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Messages Area */}
@@ -99,7 +128,7 @@ export default function AIChatPage() {
                             </div>
                         )}
 
-                        {messages.map((msg, idx) => (
+                        {(searchQuery ? filteredMessages : messages).map((msg, idx) => (
                             <div key={idx} className={`flex gap-4 max-w-3xl ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''} animate-in slide-in-from-bottom-2 duration-300`}>
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 shadow-sm ${msg.role === 'user' ? 'bg-slate-200 text-slate-600' : 'bg-teal-600 text-white'}`}>
                                     {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
@@ -133,6 +162,13 @@ export default function AIChatPage() {
 
                     {/* Input Area */}
                     <div className="p-4 bg-white border-t border-slate-100">
+                        {selectedFile && (
+                            <div className="mb-2 flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg w-fit text-sm text-slate-600">
+                                <Paperclip className="w-4 h-4" />
+                                <span className="font-medium truncate max-w-[200px]">{selectedFile.name}</span>
+                                <button onClick={() => setSelectedFile(null)} className="ml-2 hover:text-red-500">×</button>
+                            </div>
+                        )}
                         <div className="relative">
                             <textarea
                                 value={input}
@@ -142,20 +178,29 @@ export default function AIChatPage() {
                                 className="w-full pl-4 pr-32 py-4 h-24 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none font-medium placeholder:text-slate-400 transition-all focus:bg-white"
                             />
                             <div className="absolute bottom-3 right-3 flex items-center gap-2">
-                                <button className="p-2 text-slate-400 hover:text-teal-600 transition-colors rounded-lg hover:bg-teal-50" title="Attach file">
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    onChange={handleFileSelect}
+                                />
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className={`p-2 transition-colors rounded-lg ${selectedFile ? 'text-teal-600 bg-teal-50' : 'text-slate-400 hover:text-teal-600 hover:bg-teal-50'}`}
+                                    title="Attach file"
+                                >
                                     <Paperclip className="w-5 h-5" />
                                 </button>
                                 <button className="px-3 py-1.5 text-teal-700 hover:text-teal-800 transition-colors rounded-lg bg-teal-50 hover:bg-teal-100 border border-teal-200/50 font-bold text-xs flex items-center gap-1.5">
                                     <Sparkles className="w-3.5 h-3.5" /> Enhance
                                 </button>
-                                <button onClick={handleSend} disabled={isLoading || !input.trim()} className="p-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg shadow-sm transition-all hover:scale-105">
+                                <button onClick={handleSend} disabled={isLoading || (!input.trim() && !selectedFile)} className="p-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg shadow-sm transition-all hover:scale-105">
                                     <Send className="w-5 h-5" />
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
-
                 {/* Right Sidebar - Expert Profiles */}
                 <div className="w-[300px] shrink-0 space-y-6">
                     {/* Quick Prompts */}
