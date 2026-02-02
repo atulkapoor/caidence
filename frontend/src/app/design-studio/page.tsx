@@ -391,10 +391,45 @@ function DesignStudioContent() {
                                         {/* Reference Image Placeholder */}
                                         <div className="space-y-2">
                                             <label className="text-xs font-bold text-slate-500 uppercase">Reference Image</label>
-                                            <div className="w-full p-3 bg-slate-50 border-2 border-slate-200 border-dashed rounded-xl text-sm font-medium text-slate-400 flex items-center justify-center hover:bg-slate-100 cursor-pointer transition-colors h-[50px]">
-                                                <div className="flex items-center gap-2">
-                                                    <Upload className="w-4 h-4" />
-                                                    <span>Drop file to upload</span>
+                                            <div className="relative">
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onloadend = () => {
+                                                                setReferenceImage(reader.result as string);
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }}
+                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                                    id="reference-image-upload"
+                                                />
+                                                <div className={`w-full p-3 border-2 border-dashed rounded-xl text-sm font-medium flex items-center justify-center transition-colors h-[50px] ${referenceImage ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
+                                                    {referenceImage ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <img src={referenceImage} alt="Reference" className="w-6 h-6 rounded object-cover" />
+                                                            <span className="text-xs">Image uploaded</span>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    setReferenceImage("");
+                                                                }}
+                                                                className="text-red-500 hover:text-red-700 ml-2"
+                                                            >
+                                                                <X className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2">
+                                                            <Upload className="w-4 h-4" />
+                                                            <span>Click or drop to upload</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

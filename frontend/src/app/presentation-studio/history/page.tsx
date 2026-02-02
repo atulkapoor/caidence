@@ -5,6 +5,13 @@ import { Presentation as PresentationIcon, Search, Calendar, ChevronRight, FileT
 import { fetchPresentations, Presentation } from "@/lib/api";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from 'next/dynamic';
+
+// Dynamically import PDF component to avoid SSR issues
+const PresentationPDFDownload = dynamic(() => import("@/components/content/PresentationPDF"), {
+    ssr: false,
+    loading: () => <span className="text-xs text-slate-400">Loading...</span>
+});
 
 export default function PresentationHistoryPage() {
     const [history, setHistory] = useState<Presentation[]>([]);
@@ -131,19 +138,27 @@ export default function PresentationHistoryPage() {
                                             >
                                                 <Download className="w-5 h-5" />
                                             </button>
-                                            <button
+                                            <div
                                                 onClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
-                                                    // Placeholder for PDF export
-                                                    // toast.info("PDF Export coming soon");
-                                                    alert("PDF generation is processed in the background. Check your email shortly.");
                                                 }}
-                                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors group/btn"
-                                                title="Export PDF"
+                                                className="p-1"
                                             >
-                                                <FileText className="w-5 h-5" />
-                                            </button>
+                                                <PresentationPDFDownload
+                                                    data={{
+                                                        title: item.title,
+                                                        created_at: item.created_at,
+                                                        slides: Array.isArray(item.slides_json)
+                                                            ? (item.slides_json as { title?: string; content?: string }[]).map((slide, idx) => ({
+                                                                title: slide.title || `Slide ${idx + 1}`,
+                                                                content: slide.content || ""
+                                                            }))
+                                                            : [{ title: item.title, content: "Presentation content" }]
+                                                    }}
+                                                    fileName={`${item.title.replace(/\s+/g, '_').toLowerCase()}.pdf`}
+                                                />
+                                            </div>
                                             <div className="text-slate-300 group-hover:translate-x-1 transition-transform group-hover:text-cyan-500 pl-2">
                                                 <ChevronRight className="w-6 h-6" />
                                             </div>
