@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/cadence_ai
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - AI_WORKER_URL=http://ai_worker:8001
+      # Note: LLM_MODEL set here
+      - LLM_MODEL=qwen2.5:0.5b
+    restart: always
+    depends_on:
+      - db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    restart: always
+    environment:
+      - NODE_ENV=production
+      # In production, browser requests to proper domain. 
+      # Using relative path assuming /api rewrites are used, 
+      # OR public domain if defined in code. 
+      # Setting to /api/v1 to use Next.js rewrites is safest if code supports it.
+      # Otherwise using the domain:
+      - NEXT_PUBLIC_API_URL=https://dev.caidence.kclub.me/api
+      - INTERNAL_API_URL=http://backend:8000
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=cadence_ai
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: always
+
+  ai_worker:
+    build: ./ai_worker
+    ports:
+      - "8001:8001"
+    restart: always
+
+volumes:
+  postgres_data:
+  ollama_models:
