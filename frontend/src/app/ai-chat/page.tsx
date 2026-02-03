@@ -18,6 +18,7 @@ export default function AIChatPage() {
     const [messages, setMessages] = useState<any[]>([]);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isEnhancing, setIsEnhancing] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -216,8 +217,27 @@ export default function AIChatPage() {
                                 >
                                     <Paperclip className="w-5 h-5" />
                                 </button>
-                                <button className="px-3 py-1.5 text-teal-700 hover:text-teal-800 transition-colors rounded-lg bg-teal-50 hover:bg-teal-100 border border-teal-200/50 font-bold text-xs flex items-center gap-1.5">
-                                    <Sparkles className="w-3.5 h-3.5" /> Enhance
+                                <button
+                                    onClick={async () => {
+                                        if (!input.trim()) return;
+                                        setIsEnhancing(true);
+                                        try {
+                                            const { enhanceDescription } = await import("@/lib/api");
+                                            const enhanced = await enhanceDescription(input);
+                                            setInput(enhanced);
+                                        } catch (e) {
+                                            console.error("Enhance failed", e);
+                                        }
+                                        setIsEnhancing(false);
+                                    }}
+                                    disabled={isEnhancing || !input.trim()}
+                                    className="px-3 py-1.5 text-teal-700 hover:text-teal-800 transition-colors rounded-lg bg-teal-50 hover:bg-teal-100 border border-teal-200/50 font-bold text-xs flex items-center gap-1.5 disabled:opacity-50"
+                                >
+                                    {isEnhancing ? (
+                                        <><div className="w-3 h-3 border border-teal-600 border-t-transparent rounded-full animate-spin" /> Enhancing...</>
+                                    ) : (
+                                        <><Sparkles className="w-3.5 h-3.5" /> Enhance</>
+                                    )}
                                 </button>
                                 <button onClick={handleSend} disabled={isLoading || (!input.trim() && !selectedFile)} className="p-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg shadow-sm transition-all hover:scale-105">
                                     <Send className="w-5 h-5" />

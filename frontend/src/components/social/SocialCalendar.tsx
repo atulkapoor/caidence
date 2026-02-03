@@ -32,8 +32,8 @@ const mockEvents: SocialPost[] = [
     {
         id: 2,
         title: "LinkedIn Article Share",
-        start: new Date(new Date().setDate(new Date().getDate() + 1)),
-        end: new Date(new Date().setDate(new Date().getDate() + 1)),
+        start: (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(14, 0, 0, 0); return d; })(),
+        end: (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(15, 0, 0, 0); return d; })(),
         platform: "linkedin",
         content: "Check out our latest insights on AI marketing."
     },
@@ -60,15 +60,23 @@ interface SocialCalendarProps {
 }
 
 export function SocialCalendar({ campaigns = [] }: SocialCalendarProps) {
-    // Merge mock posts with campaigns
-    const campaignEvents: SocialPost[] = campaigns.map((c: any) => ({
-        id: c.id + 1000, // Offset IDs
-        title: `Campaign: ${c.title}`,
-        start: new Date(c.start_date || c.created_at),
-        end: new Date(c.end_date || new Date().setDate(new Date().getDate() + 30)),
-        platform: "campaign" as any, // Cast to any to bypass strict type for now or add 'campaign' to SocialPost type
-        content: c.description
-    }));
+    // Convert campaigns to calendar events - use 1-hour time slots instead of spanning entire date ranges
+    const campaignEvents: SocialPost[] = campaigns.map((c: any, idx: number) => {
+        const startDate = new Date(c.start_date || c.created_at);
+        // Set a specific time for the event (9am + idx hours to spread them out)
+        startDate.setHours(9 + idx, 0, 0, 0);
+        const endDate = new Date(startDate);
+        endDate.setHours(startDate.getHours() + 1); // 1-hour event
+
+        return {
+            id: c.id + 1000, // Offset IDs
+            title: `Campaign: ${c.title}`,
+            start: startDate,
+            end: endDate,
+            platform: "campaign" as any,
+            content: c.description
+        };
+    });
 
     const [events, setEvents] = useState<SocialPost[]>([...mockEvents, ...campaignEvents]);
     const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);

@@ -203,8 +203,9 @@ export function CreateCampaignTab() {
             await launchCampaign(newCampaign.id);
 
             toast.success("Campaign launched successfully!");
-            // Force a small delay or revalidation if needed, but push is enough
+            // Navigate to campaigns list with refresh
             router.push("/campaigns");
+            router.refresh();
         } catch (err) {
             toast.error("Failed to launch campaign");
             console.error(err);
@@ -215,64 +216,66 @@ export function CreateCampaignTab() {
         <div className="flex gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
             {/* Agent Wizard Modal */}
             {showWizard && (
-                <div className="absolute z-50 inset-0 bg-white/95 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-8 border border-slate-200 shadow-2xl animate-in zoom-in-95 duration-300">
-                    <div className="w-full max-w-md space-y-6">
-                        <div className="text-center space-y-2">
-                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white mb-4 shadow-lg shadow-indigo-200">
-                                <Sparkles className="w-8 h-8 animate-pulse" />
+                <div className="fixed z-50 inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-300">
+                        <div className="w-full max-w-md space-y-6">
+                            <div className="text-center space-y-2">
+                                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white mb-4 shadow-lg shadow-indigo-200">
+                                    <Sparkles className="w-8 h-8 animate-pulse" />
+                                </div>
+                                <h2 className="text-2xl font-black text-slate-900">AI Campaign Agent</h2>
+                                <p className="text-slate-500">Describe your goal, and our multi-agent team will build a strategy for you.</p>
                             </div>
-                            <h2 className="text-2xl font-black text-slate-900">AI Campaign Agent</h2>
-                            <p className="text-slate-500">Describe your goal, and our multi-agent team will build a strategy for you.</p>
-                        </div>
 
-                        {!isGenerating ? (
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Campaign Goal</label>
-                                    <input
-                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        placeholder="e.g. Launch new coffee brand"
-                                        value={wizardGoal}
-                                        onChange={e => setWizardGoal(e.target.value)}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Product / Service</label>
-                                    <input
-                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        placeholder="e.g. JavaJoy Bean Subscription"
-                                        value={wizardProduct}
-                                        onChange={e => setWizardProduct(e.target.value)}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Target Audience</label>
-                                    <input
-                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        placeholder="e.g. Remote workers, Tech enthusiasts"
-                                        value={wizardAudience}
-                                        onChange={e => setWizardAudience(e.target.value)}
-                                    />
-                                </div>
-                                <button
-                                    onClick={handleAutoGenerate}
-                                    disabled={!wizardGoal || !wizardProduct || !wizardAudience}
-                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Activate Agents 🤖
-                                </button>
-                                <button onClick={() => setShowWizard(false)} className="w-full py-2 text-slate-400 hover:text-slate-600 text-sm font-bold">Cancel</button>
-                            </div>
-                        ) : (
-                            <div className="bg-slate-900 text-green-400 p-6 rounded-xl font-mono text-xs h-64 overflow-y-auto w-full shadow-inner border border-slate-800">
-                                {agentLogs.map((log, i) => (
-                                    <div key={i} className="mb-2 border-l-2 border-green-500 pl-2 animate-in slide-in-from-left-2 fade-in">
-                                        <span className="opacity-50">[{new Date().toLocaleTimeString()}]</span> {log}
+                            {!isGenerating ? (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Campaign Goal</label>
+                                        <input
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            placeholder="e.g. Launch new coffee brand"
+                                            value={wizardGoal}
+                                            onChange={e => setWizardGoal(e.target.value)}
+                                        />
                                     </div>
-                                ))}
-                                <div className="animate-pulse">_</div>
-                            </div>
-                        )}
+                                    <div>
+                                        <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Product / Service</label>
+                                        <input
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            placeholder="e.g. JavaJoy Bean Subscription"
+                                            value={wizardProduct}
+                                            onChange={e => setWizardProduct(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Target Audience</label>
+                                        <input
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mt-1 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            placeholder="e.g. Remote workers, Tech enthusiasts"
+                                            value={wizardAudience}
+                                            onChange={e => setWizardAudience(e.target.value)}
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleAutoGenerate}
+                                        disabled={!wizardGoal || !wizardProduct || !wizardAudience}
+                                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Activate Agents 🤖
+                                    </button>
+                                    <button onClick={() => setShowWizard(false)} className="w-full py-2 text-slate-400 hover:text-slate-600 text-sm font-bold">Cancel</button>
+                                </div>
+                            ) : (
+                                <div className="bg-slate-900 text-green-400 p-6 rounded-xl font-mono text-xs h-64 overflow-y-auto w-full shadow-inner border border-slate-800">
+                                    {agentLogs.map((log, i) => (
+                                        <div key={i} className="mb-2 border-l-2 border-green-500 pl-2 animate-in slide-in-from-left-2 fade-in">
+                                            <span className="opacity-50">[{new Date().toLocaleTimeString()}]</span> {log}
+                                        </div>
+                                    ))}
+                                    <div className="animate-pulse">_</div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

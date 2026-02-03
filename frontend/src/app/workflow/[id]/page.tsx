@@ -83,6 +83,8 @@ function WorkflowDetailContent({ params }: PageProps) {
             // Refresh workflow stats
             const updatedWf = await fetchWorkflowById(workflow.id);
             setWorkflow(updatedWf);
+            // Switch to history tab to show the run result
+            setActiveTab("history");
         } catch (error) {
             console.error("Failed to run workflow", error);
             alert("Failed to start workflow");
@@ -170,7 +172,7 @@ function WorkflowDetailContent({ params }: PageProps) {
                     </nav>
 
                     {/* Header */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm sticky top-4 z-10 backdrop-blur-xl bg-white/90">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                         <div className="flex items-center gap-4">
                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${workflow?.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500'
                                 }`}>

@@ -61,15 +61,25 @@ function CreatorsContent() {
         try {
             // @ts-ignore
             const { addCreator } = await import("@/lib/api/creators");
-            await addCreator(newHandle, newPlatform);
-            setNewHandle("");
+            const newCreator = await addCreator(newHandle, newPlatform);
+
+            // Close modal and clear form FIRST
             setShowAddModal(false);
-            loadData(); // Refresh list
+            setNewHandle("");
+
+            // Show success toast
+            const { toast } = await import("sonner");
+            toast.success("Creator added successfully!");
+
+            // Refresh list to show new creator
+            await loadData();
         } catch (err) {
             console.error(err);
-            alert("Failed to add creator. Ensuring mock update.");
-            // Mock update
-            setCreators(prev => [...prev, {
+            const { toast } = await import("sonner");
+            toast.error("API unavailable - adding to local list");
+
+            // Mock update - add to local state immediately
+            const mockCreator = {
                 id: Date.now(),
                 handle: newHandle,
                 platform: newPlatform,
@@ -79,7 +89,8 @@ function CreatorsContent() {
                 follower_count: 0,
                 engagement_rate: 0,
                 status: "vetted"
-            }]);
+            };
+            setCreators(prev => [mockCreator, ...prev]); // Add to beginning so it's visible
             setShowAddModal(false);
             setNewHandle("");
         } finally {

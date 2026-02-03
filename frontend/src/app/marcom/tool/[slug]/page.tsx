@@ -71,12 +71,23 @@ export default function ToolRunnerPage() {
 
         } catch (error) {
             console.error(error);
-            toast.error("Failed to generate content. Using mock fallback.");
-            // Mock Fallback
-            setTimeout(() => {
-                setResult("1. " + tool.promptTemplate.replace("{product_name}", formValues["product_name"] || "Product") + " - Amazing Quality!\n2. Transform your life with " + (formValues["product_name"] || "this product") + ".\n3. The best choice for " + (formValues["audience"] || "you") + ".");
-                toast.success("Content generated (Mock)!");
-            }, 1000);
+            toast.error("Using AI mock - backend may be unavailable");
+
+            // Generate meaningful mock content based on tool type and inputs
+            const inputVals = Object.values(formValues).filter(Boolean).join(", ");
+            const mockResponses: Record<string, string> = {
+                "facebook-ad-headline": `1. Transform Your Business Today! 🚀\n2. Discover ${inputVals || "Amazing Results"}\n3. Don't Miss Out - Limited Offer\n4. Join Thousands of Happy Customers\n5. Your Success Story Starts Here`,
+                "website-headline": `1. Welcome to the Future of ${inputVals || "Innovation"}\n2. Transform Your Experience Today\n3. Where Quality Meets Excellence\n4. Empowering Your Journey\n5. Innovation That Inspires`,
+                "email-subject-line": `1. [ACTION REQUIRED] ${inputVals || "Special Offer Inside"}\n2. 🎉 You Won't Want to Miss This\n3. Quick Question About Your Goals\n4. Exclusive Access - Just for You\n5. Last Chance: This Ends Tonight`,
+                "seo-meta-description": `1. Discover ${inputVals || "amazing solutions"} that transform results. Learn more today!\n2. Expert ${inputVals || "services"} trusted by thousands. Get started now.\n3. Looking for ${inputVals || "quality"}? Find everything you need here.`,
+                "social-post-idea": `1. 📸 Behind-the-scenes look at ${inputVals || "our process"}\n2. 💡 5 Tips for ${inputVals || "success"}\n3. 🎯 Customer spotlight featuring amazing results\n4. 📊 Industry insights you need to know\n5. ❓ Ask Me Anything about ${inputVals || "this topic"}`,
+                "product-description": `Introducing the ultimate solution for ${inputVals || "your needs"}. Our premium offering combines cutting-edge innovation with unmatched quality to deliver results you can trust. Whether you're looking to enhance productivity, boost performance, or simply enjoy a better experience, this is the answer you've been searching for. Join thousands of satisfied customers who have already made the switch.`,
+                "blog-post-intro": `1. Have you ever wondered how ${inputVals || "top performers"} achieve incredible results? In this comprehensive guide, we'll unlock the secrets...\n\n2. The landscape of ${inputVals || "our industry"} is evolving faster than ever. Here's what you need to know to stay ahead...\n\n3. Picture this: a world where ${inputVals || "success"} is not just a possibility, but a guarantee. Let's explore how to make it happen...`
+            };
+
+            const fallbackContent = mockResponses[tool.id] || `Generated content for ${tool.title}:\n\n1. Key insight about ${inputVals}\n2. Actionable recommendation\n3. Best practices to implement\n4. Expert tips for success\n5. Next steps to take`;
+
+            setResult(fallbackContent);
         } finally {
             setLoading(false);
         }

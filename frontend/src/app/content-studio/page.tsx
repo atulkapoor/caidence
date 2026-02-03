@@ -456,7 +456,11 @@ ${prompt}
                                             <button onClick={startNew} className="text-sm font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 hover:bg-white px-3 py-1.5 rounded-lg transition-all"><Plus className="w-4 h-4" /> New Project</button>
                                             <div className="flex gap-2">
                                                 <button
-                                                    onClick={() => toast.success("All content saved to library!")}
+                                                    onClick={async () => {
+                                                        // Content is already saved when generated; refresh library
+                                                        await loadHistory();
+                                                        toast.success("Content library refreshed! All content is synced.");
+                                                    }}
                                                     className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-50 shadow-sm flex items-center gap-2"
                                                 >
                                                     <Sparkles className="w-3 h-3 text-amber-400" /> Save All

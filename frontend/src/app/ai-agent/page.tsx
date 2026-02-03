@@ -55,6 +55,7 @@ function AIAgentContent() {
 
     // Submitting State
     const [loading, setLoading] = useState(false);
+    const [isEnhancing, setIsEnhancing] = useState(false);
     const [result, setResult] = useState<any>(null);
 
     // Asset State
@@ -287,8 +288,29 @@ function AIAgentContent() {
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-slate-700 flex justify-between items-center">
                                         Marketing Objective
-                                        <button className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:text-indigo-700 transition-colors">
-                                            <Wand2 className="w-3 h-3" /> Enhance with AI
+                                        <button
+                                            onClick={async (e) => {
+                                                e.preventDefault();
+                                                if (!objective.trim()) return;
+                                                setIsEnhancing(true);
+                                                try {
+                                                    const { enhanceDescription } = await import("@/lib/api");
+                                                    const enhanced = await enhanceDescription(objective);
+                                                    setObjective(enhanced);
+                                                    toast.success("Objective enhanced!");
+                                                } catch (err) {
+                                                    console.error("Enhance failed", err);
+                                                }
+                                                setIsEnhancing(false);
+                                            }}
+                                            disabled={isEnhancing || !objective.trim()}
+                                            className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:text-indigo-700 transition-colors disabled:opacity-50"
+                                        >
+                                            {isEnhancing ? (
+                                                <><div className="w-3 h-3 border border-indigo-600 border-t-transparent rounded-full animate-spin" /> Enhancing...</>
+                                            ) : (
+                                                <><Wand2 className="w-3 h-3" /> Enhance with AI</>
+                                            )}
                                         </button>
                                     </label>
                                     <textarea

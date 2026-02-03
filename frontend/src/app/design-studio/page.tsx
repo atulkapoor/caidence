@@ -1,7 +1,7 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { generateDesign, fetchDesignAssets, DesignAsset } from "@/lib/api";
+import { generateDesign, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 // import Link from "next/link"; // Unused
@@ -19,6 +19,7 @@ function DesignStudioContent() {
     const [brandColors, setBrandColors] = useState(""); // Text input
     const [referenceImage, setReferenceImage] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isEnhancing, setIsEnhancing] = useState(false);
     const [recentDesigns, setRecentDesigns] = useState<DesignAsset[]>([]);
 
     // Library State
@@ -362,8 +363,26 @@ function DesignStudioContent() {
                                             <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">3</span>
                                             Design Brief
                                         </h2>
-                                        <button className="text-xs font-bold text-rose-600 flex items-center gap-1 hover:text-rose-700 transition-colors">
-                                            <Sparkles className="w-3 h-3" /> Enhance Prompt
+                                        <button
+                                            onClick={async () => {
+                                                if (!prompt) return;
+                                                setIsEnhancing(true);
+                                                try {
+                                                    const enhanced = await enhanceDescription(prompt);
+                                                    setPrompt(enhanced);
+                                                } catch (e) {
+                                                    console.error("Enhance failed", e);
+                                                }
+                                                setIsEnhancing(false);
+                                            }}
+                                            disabled={isEnhancing || !prompt}
+                                            className="text-xs font-bold text-rose-600 flex items-center gap-1 hover:text-rose-700 transition-colors disabled:opacity-50"
+                                        >
+                                            {isEnhancing ? (
+                                                <><div className="w-3 h-3 border border-rose-600 border-t-transparent rounded-full animate-spin" /> Enhancing...</>
+                                            ) : (
+                                                <><Sparkles className="w-3 h-3" /> Enhance Prompt</>
+                                            )}
                                         </button>
                                     </div>
                                     <div className="relative">
@@ -442,10 +461,8 @@ function DesignStudioContent() {
                                                 <img
                                                     src={asset.image_url}
                                                     onError={(e) => {
-                                                        // @ts-ignore
-                                                        e.target.src = "https://via.placeholder.com/400x300?text=Image+Error";
-                                                        // @ts-ignore
-                                                        e.target.className = "w-full h-full object-cover grayscale opacity-50";
+                                                        // @ts-ignore - Hide broken image and show parent bg
+                                                        e.target.style.display = "none";
                                                     }}
                                                     alt={asset.title}
                                                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save } from "lucide-react";
+import { Save, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { usePreferences } from "@/context/PreferencesContext";
 import { getProfile, updateProfile, type UserProfile } from "@/lib/api/profile";
@@ -37,7 +37,21 @@ export function ProfileForm() {
                 }
             } catch (error) {
                 console.error("Failed to load profile:", error);
-                toast.error("Failed to load profile");
+                // Fallback: Try to get user info from localStorage
+                try {
+                    const userJson = localStorage.getItem("user");
+                    if (userJson) {
+                        const user = JSON.parse(userJson);
+                        setFormData(prev => ({
+                            ...prev,
+                            full_name: user.full_name || prev.full_name,
+                            email: user.email || prev.email,
+                        }));
+                    }
+                } catch (e) {
+                    console.error("Failed to load from localStorage:", e);
+                }
+                toast.error("Failed to load profile from server");
             } finally {
                 setLoading(false);
             }
@@ -120,16 +134,19 @@ export function ProfileForm() {
 
                     <div className="space-y-2">
                         <label className="text-sm font-semibold text-slate-700">Industry Profile</label>
-                        <select
-                            value={industry}
-                            onChange={(e) => setIndustry(e.target.value)}
-                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 transition-all font-medium appearance-none"
-                        >
-                            <option value="Technology">Technology & SaaS</option>
-                            <option value="Real Estate">Real Estate & Construction</option>
-                            <option value="E-Commerce">E-Commerce & Retail</option>
-                            <option value="Healthcare">Healthcare & Wellness</option>
-                        </select>
+                        <div className="relative">
+                            <select
+                                value={industry}
+                                onChange={(e) => setIndustry(e.target.value)}
+                                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 transition-all font-medium appearance-none pr-10"
+                            >
+                                <option value="Technology">Technology & SaaS</option>
+                                <option value="Real Estate">Real Estate & Construction</option>
+                                <option value="E-Commerce">E-Commerce & Retail</option>
+                                <option value="Healthcare">Healthcare & Wellness</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
                     </div>
 
                     <div className="space-y-2">

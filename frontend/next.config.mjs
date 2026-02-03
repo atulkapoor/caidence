@@ -7,7 +7,7 @@ const nextConfig = {
     typescript: {
         ignoreBuildErrors: true,
     },
-    output: "standalone",
+    // output: "standalone",
     async rewrites() {
         return [
             {
