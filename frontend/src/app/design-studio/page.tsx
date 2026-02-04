@@ -5,6 +5,7 @@ import { generateDesign, fetchDesignAssets, DesignAsset, enhanceDescription } fr
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 // import Link from "next/link"; // Unused
+import { toast } from "sonner";
 import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight } from "lucide-react";
 
 function DesignStudioContent() {
@@ -53,9 +54,11 @@ function DesignStudioContent() {
                 setBrandColors(asset.brand_colors || "");
                 setActiveTab("generate");
                 window.history.replaceState({}, '', '/design-studio');
+                toast.success("Design loaded for editing");
             }
         } catch (e) {
             console.error("Failed to load edit asset", e);
+            toast.error("Failed to load design for editing");
         }
     };
 
@@ -65,6 +68,7 @@ function DesignStudioContent() {
             setRecentDesigns(data);
         } catch (error) {
             console.error("Failed to load designs", error);
+            // toast.error("Failed to load design library"); // Optional: don't spam on load
         }
     };
 
@@ -83,9 +87,10 @@ function DesignStudioContent() {
                 reference_image: referenceImage
             });
             setRecentDesigns((prev) => [newDesign, ...prev]);
+            toast.success("Design generated successfully!");
         } catch (error) {
             console.error("Failed to generate design", error);
-            alert("Failed to generate design. (If first run, check DB schema)");
+            toast.error("Failed to generate design. Please try again.");
         } finally {
             setIsGenerating(false);
         }
@@ -569,7 +574,7 @@ function DesignStudioContent() {
                                                             e.stopPropagation();
                                                             if (confirm("Delete this design?")) {
                                                                 setRecentDesigns(prev => prev.filter(p => p.id !== asset.id));
-                                                                // toast.success("Design deleted"); // toast not imported here? It is not.
+                                                                toast.success("Design deleted");
                                                             }
                                                         }}
                                                         className="text-slate-400 hover:text-red-500 transition-colors ml-4"
