@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
 import { updateStrategy } from "@/lib/api/agent";
+import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
 
 interface StrategyResultProps {
     strategy: any; // JSON object from backend
@@ -151,7 +152,9 @@ export function StrategyResult({ strategy: initialStrategy, projectId }: Strateg
                                     ) : (
                                         <>
                                             <h4 className="font-bold text-slate-900 text-lg mb-2">{persona.name}</h4>
-                                            <p className="text-slate-600 text-sm leading-relaxed">{persona.description}</p>
+                                            <div className="text-slate-600 text-sm leading-relaxed">
+                                                <TypewriterEffect text={persona.description} />
+                                            </div>
                                         </>
                                     )}
                                 </div>
@@ -218,7 +221,9 @@ export function StrategyResult({ strategy: initialStrategy, projectId }: Strateg
                                     <div className="flex-shrink-0 w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold">
                                         {i + 1}
                                     </div>
-                                    <p className="text-slate-700 font-medium pt-1">{rec}</p>
+                                    <div className="text-slate-700 font-medium pt-1">
+                                        <TypewriterEffect text={rec} />
+                                    </div>
                                 </div>
                             ))}
                         </div>

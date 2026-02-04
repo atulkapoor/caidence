@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Sparkles, ArrowRight, Check, X, Loader2 } from "lucide-react";
 import { CampaignDraft, generateCampaignPlan, createCampaign } from "@/lib/api";
+import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
 
 interface AgentWizardProps {
     isOpen: boolean;
@@ -153,7 +154,7 @@ export function AgentWizard({ isOpen, onClose, onSuccess }: AgentWizardProps) {
                                     <div>
                                         <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1">Strategic Approach</div>
                                         <div className="text-sm font-medium text-indigo-800 leading-relaxed bg-white/50 p-3 rounded-lg border border-indigo-100/50">
-                                            {draft?.description}
+                                            {draft?.description && <TypewriterEffect text={draft.description} />}
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">

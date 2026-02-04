@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Send, Sparkles, Paperclip, User, Bot, Crown, ArrowRight } from "lucide-react";
 import { usePreferences } from "@/context/PreferencesContext";
+import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
 
 const QUICK_PROMPTS: Record<string, string[]> = {
     "Technology": ["Draft a SaaS onboarding email", "Analyze churn metrics", "Feature announcement post", "Competitor battlecard"],
@@ -165,7 +166,11 @@ export default function AIChatPage() {
                                         ? 'bg-teal-600 text-white border-transparent rounded-tr-none'
                                         : 'bg-white text-slate-700 border-slate-100 rounded-tl-none'
                                         }`}>
-                                        {msg.content}
+                                        {msg.role === 'assistant' && idx === messages.length - 1 ? (
+                                            <TypewriterEffect text={msg.content} />
+                                        ) : (
+                                            msg.content
+                                        )}
                                     </div>
                                 </div>
                             </div>

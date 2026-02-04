@@ -8,23 +8,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 
 // Implementation of Typewriter effect component
-const TypewriterEffect = ({ text }: { text: string }) => {
-    const [displayedText, setDisplayedText] = useState("");
-
-    useEffect(() => {
-        let index = 0;
-        const intervalId = setInterval(() => {
-            setDisplayedText((prev) => prev + text.charAt(index));
-            index++;
-            if (index === text.length) {
-                clearInterval(intervalId);
-            }
-        }, 8); // Slightly faster
-        return () => clearInterval(intervalId);
-    }, [text]);
-
-    return <div className="whitespace-pre-line leading-relaxed text-slate-700">{displayedText}</div>;
-};
+import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
 
 function ContentStudioContent() {
     // Form State
@@ -482,7 +466,7 @@ ${prompt}
                                                     <button onClick={() => navigator.clipboard.writeText(response.result)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-violet-600"><Copy className="w-3 h-3" /> Copy</button>
                                                 </div>
                                                 <div className="p-8 prose prose-slate max-w-none">
-                                                    {isGenerating ? <div className="space-y-4 animate-pulse"><div className="h-4 bg-slate-100 rounded w-3/4"></div><div className="h-4 bg-slate-100 rounded"></div></div> : <TypewriterEffect text={response.result} />}
+                                                    {isGenerating ? <div className="space-y-4 animate-pulse"><div className="h-4 bg-slate-100 rounded w-3/4"></div><div className="h-4 bg-slate-100 rounded"></div></div> : <TypewriterEffect text={response.result} className="text-slate-700" />}
                                                 </div>
                                             </div>
                                         ))}

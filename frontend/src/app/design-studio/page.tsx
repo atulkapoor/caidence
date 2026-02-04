@@ -71,6 +71,8 @@ function DesignStudioContent() {
     const handleGenerate = async () => {
         if (!prompt) return;
         setIsGenerating(true);
+        setActiveTab("library"); // Switch immediately for better UX
+
         try {
             const newDesign = await generateDesign({
                 title: title || "Untitled Design",
@@ -81,7 +83,6 @@ function DesignStudioContent() {
                 reference_image: referenceImage
             });
             setRecentDesigns((prev) => [newDesign, ...prev]);
-            setActiveTab("library"); // Switch to library to see result
         } catch (error) {
             console.error("Failed to generate design", error);
             alert("Failed to generate design. (If first run, check DB schema)");
@@ -452,6 +453,26 @@ function DesignStudioContent() {
 
                             {/* Grid Content */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                                {/* Skeleton Loading Card */}
+                                {isGenerating && (
+                                    <div className="group flex flex-col bg-white rounded-2xl border border-rose-200 shadow-xl overflow-hidden animate-pulse">
+                                        <div className="aspect-[4/3] bg-rose-50 relative flex items-center justify-center">
+                                            <div className="flex flex-col items-center gap-3">
+                                                <div className="w-12 h-12 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin"></div>
+                                                <div className="text-sm font-bold text-rose-500 uppercase tracking-wider animate-pulse">Developing Photo...</div>
+                                            </div>
+                                        </div>
+                                        <div className="p-5 flex flex-col gap-3">
+                                            <div className="h-4 bg-slate-100 rounded w-3/4"></div>
+                                            <div className="h-3 bg-slate-100 rounded w-1/2"></div>
+                                            <div className="w-full h-px bg-slate-50 my-2"></div>
+                                            <div className="flex justify-between">
+                                                <div className="h-3 bg-slate-100 rounded w-1/4"></div>
+                                                <div className="h-3 bg-slate-100 rounded w-1/4"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 {filteredDesigns.length > 0 ? (
                                     filteredDesigns.map((asset) => (
                                         <div key={asset.id} className="group flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden">
