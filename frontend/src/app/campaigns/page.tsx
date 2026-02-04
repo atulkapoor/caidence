@@ -123,7 +123,7 @@ function CampaignContent() {
                         </div>
                         <div className="flex gap-3">
                             <button
-                                onClick={() => setIsCreateModalOpen(true)}
+                                onClick={() => setActiveTab("Create Campaign")}
                                 className="px-4 py-2 bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2"
                             >
                                 <Plus className="w-4 h-4" />
@@ -233,7 +233,7 @@ function CampaignContent() {
                                         <h3 className="text-lg font-semibold text-slate-900">No Campaigns Yet</h3>
                                         <p className="text-slate-500 text-sm mt-1 mb-6">Create your first campaign to get started.</p>
                                         <button
-                                            onClick={() => setIsCreateModalOpen(true)}
+                                            onClick={() => setActiveTab("Create Campaign")}
                                             className="px-4 py-2 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 transition-colors shadow-sm"
                                         >
                                             Create Campaign
