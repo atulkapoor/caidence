@@ -4,7 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.models import models
-from app.models.models import Campaign, CampaignEvent, Influencer, CampaignInfluencer
+from app.models.models import Campaign, CampaignEvent, Influencer, CampaignInfluencer, User
+from app.api.deps import get_current_active_user, require_permission
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -21,15 +22,24 @@ class CampaignUpdate(schemas.CampaignBase):
 # --- Endpoints ---
 
 @router.get("/", response_model=List[schemas.Campaign])
-async def read_campaigns(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+async def read_campaigns(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("read", "campaign"))
+):
     result = await db.execute(select(Campaign).order_by(Campaign.created_at.desc()).offset(skip).limit(limit))
     campaigns = result.scalars().all()
     return campaigns
 
 @router.post("/", response_model=schemas.Campaign)
-async def create_campaign(campaign: schemas.CampaignCreate, db: AsyncSession = Depends(get_db)):
-    # Hardcode owner_id=1 for now (Demo User)
-    db_campaign = Campaign(**campaign.dict(), owner_id=1) 
+async def create_campaign(
+    campaign: schemas.CampaignCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("write", "campaign"))
+):
+    # Use authenticated user's ID instead of hardcoded value
+    db_campaign = Campaign(**campaign.dict(), owner_id=current_user.id) 
     db.add(db_campaign)
     await db.commit()
     await db.refresh(db_campaign)

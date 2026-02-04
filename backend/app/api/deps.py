@@ -2,8 +2,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from typing import List, Callable
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.models import User
 from app.services.auth_service import decode_access_token
 
@@ -15,7 +17,8 @@ async def get_current_user(
 ) -> User:
     """
     Extract and validate user from JWT token.
-    DEV MODE: Returns mock super_admin if no token / valid token found.
+    In PRODUCTION: Requires valid token, no fallback.
+    In DEVELOPMENT: Falls back to mock super_admin for easier testing.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -23,8 +26,10 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # Function to return mock user
+    # Function to return mock user (development only)
     def get_mock_user():
+        if settings.is_production:
+            raise credentials_exception
         print("DEBUG: Using MOCK SUPER ADMIN user for Dev Mode")
         return User(
             id=1,
@@ -43,7 +48,7 @@ async def get_current_user(
     try:
         token_data = decode_access_token(token)
         if token_data is None:
-            return get_mock_user() # Fallback instead of raising
+            return get_mock_user()
         
         # Check if user actually exists in DB
         result = await db.execute(select(User).where(User.id == token_data.user_id))
@@ -65,3 +70,68 @@ async def get_current_active_user(
     if not current_user.is_approved:
         raise HTTPException(status_code=403, detail="Account pending approval")
     return current_user
+
+# --- RBAC Permission Checks ---
+
+def require_role(*allowed_roles: str) -> Callable:
+    """
+    Dependency factory that checks if user has one of the allowed roles.
+    Usage: Depends(require_role("admin", "super_admin"))
+    """
+    async def check_role(current_user: User = Depends(get_current_active_user)) -> User:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Required roles: {', '.join(allowed_roles)}"
+            )
+        return current_user
+    return check_role
+
+def require_permission(action: str, resource: str = None) -> Callable:
+    """
+    Dependency factory that checks if user has permission for an action.
+    Usage: Depends(require_permission("campaign:write"))
+    
+    Permission format: "resource:action" (e.g., "campaign:read", "content:write")
+    
+    Default permissions by role:
+    - super_admin: all permissions
+    - admin: all permissions for their organization
+    - manager: read/write for campaigns, content, analytics
+    - editor: read/write for content only
+    - viewer: read-only for all
+    """
+    async def check_permission(current_user: User = Depends(get_current_active_user)) -> User:
+        # Super admin bypasses all checks
+        if current_user.role == "super_admin":
+            return current_user
+        
+        # Define role-based permissions
+        role_permissions = {
+            "admin": {"campaign:read", "campaign:write", "content:read", "content:write", 
+                     "analytics:read", "discovery:read", "discovery:write", "crm:read", "crm:write"},
+            "manager": {"campaign:read", "campaign:write", "content:read", "content:write", 
+                       "analytics:read", "discovery:read"},
+            "editor": {"content:read", "content:write", "discovery:read"},
+            "viewer": {"campaign:read", "content:read", "analytics:read", "discovery:read"}
+        }
+        
+        user_permissions = role_permissions.get(current_user.role, set())
+        
+        # Check permission
+        permission_key = f"{resource}:{action}" if resource else action
+        if permission_key not in user_permissions:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied for {permission_key}"
+            )
+        
+        return current_user
+    return check_permission
+
+# Convenience dependencies for common permission checks
+require_admin = require_role("admin", "super_admin")
+require_manager = require_role("manager", "admin", "super_admin")
+require_campaign_write = require_permission("write", "campaign")
+require_content_write = require_permission("write", "content")
+

@@ -25,10 +25,13 @@ app = FastAPI(
 )
 
 # Set all CORS enabled origins
-print(f"DEBUG: Allowed Origins: {settings.allowed_origins_list}")
+# In production, use explicit origins from settings
+# In development, allow_origins_list defaults to localhost:3000
+cors_origins = settings.allowed_origins_list if settings.is_production else ["*"]
+print(f"DEBUG: Environment: {settings.ENVIRONMENT}, CORS Origins: {cors_origins}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=cors_origins if settings.is_production else ["*"],  # Restrictive in prod, permissive in dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

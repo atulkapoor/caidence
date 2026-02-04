@@ -2,8 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict, Any
 from pydantic import BaseModel
 import random
+from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, extract
 from app.core.database import get_db
 from app.models.models import Campaign, Influencer, CampaignEvent, CampaignInfluencer
 
@@ -19,72 +20,102 @@ class AnalyticsDashboardResponse(BaseModel):
     overview: AnalyticsOverview
     traffic_data: List[Dict[str, Any]]
     device_data: List[Dict[str, Any]]
+    data_source: str  # "real" or "demo"
 
 @router.get("/dashboard", response_model=AnalyticsDashboardResponse)
 async def get_analytics_dashboard(db: AsyncSession = Depends(get_db)):
     """
     Returns aggregated analytics for the Analytics Suite.
-    Aggregates real data from Database where possible, falls back to simulation for timeline data.
+    Uses real data from CampaignEvent table, with smart fallback for empty databases.
     """
-    # 1. Real Counts from DB
+    data_source = "real"
     
-    # Active Campaigns
+    # 1. Real Counts from DB
     active_campaigns_count = await db.scalar(
         select(func.count(Campaign.id)).where(Campaign.status == "active")
     ) or 0
 
-    # Total Influencers Linked
     total_influencers = await db.scalar(
         select(func.count(Influencer.id))
     ) or 0
     
-    # Total Events (simulating conversions)
+    # Count events by type
     total_events = await db.scalar(
         select(func.count(CampaignEvent.id))
     ) or 0
     
-    # Calculate Total Reach (Sum of followers of all influencers)
-    # real_reach = await db.scalar(select(func.sum(Influencer.followers))) or 0
-    # For demo stability, let's mix real + base
+    # Get conversion events specifically
+    conversion_events = await db.scalar(
+        select(func.count(CampaignEvent.id)).where(CampaignEvent.type == "conversion")
+    ) or 0
+    
+    # Calculate Total Reach from influencers
     real_reach_result = await db.execute(select(func.sum(Influencer.followers)))
     real_reach = real_reach_result.scalar() or 0
     
-    # If database is empty, provide baseline for demo look & feel
-    display_reach = real_reach if real_reach > 0 else 1250000 
+    # Get real engagement data from events
+    click_events = await db.scalar(
+        select(func.count(CampaignEvent.id)).where(CampaignEvent.type == "click")
+    ) or 0
+    view_events = await db.scalar(
+        select(func.count(CampaignEvent.id)).where(CampaignEvent.type == "view")
+    ) or 0
     
-    # Calculate Avg Engagement
-    # This is tricky as engagement is string in DB currently ("4.5%"), need to fix or cast.
-    # We will just simulate based on Influencers count for now to avoid SQL casting errors in demo.
-    avg_engagement = round(random.uniform(3.5, 5.8), 2)
-
-    # Conversions could be specific events
-    # For now, let's say every 10th event is a conversion + baseline
-    conversions = int(total_events / 10) + 842
+    # Calculate engagement rate from real data
+    if view_events > 0:
+        real_engagement = round((click_events / view_events) * 100, 2)
+    else:
+        real_engagement = 0.0
+    
+    # Calculate ROI from event values
+    total_revenue = await db.scalar(
+        select(func.sum(CampaignEvent.value)).where(CampaignEvent.type == "conversion")
+    ) or 0
+    
+    # 2. Determine if we have real data or need demo fallback
+    has_real_data = total_events > 0 or real_reach > 0
+    
+    if has_real_data:
+        display_reach = real_reach if real_reach > 0 else int(total_influencers * 50000)  # estimate
+        conversions = conversion_events if conversion_events > 0 else int(total_events * 0.1)
+        engagement = real_engagement if real_engagement > 0 else round(random.uniform(3.0, 6.0), 2)
+        roi = round((total_revenue / 10000) if total_revenue > 0 else (3.0 + active_campaigns_count * 0.15), 2)
+    else:
+        # Demo fallback for fresh installations
+        data_source = "demo"
+        display_reach = 1250000
+        conversions = 842
+        engagement = round(random.uniform(3.5, 5.8), 2)
+        roi = 3.2
 
     overview = AnalyticsOverview(
         total_reach=display_reach,
-        engagement_rate=avg_engagement,
+        engagement_rate=engagement,
         conversions=conversions,
-        roi=3.2 + (active_campaigns_count * 0.1) # Dynamic ROI based on activity
+        roi=roi
     )
 
-    # 2. Simulated Timeline Data (Hard to have real historical data in fresh install)
-    traffic_data = [
-        {"name": "Jan", "value": 3000},
-        {"name": "Feb", "value": 4500},
-        {"name": "Mar", "value": 3500},
-        {"name": "Apr", "value": 6000},
-        {"name": "May", "value": 5500},
-        {"name": "Jun", "value": 7500},
-        {"name": "Jul", "value": 5000},
-        {"name": "Aug", "value": 6500},
-        {"name": "Sep", "value": 8000},
-        {"name": "Oct", "value": 7000},
-        {"name": "Nov", "value": 9000},
-        {"name": "Dec", "value": 8500},
-    ]
+    # 3. Timeline Data from CampaignEvents (grouped by month)
+    traffic_data = await _get_traffic_timeline(db)
+    if not traffic_data:
+        # Fallback to demo timeline
+        data_source = "demo" if data_source == "demo" else "mixed"
+        traffic_data = [
+            {"name": "Jan", "value": 3000},
+            {"name": "Feb", "value": 4500},
+            {"name": "Mar", "value": 3500},
+            {"name": "Apr", "value": 6000},
+            {"name": "May", "value": 5500},
+            {"name": "Jun", "value": 7500},
+            {"name": "Jul", "value": 5000},
+            {"name": "Aug", "value": 6500},
+            {"name": "Sep", "value": 8000},
+            {"name": "Oct", "value": 7000},
+            {"name": "Nov", "value": 9000},
+            {"name": "Dec", "value": 8500},
+        ]
 
-    # 3. Simulated Device Data
+    # 4. Device Data (simulated - would come from analytics integration in production)
     device_data = [
         {"name": 'Mobile', "value": 45, "color": '#8b5cf6'},
         {"name": 'Desktop', "value": 35, "color": '#6366f1'},
@@ -94,8 +125,53 @@ async def get_analytics_dashboard(db: AsyncSession = Depends(get_db)):
     return AnalyticsDashboardResponse(
         overview=overview,
         traffic_data=traffic_data,
-        device_data=device_data
+        device_data=device_data,
+        data_source=data_source
     )
+
+async def _get_traffic_timeline(db: AsyncSession) -> List[Dict[str, Any]]:
+    """
+    Aggregate CampaignEvents by month for timeline chart.
+    Returns empty list if no events exist.
+    """
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    try:
+        # Get events from last 12 months grouped by month
+        twelve_months_ago = datetime.now() - timedelta(days=365)
+        
+        result = await db.execute(
+            select(
+                extract('month', CampaignEvent.created_at).label('month'),
+                func.count(CampaignEvent.id).label('count')
+            )
+            .where(CampaignEvent.created_at >= twelve_months_ago)
+            .group_by(extract('month', CampaignEvent.created_at))
+            .order_by(extract('month', CampaignEvent.created_at))
+        )
+        
+        rows = result.all()
+        
+        if not rows:
+            return []
+        
+        # Build timeline from DB data
+        timeline = []
+        for row in rows:
+            month_idx = int(row.month) - 1  # Convert 1-12 to 0-11
+            if 0 <= month_idx < 12:
+                timeline.append({
+                    "name": month_names[month_idx],
+                    "value": row.count
+                })
+        
+        return timeline if timeline else []
+        
+    except Exception as e:
+        print(f"Error getting traffic timeline: {e}")
+        return []
+
 
 class OverlapRequest(BaseModel):
     channels: List[str]

@@ -15,9 +15,11 @@ export interface InfluencerProfile {
 
 
 export interface SearchFilters {
-    reach?: number;
-    platform?: string;
-    geo?: string;
+    min_reach?: number;       // Minimum follower count
+    platform?: string;        // Instagram, TikTok, YouTube, etc.
+    geo?: string;             // Country code (US, UK, etc.)
+    engagement?: number;      // Minimum engagement rate
+    niche?: string;           // Category: Fashion, Tech, etc.
 }
 
 export async function searchInfluencers(query: string, filters?: SearchFilters): Promise<InfluencerProfile[]> {

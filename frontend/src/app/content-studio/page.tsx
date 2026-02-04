@@ -4,6 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import { generateContent, fetchContentGenerations, ContentGeneration } from "@/lib/api";
+import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 
@@ -13,7 +14,8 @@ import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
 function ContentStudioContent() {
     // Form State
     const [title, setTitle] = useState("");
-    const [campaign, setCampaign] = useState("");
+    const [campaignId, setCampaignId] = useState<number | null>(null);
+    const [availableCampaigns, setAvailableCampaigns] = useState<Campaign[]>([]);
     const [contentType, setContentType] = useState("Blog Post");
     const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["LinkedIn"]);
     const [keywords, setKeywords] = useState("");
@@ -43,12 +45,12 @@ function ContentStudioContent() {
 
     const contentTypes = ["Post", "Article", "Thread", "Caption", "Newsletter", "Ad Copy"];
     const experts = ["General Marketing", "SEO Specialist", "Copywriter", "Technical Writer", "Creative Storyteller", "Viral Tweeter"];
-    const campaigns = ["Q4 Brand Awareness", "Product Launch v2", "Weekly Newsletter", "Holiday Special"];
 
 
-    // Load history on mount
+    // Load history and campaigns on mount
     useEffect(() => {
         loadHistory();
+        loadCampaigns();
 
         // Check for edit mode
         const params = new URLSearchParams(window.location.search);
@@ -84,6 +86,15 @@ function ContentStudioContent() {
             setRecentCreations(data);
         } catch (error) {
             console.error("Failed to load history", error);
+        }
+    };
+
+    const loadCampaigns = async () => {
+        try {
+            const data = await fetchCampaigns();
+            setAvailableCampaigns(data);
+        } catch (error) {
+            console.error("Failed to load campaigns", error);
         }
     };
 
@@ -132,9 +143,10 @@ function ContentStudioContent() {
         try {
             for (const platform of selectedPlatforms) {
                 // Construct customized prompt for each platform
+                const selectedCampaign = availableCampaigns.find(c => c.id === campaignId);
                 const richPrompt = `
 Context: Creating ${contentType} for ${platform}.
-Campaign: ${campaign || "None"}
+Campaign: ${selectedCampaign?.title || "None"}
 Keywords: ${keywords || "None"}
 Writing Style: ${writingExpert}
 Web Search: ${webSearch ? "Enabled" : "Disabled"}
@@ -392,7 +404,16 @@ ${prompt}
                                             <input type="text" value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="Keywords (e.g. AI, automation)..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-violet-500 outline-none" />
 
                                             <div className="grid grid-cols-2 gap-4">
-                                                <select value={campaign} onChange={(e) => setCampaign(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium"><option value="">No Campaign</option>{campaigns.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                                                <select
+                                                    value={campaignId || ""}
+                                                    onChange={(e) => setCampaignId(e.target.value ? Number(e.target.value) : null)}
+                                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium"
+                                                >
+                                                    <option value="">No Campaign</option>
+                                                    {availableCampaigns.map(c => (
+                                                        <option key={c.id} value={c.id}>{c.title}</option>
+                                                    ))}
+                                                </select>
                                                 <select value={writingExpert} onChange={(e) => setWritingExpert(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium"><option value="General Marketing">General Marketing</option>{experts.map(e => <option key={e} value={e}>{e}</option>)}</select>
                                             </div>
 
