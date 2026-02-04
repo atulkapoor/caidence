@@ -126,19 +126,20 @@ function CreatorsContent() {
     }
 
     const filteredCreators = creators.filter(c => {
-        const matchesTab = activeTab === "all" || c.status === activeTab;
-        const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.handle.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesTab = activeTab === "all" || (c.status || "active") === activeTab;
+        const matchesSearch = (c.name || "").toLowerCase().includes(searchQuery.toLowerCase()) || (c.handle || "").toLowerCase().includes(searchQuery.toLowerCase());
         return matchesTab && matchesSearch;
     });
 
     const formatFollowers = (count: number) => {
+        if (!count) return "0";
         if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
         if (count >= 1000) return `${(count / 1000).toFixed(0)}K`;
         return count.toString();
     };
 
     const getPlatformIcon = (platform: string) => {
-        switch (platform.toLowerCase()) {
+        switch (platform?.toLowerCase() || "") {
             case "instagram": return <Instagram className="w-4 h-4" />;
             case "youtube": return <Youtube className="w-4 h-4" />;
             default: return <Users className="w-4 h-4" />;
@@ -146,7 +147,7 @@ function CreatorsContent() {
     };
 
     const getTierColor = (tier: string) => {
-        switch (tier.toLowerCase()) {
+        switch (tier?.toLowerCase() || "") {
             case "mega": return "bg-purple-100 text-purple-700";
             case "macro": return "bg-blue-100 text-blue-700";
             case "micro": return "bg-emerald-100 text-emerald-700";
@@ -276,7 +277,7 @@ function CreatorsContent() {
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                                                {creator.name.charAt(0)}
+                                                {(creator.name || "?").charAt(0)}
                                             </div>
                                             <div>
                                                 <div className="font-bold text-slate-900">{creator.name}</div>
