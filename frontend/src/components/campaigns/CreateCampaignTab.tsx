@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sparkles, Plus, Target, Calendar as CalendarIcon, DollarSign, X, Bell, Mail, MessageSquare, Phone } from "lucide-react";
 import { sendTestEmail, sendTestSMS, sendTestWhatsApp, createCampaign, launchCampaign, enhanceDescription, addInfluencerToCampaign, CampaignDraft } from "@/lib/api";
 import { AudienceOverlapStub } from "@/components/analytics/AudienceOverlapStub";
@@ -6,12 +6,42 @@ import { StrategyComparator } from "@/components/campaigns/StrategyComparator";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-export function CreateCampaignTab() {
+export function CreateCampaignTab({ editId }: { editId?: number | null }) {
     const [name, setName] = useState("");
     const [budget, setBudget] = useState("");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [description, setDescription] = useState("");
+
+    // Edit Mode Loading
+    useEffect(() => {
+        if (editId) {
+            const loadCampaign = async () => {
+                try {
+                    const { readCampaign } = await import("@/lib/api");
+                    // @ts-ignore
+                    const campaign = await readCampaign(editId);
+                    if (campaign) {
+                        setName(campaign.title);
+                        setDescription(campaign.description || "");
+                        setBudget(campaign.budget?.replace(/[^0-9]/g, '') || "");
+                        setStartDate(campaign.start_date ? new Date(campaign.start_date).toISOString().split('T')[0] : "");
+                        setEndDate(campaign.end_date ? new Date(campaign.end_date).toISOString().split('T')[0] : "");
+
+                        // Parse JSON fields if they are strings
+                        try {
+                            const channels = typeof campaign.channels === 'string' ? JSON.parse(campaign.channels) : campaign.channels;
+                            if (Array.isArray(channels)) setSelectedChannels(channels);
+                        } catch (e) { }
+                    }
+                } catch (error) {
+                    console.error("Failed to load campaign for edit", error);
+                    toast.error("Failed to load campaign details");
+                }
+            };
+            loadCampaign();
+        }
+    }, [editId]);
 
     // Detailed Targeting
     const [audience, setAudience] = useState("");
@@ -202,9 +232,10 @@ export function CreateCampaignTab() {
             // Trigger Launch Event
             await launchCampaign(newCampaign.id);
 
+
             toast.success("Campaign launched successfully!");
-            // Navigate to campaigns list with refresh
-            router.push("/campaigns");
+            // Navigate to campaigns list with refresh and explicit tab
+            router.push("/campaigns?tab=Campaign+List");
             router.refresh();
         } catch (err) {
             toast.error("Failed to launch campaign");

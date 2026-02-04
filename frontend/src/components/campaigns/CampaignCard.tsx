@@ -10,10 +10,13 @@ interface CampaignCardProps {
     budget: string;
     spent: string;
     channels: string[];
-    id?: string;
+    id?: string | number;
+    onDelete?: () => void;
+    onDuplicate?: () => void;
+    onArchive?: () => void;
 }
 
-export function CampaignCard({ title, description, status, progress, budget, spent, channels, id = "CAM-101" }: CampaignCardProps) {
+export function CampaignCard({ title, description, status, progress, budget, spent, channels, id = "CAM-101", onDelete, onDuplicate, onArchive }: CampaignCardProps) {
     const statusColors = {
         active: "bg-emerald-100 text-emerald-700",
         paused: "bg-amber-100 text-amber-700",
@@ -22,16 +25,19 @@ export function CampaignCard({ title, description, status, progress, budget, spe
     };
 
     const handleDuplicate = () => {
-        toast.success(`Campaign "${title}" duplicated!`, { description: "A copy has been created as a draft." });
+        if (onDuplicate) onDuplicate();
+        else toast.info("Duplication not implemented yet.");
     };
 
     const handleArchive = () => {
-        toast.success(`Campaign "${title}" archived.`, { description: "You can restore it from the archive." });
+        if (onArchive) onArchive();
+        else toast.info("Archiving not implemented yet.");
     };
 
     const handleDelete = () => {
         if (confirm(`Are you sure you want to delete "${title}"? This action cannot be undone.`)) {
-            toast.success(`Campaign "${title}" deleted.`);
+            if (onDelete) onDelete();
+            else toast.success(`Campaign "${title}" deleted.`);
         }
     };
 

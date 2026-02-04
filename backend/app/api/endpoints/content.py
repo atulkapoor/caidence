@@ -46,3 +46,14 @@ async def generate_content(request: schemas.ContentGenerationCreate, db: AsyncSe
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{content_id}")
+async def delete_content_generation(content_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.ContentGeneration).filter(models.ContentGeneration.id == content_id))
+    content = result.scalar_one_or_none()
+    if content is None:
+        raise HTTPException(status_code=404, detail="Content generation not found")
+    
+    await db.delete(content)
+    await db.commit()
+    return {"message": "Content deleted successfully"}

@@ -58,7 +58,7 @@ async def get_design_asset(asset_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/generate", response_model=schemas.DesignAsset)
 async def generate_design(request: schemas.DesignAssetCreate, db: AsyncSession = Depends(get_db)):
     # 1. Generate Image URL via Service (returns Base64)
-    image_url = await AIService.generate_image(request.style, request.prompt)
+    image_url = await AIService.generate_image(request.style, request.prompt, request.aspect_ratio)
     
     # 2. Save to DB
     db_asset = models.DesignAsset(

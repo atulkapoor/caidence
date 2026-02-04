@@ -238,7 +238,11 @@ async def invite_team_member(
     """
     Invite a new team member by creating their account directly.
     """
-    # Check if email exists
+    from app.services.email_service import send_invite_email
+
+    # Handle organization_id=0 from frontend
+    if invite_data.organization_id == 0:
+        invite_data.organization_id = None
     result = await db.execute(select(User).where(User.email == invite_data.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -255,6 +259,14 @@ async def invite_team_member(
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
+    await db.refresh(new_user)
+    
+    # Send email
+    try:
+        await send_invite_email(new_user.email, invite_data.password)
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
     return new_user
 
 

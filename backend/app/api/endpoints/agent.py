@@ -5,11 +5,15 @@ from app.services.ai_service import AIService
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
-from app.models.models import User
+from app.models.models import User, Project
+from app.schemas.schemas import Project as ProjectSchema
+from app.api import deps
 import json
 import random
 
 router = APIRouter()
+
+# --- Schemas ---
 
 class AgentInput(BaseModel):
     goal: str
@@ -28,14 +32,28 @@ class CampaignDraft(BaseModel):
 class EnhanceInput(BaseModel):
     text: str
 
+class StrategyInput(BaseModel):
+    role: str
+    project_type: str
+    objective: str
+    assets: List[str] = []
+
+class StrategyResponse(BaseModel):
+    project_id: int
+    strategy: dict # JSON object
+
+# --- Endpoints ---
+
 @router.post("/enhance_description")
 async def enhance_description(input: EnhanceInput):
     prompt = f"Rewrite the following campaign description to be more engaging, professional, and persuasive, but keep it concise: '{input.text}'"
     try:
-        response = await AIService._call_ollama(prompt)
+        # Use _call_llm instead of non-existent _call_ollama
+        response = await AIService._call_llm(prompt)
         enhanced = response.strip().strip('"').strip("'")
         return {"enhanced_text": enhanced}
-    except Exception:
+    except Exception as e:
+        print(f"Enhance Error: {e}")
         # Fallback if AI fails
         return {"enhanced_text": input.text + " (Enhanced)"}
 
@@ -83,14 +101,15 @@ async def draft_campaign(input: AgentInput, db: AsyncSession = Depends(get_db)):
     )
 
     try:
-        # PLAN A
-        response_text = await AIService._call_ollama(prompt, json_mode=True)
+        # PLAN A - Use _call_llm
+        response_text = await AIService._call_llm(prompt, json_mode=True)
         response_text = response_text.replace("```json", "").replace("```", "").strip()
         data = json.loads(response_text)
         
         # PLAN B (Simulated Aggressive Alternative)
         # In a real system, we'd prompt for a "Contrarian Strategy"
-        budget_int = int(''.join(filter(str.isdigit, str(data.get("budget", "5000")))))
+        budget_digit = ''.join(filter(str.isdigit, str(data.get("budget", "5000"))))
+        budget_int = int(budget_digit) if budget_digit else 5000
         alt_budget = str(int(budget_int * 1.5))
         
         alt_channels = data.get("channels", [])[:1] + ["TikTok", "Influencers", "Guerrilla Marketing"]
@@ -131,33 +150,13 @@ async def draft_campaign(input: AgentInput, db: AsyncSession = Depends(get_db)):
             agent_logs=[]
         )
         plan_a.alternative_draft = plan_b
-        plan_a.alternative_draft = plan_b
         return plan_a
-
-# --- Phase 12: Real AI Agent Workflow ---
-
-from app.models.models import Project
-from app.schemas.schemas import Project as ProjectSchema
-from sqlalchemy.orm import Session
-from fastapi import Depends
-from app.api import deps
-import json
-
-class StrategyInput(BaseModel):
-    role: str
-    project_type: str
-    objective: str
-    assets: List[str] = []
-
-class StrategyResponse(BaseModel):
-    project_id: int
-    strategy: dict # JSON object
 
 @router.post("/generate", response_model=StrategyResponse)
 async def generate_strategy(
     input: StrategyInput,
-    db: AsyncSession = Depends(deps.get_db),
-    current_user = Depends(deps.get_current_active_user)
+    db: AsyncSession = Depends(deps.get_db), 
+    current_user: User = Depends(deps.get_current_active_user)
 ):
     """
     Generates a full marketing strategy using Ollama and saves it as a new Project.

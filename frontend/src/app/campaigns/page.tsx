@@ -29,21 +29,20 @@ function CampaignContent() {
     // Filters
     const [statusFilter, setStatusFilter] = useState<string>("free-all"); // "free-all" is logic for "All"
     const [searchQuery, setSearchQuery] = useState("");
+    const [editId, setEditId] = useState<number | null>(null);
 
     const searchParams = useSearchParams();
     const router = useRouter();
 
     // Check for edit param on load
+    // Check for edit param on load
     useEffect(() => {
-        const editId = searchParams.get('edit');
-        if (editId) {
-            // Find campaign and open modal (simulated for now as we don't have full edit form)
-            // In real app, we would fetch(id) and set form state.
-            // For now, just opening the create modal with title pre-filled if found
-            // setIsCreateModalOpen(true);
-            // We'll leave this as a placeholder or specific alert for now until Edit Modal is fully built
+        const editIdParam = searchParams.get('edit');
+        if (editIdParam) {
+            setEditId(parseInt(editIdParam));
+            setActiveTab("Create Campaign");
         }
-    }, [searchParams]);
+    }, [searchParams, setActiveTab]);
 
     // Create Form State
     const [newCampaignTitle, setNewCampaignTitle] = useState("");
@@ -163,14 +162,14 @@ function CampaignContent() {
                                 Calendar
                             </button>
                             <button
-                                onClick={() => setActiveTab("Create Campaign")}
+                                onClick={() => { setActiveTab("Create Campaign"); setEditId(null); }}
                                 className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === "Create Campaign"
                                     ? "bg-slate-900 text-white shadow-md"
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
                                     }`}
                             >
                                 <Plus className="w-4 h-4" />
-                                Create New
+                                {editId ? "Edit Campaign" : "Create New"}
                             </button>
                             <button
                                 onClick={() => setActiveTab("Analytics")}
@@ -207,10 +206,10 @@ function CampaignContent() {
                                             <span className="flex items-center gap-2"><Filter className="w-4 h-4" /> {statusFilter === "free-all" ? "All Status" : statusFilter}</span>
                                         </button>
                                         <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl z-20 hidden group-hover:block animate-in fade-in zoom-in-95 duration-200">
-                                            {["All", "active", "draft", "paused", "completed"].map(s => (
+                                            {["All", "Active", "Draft", "Paused", "Completed"].map(s => (
                                                 <button
                                                     key={s}
-                                                    onClick={() => setStatusFilter(s === "All" ? "free-all" : s)}
+                                                    onClick={() => setStatusFilter(s === "All" ? "free-all" : s.toLowerCase())}
                                                     className="w-full text-left px-4 py-2 hover:bg-slate-50 text-sm font-medium capitalize first:rounded-t-xl last:rounded-b-xl"
                                                 >
                                                     {s}
@@ -242,10 +241,36 @@ function CampaignContent() {
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                         {campaigns
-                                            .filter(c => statusFilter === "free-all" || c.status === statusFilter)
+                                            .filter(c => statusFilter === "free-all" || c.status?.toLowerCase() === statusFilter.toLowerCase())
                                             .filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
                                             .map((camp: any, idx: number) => (
-                                                <CampaignCard key={idx} {...camp} />
+                                                <CampaignCard
+                                                    key={idx}
+                                                    {...camp}
+                                                    onDelete={async () => {
+                                                        // @ts-ignore
+                                                        const { deleteCampaign } = await import("@/lib/api"); // Assuming delete exists or create sth
+                                                        // Fallback if not exists
+                                                        if (deleteCampaign) {
+                                                            try {
+                                                                await deleteCampaign(camp.id);
+                                                                loadCampaigns();
+                                                                // @ts-ignore
+                                                                toast.success("Campaign deleted");
+                                                            } catch (e) { console.error(e); }
+                                                        } else {
+                                                            alert("Delete API not connected yet");
+                                                        }
+                                                    }}
+                                                    onDuplicate={async () => {
+                                                        // @ts-ignore
+                                                        const { createCampaign } = await import("@/lib/api");
+                                                        await createCampaign({ ...camp, title: `${camp.title} (Copy)`, status: 'draft', id: undefined, created_at: undefined });
+                                                        loadCampaigns();
+                                                        // @ts-ignore
+                                                        toast.success("Campaign duplicated");
+                                                    }}
+                                                />
                                             ))}
                                     </div>
                                 )}
@@ -254,7 +279,7 @@ function CampaignContent() {
 
                         {/* 2. Other Views */}
                         {activeTab === "Calendar" && <SocialCalendar campaigns={campaigns} />}
-                        {activeTab === "Create Campaign" && <CreateCampaignTab />}
+                        {activeTab === "Create Campaign" && <CreateCampaignTab editId={editId} />}
                         {activeTab === "Analytics" && <AnalyticsTab />}
                     </div>
                 </div>

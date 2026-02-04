@@ -304,34 +304,44 @@ function DesignStudioContent() {
                                     <div className="grid grid-cols-2 gap-6">
                                         <div className="space-y-2">
                                             <label className="text-xs font-bold text-slate-500 uppercase">Brand Colors (Optional)</label>
-                                            <input
-                                                type="text"
-                                                value={brandColors}
-                                                onChange={(e) => setBrandColors(e.target.value)}
-                                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all placeholder:font-normal"
-                                                placeholder="e.g. #FF0000, Navy Blue"
-                                            />
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="color"
+                                                    value={brandColors || "#000000"}
+                                                    onChange={(e) => setBrandColors(e.target.value)}
+                                                    className="w-12 h-12 p-1 bg-white border border-slate-200 rounded-lg cursor-pointer"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={brandColors}
+                                                    onChange={(e) => setBrandColors(e.target.value)}
+                                                    className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all placeholder:font-normal"
+                                                    placeholder="Hex Code (e.g. #FF0000)"
+                                                />
+                                            </div>
                                         </div>
                                         {/* Reference Image Placeholder */}
                                         <div className="space-y-2">
                                             <label className="text-xs font-bold text-slate-500 uppercase">Reference Image</label>
-                                            <div className="relative">
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    onChange={(e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (file) {
-                                                            const reader = new FileReader();
-                                                            reader.onloadend = () => {
-                                                                setReferenceImage(reader.result as string);
-                                                            };
-                                                            reader.readAsDataURL(file);
-                                                        }
-                                                    }}
-                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                                                    id="reference-image-upload"
-                                                />
+                                            <div className="relative h-[50px]">
+                                                {!referenceImage && (
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) {
+                                                                const reader = new FileReader();
+                                                                reader.onloadend = () => {
+                                                                    setReferenceImage(reader.result as string);
+                                                                };
+                                                                reader.readAsDataURL(file);
+                                                            }
+                                                        }}
+                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                                        id="reference-image-upload"
+                                                    />
+                                                )}
                                                 <div className={`w-full p-3 border-2 border-dashed rounded-xl text-sm font-medium flex items-center justify-center transition-colors h-[50px] ${referenceImage ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
                                                     {referenceImage ? (
                                                         <div className="flex items-center gap-2">

@@ -127,6 +127,13 @@ class DiscoveryService:
                 stmt = stmt.where(Creator.follower_count >= filters.min_reach)
             if filters.platform:
                 stmt = stmt.where(Creator.platform.ilike(f"%{filters.platform}%"))
+            if filters.engagement:
+                stmt = stmt.where(Creator.engagement_rate >= filters.engagement)
+            if filters.niche:
+                stmt = stmt.where(or_(
+                    Creator.category.ilike(f"%{filters.niche}%"),
+                    Creator.bio.ilike(f"%{filters.niche}%")
+                ))
         
         stmt = stmt.limit(10)
         

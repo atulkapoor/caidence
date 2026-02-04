@@ -4,19 +4,8 @@ import { useState, useEffect, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Users, Plus, Search, Filter, MoreHorizontal, Link2, FileText, Instagram, Youtube } from "lucide-react";
-
-interface Creator {
-    id: number;
-    handle: string;
-    platform: string;
-    name: string;
-    category: string;
-    tier: string;
-    follower_count: number;
-    engagement_rate: number;
-    status: string;
-    affiliate_code?: string;
-}
+import { fetchCreators, addCreator, deleteCreator, generateAffiliateCode, Creator } from "@/lib/api";
+import { toast } from "sonner";
 
 function CreatorsContent() {
     const [creators, setCreators] = useState<Creator[]>([]);
@@ -35,16 +24,13 @@ function CreatorsContent() {
     const loadData = async () => {
         setLoading(true);
         try {
-            // Dynamically import to avoid build errors if file doesn't exist yet (though we just created it)
-            // @ts-ignore
-            const { fetchCreators } = await import("@/lib/api/creators");
             const data = await fetchCreators();
             setCreators(data);
         } catch (err) {
-            console.error(err);
+            console.error("API Fetch Error", err);
             // Fallback to mock data if API fails (for demo purposes)
             setCreators([
-                { id: 1, handle: "@emma_styles", platform: "Instagram", name: "Emma Johnson", category: "Fashion", tier: "Macro", follower_count: 850000, engagement_rate: 4.2, status: "active", affiliate_code: "EMMA2026" },
+                { id: 1, handle: "@emma_styles", platform: "Instagram", name: "Emma Johnson (Mock)", category: "Fashion", tier: "Macro", follower_count: 850000, engagement_rate: 4.2, status: "active", affiliate_code: "EMMA2026" },
                 { id: 2, handle: "@techguru_mike", platform: "YouTube", name: "Mike Chen", category: "Technology", tier: "Mega", follower_count: 2500000, engagement_rate: 3.8, status: "active", affiliate_code: "TECHGURU" },
                 { id: 3, handle: "@fitlife_sarah", platform: "TikTok", name: "Sarah Williams", category: "Fitness", tier: "Micro", follower_count: 95000, engagement_rate: 7.1, status: "vetted" },
                 { id: 4, handle: "@foodie_alex", platform: "Instagram", name: "Alex Rivera", category: "Food", tier: "Macro", follower_count: 620000, engagement_rate: 5.5, status: "active", affiliate_code: "FOODIE" },
@@ -59,27 +45,15 @@ function CreatorsContent() {
         if (!newHandle.trim()) return;
         setAdding(true);
         try {
-            // @ts-ignore
-            const { addCreator } = await import("@/lib/api/creators");
-            const newCreator = await addCreator(newHandle, newPlatform);
-
-            // Close modal and clear form FIRST
+            await addCreator(newHandle, newPlatform);
             setShowAddModal(false);
             setNewHandle("");
-
-            // Show success toast
-            const { toast } = await import("sonner");
             toast.success("Creator added successfully!");
-
-            // Refresh list to show new creator
             await loadData();
         } catch (err) {
             console.error(err);
-            const { toast } = await import("sonner");
-            toast.error("API unavailable - adding to local list");
-
-            // Mock update - add to local state immediately
-            const mockCreator = {
+            toast.error("Failed to add creator");
+            const mockCreator: any = {
                 id: Date.now(),
                 handle: newHandle,
                 platform: newPlatform,
@@ -90,7 +64,7 @@ function CreatorsContent() {
                 engagement_rate: 0,
                 status: "vetted"
             };
-            setCreators(prev => [mockCreator, ...prev]); // Add to beginning so it's visible
+            setCreators(prev => [mockCreator, ...prev]);
             setShowAddModal(false);
             setNewHandle("");
         } finally {
@@ -101,27 +75,25 @@ function CreatorsContent() {
     const handleDelete = async (id: number) => {
         if (!confirm("Are you sure you want to remove this creator?")) return;
         try {
-            // @ts-ignore
-            const { deleteCreator } = await import("@/lib/api/creators");
             await deleteCreator(id);
-            setCreators(creators.filter(c => c.id !== id));
+            setCreators(prev => prev.filter(c => c.id !== id));
+            toast.success("Creator removed");
         } catch (e) {
-            console.error("Delete failed", e);
-            // Mock delete
-            setCreators(creators.filter(c => c.id !== id));
+            console.error(e);
+            toast.error("Failed to remove creator");
+            setCreators(prev => prev.filter(c => c.id !== id));
         }
     };
 
     const handleGenerateCode = async (id: number) => {
         try {
-            // @ts-ignore
-            const { generateAffiliateCode } = await import("@/lib/api/creators");
             const res = await generateAffiliateCode(id);
-            // Update local state
-            setCreators(creators.map(c => c.id === id ? { ...c, affiliate_code: res.code } : c));
+            setCreators(prev => prev.map(c => c.id === id ? { ...c, affiliate_code: res.code } : c));
+            toast.success("Affiliate code generated");
         } catch (e) {
-            console.log("Mocking code generation");
-            setCreators(creators.map(c => c.id === id ? { ...c, affiliate_code: `CODE${id}` } : c));
+            console.error(e);
+            toast.error("Using mock code (API failed)");
+            setCreators(prev => prev.map(c => c.id === id ? { ...c, affiliate_code: `CODE${id}` } : c));
         }
     }
 

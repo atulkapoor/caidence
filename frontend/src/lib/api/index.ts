@@ -23,3 +23,4 @@ export * from "./crm";
 export * from "./admin";
 export * from "./brands";
 export * from "./organizations";
+export * from "./creators";

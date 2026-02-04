@@ -61,12 +61,12 @@ interface SocialCalendarProps {
 
 export function SocialCalendar({ campaigns = [] }: SocialCalendarProps) {
     // Convert campaigns to calendar events - use 1-hour time slots instead of spanning entire date ranges
-    const campaignEvents: SocialPost[] = campaigns.map((c: any, idx: number) => {
-        const startDate = new Date(c.start_date || c.created_at);
-        // Set a specific time for the event (9am + idx hours to spread them out)
-        startDate.setHours(9 + idx, 0, 0, 0);
-        const endDate = new Date(startDate);
-        endDate.setHours(startDate.getHours() + 1); // 1-hour event
+    const campaignEvents: SocialPost[] = campaigns.map((c: any) => {
+        // Use actual start date or fallback to created_at
+        const startDate = c.start_date ? new Date(c.start_date) : new Date(c.created_at);
+
+        // Use actual end date or default to start + 1 hour
+        const endDate = c.end_date ? new Date(c.end_date) : new Date(startDate.getTime() + 60 * 60 * 1000);
 
         return {
             id: c.id + 1000, // Offset IDs

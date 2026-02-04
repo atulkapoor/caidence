@@ -76,8 +76,8 @@ function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSide
                                         platform: prev.platform === platform ? undefined : platform
                                     }))}
                                     className={`px-3 py-2.5 rounded-xl text-sm font-bold border transition-all ${localFilters.platform === platform
-                                            ? "bg-slate-900 text-white border-slate-900"
-                                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                        ? "bg-slate-900 text-white border-slate-900"
+                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                                         }`}
                                 >
                                     {platform}
@@ -107,8 +107,8 @@ function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSide
                                         min_reach: prev.min_reach === range.min ? undefined : range.min
                                     }))}
                                     className={`px-3 py-2.5 rounded-xl text-sm font-bold border transition-all ${localFilters.min_reach === range.min
-                                            ? "bg-indigo-600 text-white border-indigo-600"
-                                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                        ? "bg-indigo-600 text-white border-indigo-600"
+                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                                         }`}
                                 >
                                     {range.label}
@@ -138,8 +138,8 @@ function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSide
                                         engagement: prev.engagement === opt.value ? undefined : opt.value
                                     }))}
                                     className={`px-3 py-2.5 rounded-xl text-sm font-bold border transition-all ${localFilters.engagement === opt.value
-                                            ? "bg-emerald-600 text-white border-emerald-600"
-                                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                        ? "bg-emerald-600 text-white border-emerald-600"
+                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                                         }`}
                                 >
                                     {opt.label}
@@ -162,8 +162,8 @@ function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSide
                                         geo: prev.geo === loc.value ? undefined : loc.value
                                     }))}
                                     className={`px-3 py-2 rounded-full text-sm font-bold border transition-all ${localFilters.geo === loc.value
-                                            ? "bg-pink-600 text-white border-pink-600"
-                                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                        ? "bg-pink-600 text-white border-pink-600"
+                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                                         }`}
                                 >
                                     {loc.label}
@@ -186,8 +186,8 @@ function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSide
                                         niche: prev.niche === niche ? undefined : niche
                                     }))}
                                     className={`px-3 py-2 rounded-full text-sm font-bold border transition-all ${localFilters.niche === niche
-                                            ? "bg-purple-600 text-white border-purple-600"
-                                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                        ? "bg-purple-600 text-white border-purple-600"
+                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                                         }`}
                                 >
                                     {niche}
@@ -375,7 +375,36 @@ export function InfluencerSearch() {
                         />
                         <div className="absolute right-3 flex gap-2">
                             {/* AI Input Buttons */}
-                            <button onClick={() => toast.info("Visual Search is coming soon!")} className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="Search by Inspiration Image">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                id="visual-search-input"
+                                onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    setLoading(true);
+                                    setQuery(`Visual analysis of ${file.name}...`);
+                                    try {
+                                        // @ts-ignore
+                                        const { searchByImage } = await import("@/lib/api/discovery");
+                                        const results = await searchByImage(file);
+                                        setResults(results);
+                                        setHasSearched(true);
+                                        toast.success("Visual search complete!");
+                                    } catch (err) {
+                                        console.error(err);
+                                        toast.error("Visual search failed");
+                                    } finally {
+                                        setLoading(false);
+                                    }
+                                }}
+                            />
+                            <button
+                                onClick={() => document.getElementById('visual-search-input')?.click()}
+                                className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                title="Search by Inspiration Image"
+                            >
                                 <Camera className="w-5 h-5" />
                             </button>
                             <button onClick={() => toast.info("Voice Search is coming soon!")} className="p-3 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-all" title="Search by Voice Tone">
@@ -533,8 +562,8 @@ export function InfluencerSearch() {
                                     <button
                                         onClick={() => toggleSelection(profile.handle)}
                                         className={`absolute top-4 left-4 z-20 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selectedItems.has(profile.handle)
-                                                ? 'bg-indigo-600 border-indigo-600 text-white'
-                                                : 'bg-white/80 border-white/80 hover:border-indigo-300 backdrop-blur-sm'
+                                            ? 'bg-indigo-600 border-indigo-600 text-white'
+                                            : 'bg-white/80 border-white/80 hover:border-indigo-300 backdrop-blur-sm'
                                             }`}
                                     >
                                         {selectedItems.has(profile.handle) && <CheckCircle2 className="w-4 h-4" />}

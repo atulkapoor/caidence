@@ -135,3 +135,27 @@ async def set_password(
     await db.commit()
     
     return {"message": "Password set successfully"}
+@router.post("/recover-password")
+async def recover_password(
+    email: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Initiate password recovery.
+    """
+    from app.services.email_service import send_password_reset_email
+    
+    # Check user exists
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    
+    if user:
+        # Generate token (mocked unique token for now)
+        import uuid
+        token = str(uuid.uuid4())
+        # TODO: Save token to DB with expiry
+        
+        await send_password_reset_email(email, token)
+    
+    # Always return success to prevent email enumeration
+    return {"message": "If this email is registered, a recovery link has been sent."}

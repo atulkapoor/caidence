@@ -51,7 +51,8 @@ async def get_current_user(
             return get_mock_user()
         
         # Check if user actually exists in DB
-        result = await db.execute(select(User).where(User.id == token_data.user_id))
+        from sqlalchemy.orm import selectinload
+        result = await db.execute(select(User).options(selectinload(User.custom_permissions)).where(User.id == token_data.user_id))
         user = result.scalar_one_or_none()
         if user is None:
             return get_mock_user()
@@ -106,21 +107,47 @@ def require_permission(action: str, resource: str = None) -> Callable:
         if current_user.role == "super_admin":
             return current_user
         
-        # Define role-based permissions
-        role_permissions = {
+        # Define role-based permissions (Defaults)
+        role_permissions_map = {
             "admin": {"campaign:read", "campaign:write", "content:read", "content:write", 
-                     "analytics:read", "discovery:read", "discovery:write", "crm:read", "crm:write"},
+                     "analytics:read", "discovery:read", "discovery:write", "crm:read", "crm:write",
+                     "design_studio:read", "design_studio:write", "marcom:read", "marcom:write"},
             "manager": {"campaign:read", "campaign:write", "content:read", "content:write", 
-                       "analytics:read", "discovery:read"},
-            "editor": {"content:read", "content:write", "discovery:read"},
-            "viewer": {"campaign:read", "content:read", "analytics:read", "discovery:read"}
+                       "analytics:read", "discovery:read", "design_studio:read", "design_studio:write"},
+            "editor": {"content:read", "content:write", "discovery:read", "design_studio:read"},
+            "viewer": {"campaign:read", "content:read", "analytics:read", "discovery:read", "design_studio:read"}
         }
         
-        user_permissions = role_permissions.get(current_user.role, set())
+        effective_permissions = set(role_permissions_map.get(current_user.role, set()))
         
+        # Apply Custom Overrides
+        # Assuming User.custom_permissions is loaded (list of Permission objects)
+        if hasattr(current_user, "custom_permissions") and current_user.custom_permissions:
+            for perm in current_user.custom_permissions:
+                # perm.resource (e.g., "campaign"), perm.action (e.g., "write")
+                # Our keys are "resource:action" (e.g., "campaign:write")
+                # Also implies read if write is granted? For now, explicit.
+                
+                perm_key_write = f"{perm.resource}:write"
+                perm_key_read = f"{perm.resource}:read"
+                
+                if perm.action == "write":
+                    effective_permissions.add(perm_key_write)
+                    effective_permissions.add(perm_key_read) # Write implies read often
+                elif perm.action == "read":
+                    effective_permissions.add(perm_key_read)
+                    effective_permissions.discard(perm_key_write)
+                elif perm.action == "none":
+                    effective_permissions.discard(perm_key_write)
+                    effective_permissions.discard(perm_key_read)
+
         # Check permission
         permission_key = f"{resource}:{action}" if resource else action
-        if permission_key not in user_permissions:
+        if permission_key not in effective_permissions:
+            # Check for implied permissions (e.g. asking for read, but have write)
+            if action == "read" and f"{resource}:write" in effective_permissions:
+                return current_user
+
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied for {permission_key}"

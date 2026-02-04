@@ -37,3 +37,16 @@ export async function getInfluencerProfile(handle: string): Promise<InfluencerPr
     if (!res.ok) throw new Error("Failed to fetch influencer profile");
     return res.json();
 }
+
+export async function searchByImage(file: File): Promise<InfluencerProfile[]> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch(`${API_BASE_URL}/discovery/image-search`, {
+        method: "POST",
+        body: formData,
+    });
+
+    if (!res.ok) throw new Error("Failed to perform visual search");
+    return res.json();
+}

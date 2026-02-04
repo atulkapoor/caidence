@@ -40,6 +40,12 @@ export async function fetchCampaigns(): Promise<Campaign[]> {
     return res.json();
 }
 
+export async function readCampaign(id: number): Promise<Campaign> {
+    const res = await fetch(`${API_BASE_URL}/campaigns/${id}`);
+    if (!res.ok) throw new Error("Failed to fetch campaign details");
+    return res.json();
+}
+
 export async function createCampaign(data: {
     title: string;
     description?: string;

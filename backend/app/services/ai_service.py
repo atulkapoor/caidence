@@ -173,7 +173,7 @@ class AIService:
         return await AIService._call_llm(full_prompt, system_prompt=system)
 
     @staticmethod
-    async def generate_image(style: str, prompt: str) -> str:
+    async def generate_image(style: str, prompt: str, aspect_ratio: str = "1:1") -> str:
         """Generates an image via Stable Diffusion (AI Worker)."""
         ai_worker_url = os.getenv("AI_WORKER_URL", "http://ai_worker:8001")
         
@@ -187,11 +187,26 @@ class AIService:
         
         final_prompt = f"{prompt}, {style_modifiers.get(style, '')}"
         
+        # Map aspect ratios to dimensions (assuming SDXL or similar 1024x1024 base)
+        ratio_map = {
+            "1:1": {"width": 1024, "height": 1024},
+            "16:9": {"width": 1024, "height": 576},
+            "9:16": {"width": 576, "height": 1024},
+            "4:3": {"width": 1024, "height": 768},
+            "3:4": {"width": 768, "height": 1024}
+        }
+        dims = ratio_map.get(aspect_ratio, {"width": 1024, "height": 1024})
+        
         try:
             async with httpx.AsyncClient(timeout=120.0) as client: # Long timeout for generation
                 res = await client.post(
                     f"{ai_worker_url}/generate",
-                    json={"prompt": final_prompt, "steps": 1} 
+                    json={
+                        "prompt": final_prompt, 
+                        "steps": 25,  # Increased steps for better quality
+                        "width": dims["width"], 
+                        "height": dims["height"]
+                    } 
                 )
                 res.raise_for_status()
                 data = res.json()
@@ -200,7 +215,7 @@ class AIService:
         except Exception as e:
             logger.error(f"Image generation failed: {e}")
             # Fallback to placeholder if worker is down
-            return "https://via.placeholder.com/1024x1024?text=Generation+Failed"
+            return f"https://via.placeholder.com/{dims['width']}x{dims['height']}?text=Generation+Failed"
 
     @staticmethod
     async def generate_presentation_slides(source_type: str, title: str) -> str:

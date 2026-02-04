@@ -117,6 +117,15 @@ export interface CampaignAnalytics {
     total_spend: number;
     total_impressions: number;
     avg_engagement_rate: number;
+    // Extended fields for AnalyticsTab
+    overview?: {
+        total_spend: string;
+        roi: string;
+        conversions: string;
+        ctr: string;
+    };
+    performance_chart?: Array<{ name: string; value: number }>;
+    channel_distribution?: Array<{ name: string; value: number }>;
 }
 
 export async function fetchCampaignAnalytics(): Promise<CampaignAnalytics> {
@@ -132,7 +141,28 @@ export async function fetchCampaignAnalytics(): Promise<CampaignAnalytics> {
             active_campaigns: 5,
             total_spend: 45000,
             total_impressions: 2850000,
-            avg_engagement_rate: 4.2
+            avg_engagement_rate: 4.2,
+            overview: {
+                total_spend: "$45,231",
+                roi: "3.2x",
+                conversions: "1,234",
+                ctr: "2.1%"
+            },
+            performance_chart: [
+                { name: "Mon", value: 4000 },
+                { name: "Tue", value: 3000 },
+                { name: "Wed", value: 2000 },
+                { name: "Thu", value: 2780 },
+                { name: "Fri", value: 1890 },
+                { name: "Sat", value: 2390 },
+                { name: "Sun", value: 3490 }
+            ],
+            channel_distribution: [
+                { name: "Instagram", value: 45 },
+                { name: "TikTok", value: 30 },
+                { name: "YouTube", value: 15 },
+                { name: "Other", value: 10 }
+            ]
         };
     }
 }

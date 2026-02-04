@@ -28,32 +28,24 @@ export async function generateContent(data: any): Promise<ContentGeneration> {
 }
 
 export async function fetchContentGenerations(): Promise<ContentGeneration[]> {
-    // Mock 
-    if (mockGenerations.length === 0) {
-        // This block would typically fetch from an API, but for mocking, we return initial data if empty
-        return [
-            { id: 1, title: "LinkedIn Thought Leadership", platform: "LinkedIn", content_type: "Post", result: "AI puts the 'Art' in Artificial Intelligence...", created_at: new Date().toISOString(), prompt: "Write about AI" },
-            { id: 2, title: "Twitter Thread: SEO Tips", platform: "Twitter", content_type: "Thread", result: "1/5 SEO is dead? No. Here's why...", created_at: new Date(Date.now() - 86400000).toISOString(), prompt: "SEO Tips" }
-        ];
-    }
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve(mockGenerations);
-        }, 500);
-    });
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/content`, { headers });
+    if (!res.ok) throw new Error("Failed to fetch content history");
+    return res.json();
 }
 
 export async function fetchContentGenerationById(id: number): Promise<ContentGeneration> {
-    const res = await fetch(`${API_BASE_URL}/content/${id}`);
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/content/${id}`, { headers });
     if (!res.ok) throw new Error("Failed to fetch content details");
     return res.json();
 }
 
 export async function deleteContent(id: number): Promise<void> {
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            mockGenerations = mockGenerations.filter(c => c.id !== id);
-            resolve();
-        }, 500);
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/content/${id}`, {
+        method: "DELETE",
+        headers
     });
+    if (!res.ok) throw new Error("Failed to delete content");
 }
