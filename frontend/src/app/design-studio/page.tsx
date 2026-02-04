@@ -459,7 +459,9 @@ function DesignStudioContent() {
                                         <div className="aspect-[4/3] bg-rose-50 relative flex items-center justify-center">
                                             <div className="flex flex-col items-center gap-3">
                                                 <div className="w-12 h-12 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin"></div>
-                                                <div className="text-sm font-bold text-rose-500 uppercase tracking-wider animate-pulse">Developing Photo...</div>
+                                                <div className="text-sm font-bold text-rose-500 uppercase tracking-wider animate-pulse">
+                                                    Developing {selectedStyle === 'Photorealistic' ? 'Photo' : selectedStyle}...
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="p-5 flex flex-col gap-3">
@@ -475,7 +477,7 @@ function DesignStudioContent() {
                                 )}
                                 {filteredDesigns.length > 0 ? (
                                     filteredDesigns.map((asset) => (
-                                        <div key={asset.id} className="group flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden">
+                                        <div key={asset.id} className="group flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
                                             {/* Image Preview */}
                                             <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden cursor-pointer" onClick={() => setPreviewDesign(asset)}>
                                                 {/* eslint-disable-next-line @next/next/no-img-element */}
