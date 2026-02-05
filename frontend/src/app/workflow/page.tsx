@@ -1,288 +1,213 @@
-
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
-import { useTabState } from "@/hooks/useTabState";
-import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Workflow, Plus, Play, Activity } from "lucide-react";
-
-import { fetchWorkflows, createWorkflow, Workflow as WorkflowType } from "@/lib/api";
+import { Plus, Search, Layers, Play, Clock, MoreVertical, Trash2, ArrowRight } from "lucide-react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
+import { fetchWorkflows, createWorkflow, Workflow } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
-const TEMPLATE_WORKFLOWS = [
-    {
-        name: "Lead Generation",
-        description: "Automated sequence to nurture leads across email and LinkedIn.",
-        steps_json: JSON.stringify([
-            { id: "1", name: "Scrape LinkedIn Profiles", type: "trigger" },
-            { id: "2", name: "Enrich Contact Data", type: "action" },
-            { id: "3", name: "Send Connection Request", type: "action" },
-            { id: "4", name: "Wait 2 Days", type: "delay" },
-            { id: "5", name: "Send Follow-up Email", type: "action" }
-        ])
-    },
-    {
-        name: "Content Distribution",
-        description: "Publish content to Twitter, LinkedIn, and Medium automatically.",
-        steps_json: JSON.stringify([
-            { id: "1", name: "New Blog Post Trigger", type: "trigger" },
-            { id: "2", name: "Generate Summary with AI", type: "action" },
-            { id: "3", name: "Create Twitter Thread", type: "action" },
-            { id: "4", name: "Post to LinkedIn", type: "action" }
-        ])
-    },
-    {
-        name: "Customer Onboarding",
-        description: "Welcome new users and guide them through setup.",
-        steps_json: JSON.stringify([
-            { id: "1", name: "New User Signup", type: "trigger" },
-            { id: "2", name: "Send Welcome Email", type: "action" },
-            { id: "3", name: "Create CRM Contact", type: "action" },
-            { id: "4", name: "Wait 3 Days", type: "delay" },
-            { id: "5", name: "Check Activation Status", type: "condition" },
-            { id: "6", name: "Send Tutorial Video", type: "action" }
-        ])
-    },
-    {
-        name: "Event Promotion",
-        description: "Drive registrations for your upcoming webinar or event.",
-        steps_json: JSON.stringify([
-            { id: "1", name: "Event Created", type: "trigger" },
-            { id: "2", name: "Post Announcement to LinkedIn", type: "action" },
-            { id: "3", name: "Send Invite Email to Segment", type: "action" },
-            { id: "4", name: "Wait 5 Days", type: "delay" },
-            { id: "5", name: "Send Reminder Email to Non-Openers", type: "action" }
-        ])
-    },
-    {
-        name: "Review Request",
-        description: "Automatically ask satisfied customers for reviews.",
-        steps_json: JSON.stringify([
-            { id: "1", name: "Order Completed", type: "trigger" },
-            { id: "2", name: "Wait 7 Days", type: "delay" },
-            { id: "3", name: "Send Review Request Email", type: "action" },
-            { id: "4", name: "If 5 Stars, Post to Socials", type: "condition" },
-            { id: "5", name: "If < 3 Stars, Create Support Ticket", type: "action" }
-        ])
-    },
-    {
-        name: "Re-engagement",
-        description: "Win back inactive users with special offers.",
-        steps_json: JSON.stringify([
-            { id: "1", name: "User Inactive for 30 Days", type: "trigger" },
-            { id: "2", name: "Send 'We Miss You' Email", type: "action" },
-            { id: "3", name: "Wait 3 Days", type: "delay" },
-            { id: "4", name: "Check Login Status", type: "condition" },
-            { id: "5", name: "Send deprecation warning or discount", type: "action" }
-        ])
-    }
-];
-
-function WorkflowContent() {
-    const [activeTab, setActiveTab] = useTabState("my-workflows");
-    const [workflows, setWorkflows] = useState<WorkflowType[]>([]);
+function WorkflowList() {
     const router = useRouter();
+    const [workflows, setWorkflows] = useState<Workflow[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [isCreating, setIsCreating] = useState(false);
+    const [newWorkflowName, setNewWorkflowName] = useState("");
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
     useEffect(() => {
-        const loadWorkflows = async () => {
-            try {
-                const data = await fetchWorkflows();
-                setWorkflows(data);
-            } catch (error) {
-                console.error(error);
-            }
-        };
         loadWorkflows();
     }, []);
 
-    const handleCreate = async () => {
+    const loadWorkflows = async () => {
         try {
-            const newWorkflow = await createWorkflow({
-                name: "New AI Workflow",
-                description: "Draft workflow",
+            setLoading(true);
+            const data = await fetchWorkflows();
+            setWorkflows(data);
+        } catch (error) {
+            console.error("Failed to fetch workflows", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCreateWrapper = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newWorkflowName.trim()) return;
+
+        setIsCreating(true);
+        try {
+            const newWf = await createWorkflow({
+                name: newWorkflowName,
+                description: "New automation workflow",
                 steps_json: "[]"
             });
-            router.push(`/workflow/${newWorkflow.id}`);
+            setWorkflows([newWf, ...workflows]);
+            setShowCreateModal(false);
+            setNewWorkflowName("");
+            router.push(`/workflow/${newWf.id}`);
         } catch (error) {
             console.error("Failed to create workflow", error);
-            alert("Failed to create workflow. Check console for details.");
+            alert("Failed to create workflow");
+        } finally {
+            setIsCreating(false);
         }
     };
 
-    const handleUseTemplate = async (template: typeof TEMPLATE_WORKFLOWS[0]) => {
-        try {
-            const newWorkflow = await createWorkflow({
-                name: template.name,
-                description: template.description,
-                steps_json: template.steps_json
-            });
-            toast.success("Workflow created from template!");
-            router.push(`/workflow/${newWorkflow.id}`);
-        } catch (error) {
-            console.error("Failed to create workflow from template", error);
-            toast.error("Failed to use template.");
-        }
-    };
+    const filteredWorkflows = workflows.filter(w =>
+        w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        w.description.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     return (
-        <DashboardLayout>
-            <div className="max-w-6xl mx-auto">
+        <div className="min-h-screen bg-slate-50/50 p-6 sm:p-8">
+            <div className="max-w-7xl mx-auto space-y-8">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-black text-slate-900">Workflow Automation</h1>
-                        <p className="text-slate-600 text-sm">Automate your marketing tasks with AI agents</p>
+                        <h1 className="text-2xl font-bold text-slate-900">Workflow Automation</h1>
+                        <p className="text-sm text-slate-500 mt-1">Design and manage your automated marketing flows.</p>
                     </div>
                     <button
-                        onClick={handleCreate}
-                        className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 flex items-center gap-2 transition-all cursor-pointer"
+                        onClick={() => setShowCreateModal(true)}
+                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 group"
                     >
-                        <Plus className="w-5 h-5" />
+                        <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" />
                         Create Workflow
                     </button>
                 </div>
 
-                {/* Tabs */}
-                <div className="flex justify-center mb-10">
-                    <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-slate-300 inline-flex">
-                        {["my-workflows", "templates"].map((tab) => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                className={`px-8 py-2.5 rounded-xl text-sm font-bold capitalize transition-all cursor-pointer ${activeTab === tab
-                                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20"
-                                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                                    }`}
-                            >
-                                {tab.replace("-", " ")}
-                            </button>
-                        ))}
-                    </div>
+                {/* Filters */}
+                <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 max-w-md">
+                    <Search className="w-5 h-5 text-slate-400 ml-2" />
+                    <input
+                        type="text"
+                        placeholder="Search workflows..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="flex-1 bg-transparent border-none focus:ring-0 text-sm font-medium text-slate-700 placeholder:text-slate-400"
+                    />
                 </div>
 
-                {activeTab === "my-workflows" ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {workflows.length === 0 && (
-                            <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-slate-200">
-                                <div className="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                    <Workflow className="w-8 h-8" />
-                                </div>
-                                <h3 className="text-xl font-bold text-slate-900 mb-2">No workflows yet</h3>
-                                <p className="text-slate-500 mb-6">Create your first automated workflow to get started.</p>
-                                <button onClick={handleCreate} className="text-indigo-600 font-bold hover:underline cursor-pointer">
-                                    Create New Workflow &rarr;
-                                </button>
-                            </div>
-                        )}
-                        {workflows.map((workflow) => {
-                            let steps: Record<string, unknown>[] = [];
-                            try {
-                                steps = JSON.parse(workflow.steps_json) as Record<string, unknown>[];
-                            } catch {
-                                steps = [];
-                            }
-
-                            return (
-                                <Link href={`/workflow/${workflow.id}`} key={workflow.id} className="block group">
-                                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 h-full flex flex-col relative overflow-hidden cursor-pointer">
-
-                                        {/* Status Badge */}
-                                        <div className="absolute top-4 right-4">
-                                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${workflow.status === 'active' ? 'bg-green-100/50 text-green-700 border border-green-100' : 'bg-slate-100 text-slate-500 border border-slate-100'
-                                                }`}>
-                                                {workflow.status}
-                                            </span>
-                                        </div>
-
-                                        {/* Header */}
-                                        <div className="flex items-start gap-4 mb-6 mt-1">
-                                            <div className="w-12 h-12 bg-gradient-to-br from-indigo-100 to-purple-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
-                                                <Workflow className="w-6 h-6" />
-                                            </div>
-                                            <div className="flex-1 pt-1">
-                                                <h3 className="font-bold text-lg text-slate-900 leading-tight mb-1 group-hover:text-indigo-600 transition-colors">{workflow.name}</h3>
-                                                <p className="text-xs text-slate-500 line-clamp-2">{workflow.description}</p>
-                                            </div>
-                                        </div>
-
-                                        {/* Step Preview */}
-                                        <div className="bg-slate-50 rounded-2xl p-4 mb-6 border border-slate-100/50">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Automation Preview</span>
-                                                <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">{steps.length} Steps</span>
-                                            </div>
-                                            <div className="space-y-2.5">
-                                                {steps.length > 0 ? (
-                                                    steps.slice(0, 3).map((step, idx) => (
-                                                        <div key={idx} className="flex items-center gap-3 text-sm text-slate-600">
-                                                            <div className="w-5 h-5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-400 shadow-sm">{idx + 1}</div>
-                                                            <span className="truncate flex-1 font-medium">{(step.name as string) || "Untitled Step"}</span>
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <div className="text-center py-2 text-xs text-slate-400 italic">No steps configured</div>
-                                                )}
-                                                {steps.length > 3 && (
-                                                    <div className="pl-8 text-xs text-indigo-500 font-semibold">+ {steps.length - 3} more steps</div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Footer */}
-                                        <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between text-xs font-medium text-slate-400">
-                                            <div className="flex items-center gap-1.5">
-                                                <Activity className="w-3.5 h-3.5" />
-                                                {workflow.run_count} Executions
-                                            </div>
-                                            <button className="text-indigo-600 font-bold group-hover:underline cursor-pointer">
-                                                Configure &rarr;
-                                            </button>
-                                        </div>
-                                    </div>
-                                </Link>
-                            )
-                        })}
+                {/* Grid */}
+                {loading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="h-48 bg-white rounded-2xl border border-slate-100 animate-pulse"></div>
+                        ))}
+                    </div>
+                ) : filteredWorkflows.length === 0 ? (
+                    <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 border-dashed">
+                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Layers className="w-8 h-8 text-slate-300" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900">No workflows found</h3>
+                        <p className="text-slate-500 mb-6">Get started by creating your first automation.</p>
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="text-indigo-600 font-bold hover:underline"
+                        >
+                            Create New Workflow
+                        </button>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {TEMPLATE_WORKFLOWS.map((template, i) => {
-                            const stepCount = JSON.parse(template.steps_json).length;
-                            return (
-                                <div key={i} className="bg-white p-7 rounded-3xl border border-slate-100 hover:border-indigo-100 hover:shadow-xl hover:shadow-indigo-500/5 transition-all group flex flex-col h-full">
-                                    <div className="w-14 h-14 bg-gradient-to-br from-pink-50 to-rose-50 text-pink-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
-                                        <Play className="w-7 h-7" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredWorkflows.map((workflow) => (
+                            <Link key={workflow.id} href={`/workflow/${workflow.id}`} className="group">
+                                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-xl hover:border-indigo-200 hover:-translate-y-1 transition-all h-full flex flex-col relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1.5 h-full bg-slate-200 group-hover:bg-indigo-500 transition-colors"></div>
+
+                                    <div className="flex justify-between items-start mb-4 pl-2">
+                                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                            <Layers className="w-5 h-5" />
+                                        </div>
+                                        <div className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${workflow.status === 'active' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-slate-50 text-slate-500 border border-slate-100'
+                                            }`}>
+                                            {workflow.status}
+                                        </div>
                                     </div>
-                                    <h3 className="font-bold text-lg text-slate-900 mb-2">{template.name}</h3>
-                                    <p className="text-slate-500 text-sm mb-6 flex-1">
-                                        {template.description}
-                                    </p>
-                                    <div className="pt-4 border-t border-slate-50 flex items-center justify-between mt-auto">
-                                        <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-lg">
-                                            {stepCount} Steps
-                                        </span>
+
+                                    <h3 className="font-bold text-slate-900 text-lg mb-2 pl-2 group-hover:text-indigo-600 transition-colors">{workflow.name}</h3>
+                                    <p className="text-sm text-slate-500 mb-6 pl-2 line-clamp-2 flex-1">{workflow.description}</p>
+
+                                    <div className="pl-2 pt-4 border-t border-slate-50 flex items-center justify-between text-xs font-medium text-slate-400">
+                                        <div className="flex items-center gap-4">
+                                            <span className="flex items-center gap-1">
+                                                <Play className="w-3 h-3" />
+                                                {workflow.run_count} runs
+                                            </span>
+                                            {workflow.last_run && (
+                                                <span className="flex items-center gap-1">
+                                                    <Clock className="w-3 h-3" />
+                                                    {new Date(workflow.last_run).toLocaleDateString()}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <ArrowRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-1 transition-transform" />
+                                    </div>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                )}
+
+                {/* Create Modal */}
+                {showCreateModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+                            <h2 className="text-xl font-bold text-slate-900 mb-4">Create New Workflow</h2>
+                            <form onSubmit={handleCreateWrapper}>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 mb-1">Workflow Name</label>
+                                        <input
+                                            autoFocus
+                                            type="text"
+                                            value={newWorkflowName}
+                                            onChange={(e) => setNewWorkflowName(e.target.value)}
+                                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium"
+                                            placeholder="e.g., Weekly Newsletter Automation"
+                                        />
+                                    </div>
+                                    <div className="flex gap-3 pt-2">
                                         <button
-                                            onClick={() => handleUseTemplate(template)}
-                                            className="text-sm font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 px-4 py-2 rounded-lg shadow-md shadow-pink-500/20 group-hover:shadow-pink-500/40 hover:-translate-y-0.5 transition-all cursor-pointer"
+                                            type="button"
+                                            onClick={() => setShowCreateModal(false)}
+                                            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 transition-colors"
                                         >
-                                            Use Template
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={!newWorkflowName.trim() || isCreating}
+                                            className="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isCreating ? 'Creating...' : 'Create Workflow'}
                                         </button>
                                     </div>
                                 </div>
-                            )
-                        })}
+                            </form>
+                        </div>
                     </div>
                 )}
             </div>
-        </DashboardLayout>
+        </div>
     );
 }
 
 export default function WorkflowPage() {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading workflows...</div>}>
-            <WorkflowContent />
+        <Suspense fallback={
+            <DashboardLayout>
+                <div className="p-8 flex items-center justify-center min-h-[50vh]">
+                    <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                </div>
+            </DashboardLayout>
+        }>
+            <DashboardLayout>
+                <WorkflowList />
+            </DashboardLayout>
         </Suspense>
     );
 }

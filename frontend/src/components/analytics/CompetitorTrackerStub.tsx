@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { fetchCompetitorAnalysis, CompetitorAnalysisResponse } from "@/lib/api";
 import { TrendingUp, TrendingDown, Minus, Search, Swords } from "lucide-react";
@@ -114,8 +116,8 @@ export function CompetitorTrackerStub() {
                                         <td className="p-3 font-mono text-slate-600">{item.share_of_voice}%</td>
                                         <td className="p-3">
                                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold capitalize ${item.sentiment === 'Positive' ? 'bg-emerald-100 text-emerald-700' :
-                                                    item.sentiment === 'Negative' ? 'bg-red-100 text-red-700' :
-                                                        'bg-slate-100 text-slate-600'
+                                                item.sentiment === 'Negative' ? 'bg-red-100 text-red-700' :
+                                                    'bg-slate-100 text-slate-600'
                                                 }`}>
                                                 {item.sentiment === 'Positive' && <TrendingUp className="w-3 h-3" />}
                                                 {item.sentiment === 'Negative' && <TrendingDown className="w-3 h-3" />}

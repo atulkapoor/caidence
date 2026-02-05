@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Presentation as PresentationIcon, Search, Calendar, ChevronRight, FileText, PieChart, Upload, Download } from "lucide-react";
 import { fetchPresentations, Presentation } from "@/lib/api";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import dynamic from 'next/dynamic';
 
@@ -13,7 +13,7 @@ const PresentationPDFDownload = dynamic(() => import("@/components/content/Prese
     loading: () => <span className="text-xs text-slate-400">Loading...</span>
 });
 
-export default function PresentationHistoryPage() {
+function PresentationHistoryContent() {
     const [history, setHistory] = useState<Presentation[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
 
@@ -171,5 +171,13 @@ export default function PresentationHistoryPage() {
                 </div>
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function PresentationHistoryPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <PresentationHistoryContent />
+        </Suspense>
     );
 }

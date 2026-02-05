@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft } from "lucide-react";
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordContent() {
     const [email, setEmail] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
@@ -87,5 +87,13 @@ export default function ForgotPasswordPage() {
                 </button>
             </form>
         </AuthLayout>
+    );
+}
+
+export default function ForgotPasswordPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <ForgotPasswordContent />
+        </Suspense>
     );
 }

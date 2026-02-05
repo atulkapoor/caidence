@@ -7,20 +7,17 @@ interface TypewriterEffectProps {
     speed?: number;
     className?: string;
     onComplete?: () => void;
+    onUpdate?: () => void;
 }
 
 export const TypewriterEffect = ({
     text,
     speed = 8,
     className = "",
-    onComplete
+    onComplete,
+    onUpdate
 }: TypewriterEffectProps) => {
     const [displayedText, setDisplayedText] = useState("");
-
-    // Reset if text changes completely (e.g. new generation)
-    // But be careful not to reset if it's just incremental streaming updates, which might be handled differently.
-    // Ideally this component expects the FULL final text to be passed, or stable text updates.
-    // For this simple version, we assume 'text' is the complete string we want to animate from start to finish.
 
     useEffect(() => {
         setDisplayedText("");
@@ -30,6 +27,7 @@ export const TypewriterEffect = ({
             if (index < text.length) {
                 setDisplayedText((prev) => prev + text.charAt(index));
                 index++;
+                if (onUpdate) onUpdate();
             } else {
                 clearInterval(intervalId);
                 if (onComplete) onComplete();
@@ -37,7 +35,7 @@ export const TypewriterEffect = ({
         }, speed);
 
         return () => clearInterval(intervalId);
-    }, [text, speed]);
+    }, [text, speed, onUpdate]); // Added onUpdate to dependencies, but be careful of loops if onUpdate changes.
 
     return (
         <div className={`whitespace-pre-wrap leading-relaxed ${className}`}>

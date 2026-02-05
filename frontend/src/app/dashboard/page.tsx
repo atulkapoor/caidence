@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { usePreferences } from "@/context/PreferencesContext";
 import { ActionCards } from "@/components/dashboard/ActionCards";
@@ -12,7 +12,7 @@ import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { fetchDashboardStats, type DashboardData } from "@/lib/api";
 
-export default function Dashboard() {
+function DashboardContent() {
     const { industry } = usePreferences();
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -20,9 +20,6 @@ export default function Dashboard() {
 
     useEffect(() => {
         async function loadData() {
-            // Keep loading=true only for initial load, or maybe simplified loading for tab switch?
-            // For now, let's keep it simple. If we want "soft" loading, we'd need another state.
-            // Or just let it update.
             try {
                 const dashboardData = await fetchDashboardStats(range);
                 setData(dashboardData);
@@ -52,16 +49,15 @@ export default function Dashboard() {
                 <div className="space-y-2">
                     <h1 className="text-4xl font-black text-slate-900 tracking-tight">C(AI)DENCE</h1>
                     <p className="text-lg text-slate-600 font-medium">AI-powered intelligence for <span className="text-indigo-600 font-bold">{industry || "Marketing"}</span></p>
-
                 </div>
 
-                {/* 1. Action Cards (Start Here / Marcom Hub) */}
+                {/* 1. Action Cards */}
                 <ActionCards />
 
-                {/* 2. Advanced AI Capabilities (Slim Row) */}
+                {/* 2. Advanced AI Capabilities */}
                 <CapabilitiesGrid />
 
-                {/* 3. AI-Powered Tools (Grid of 7) */}
+                {/* 3. AI-Powered Tools */}
                 <ToolsGrid />
 
                 {/* 4. Stats Row */}
@@ -85,5 +81,13 @@ export default function Dashboard() {
                 </div>
             </div>
         </DashboardLayout>
+    );
+}
+
+export default function Dashboard() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <DashboardContent />
+        </Suspense>
     );
 }

@@ -9,8 +9,8 @@ export interface AnalyticsOverview {
 
 export interface AnalyticsDashboardResponse {
     overview: AnalyticsOverview;
-    traffic_data: Array<{ name: string; value: number }>;
-    device_data: Array<{ name: string; value: number; color: string }>;
+    trends: Array<{ date: string; value: number; engagement: number }>;
+    audience: Array<{ name: string; value: number }>;
 }
 
 export async function getDashboardAnalytics(): Promise<AnalyticsDashboardResponse> {
@@ -28,24 +28,19 @@ export async function getDashboardAnalytics(): Promise<AnalyticsDashboardRespons
                 conversions: 892,
                 roi: 3.8
             },
-            traffic_data: [
-                { name: "Jan", value: 4000 },
-                { name: "Feb", value: 3500 },
-                { name: "Mar", value: 5200 },
-                { name: "Apr", value: 4800 },
-                { name: "May", value: 6100 },
-                { name: "Jun", value: 5400 },
-                { name: "Jul", value: 7200 },
-                { name: "Aug", value: 6800 },
-                { name: "Sep", value: 8100 },
-                { name: "Oct", value: 7500 },
-                { name: "Nov", value: 9200 },
-                { name: "Dec", value: 8800 }
+            trends: [
+                { date: "Jan", value: 4000, engagement: 2400 },
+                { date: "Feb", value: 3500, engagement: 1398 },
+                { date: "Mar", value: 5200, engagement: 9800 },
+                { date: "Apr", value: 4800, engagement: 3908 },
+                { date: "May", value: 6100, engagement: 4800 },
+                { date: "Jun", value: 5400, engagement: 3800 },
+                { date: "Jul", value: 7200, engagement: 4300 }
             ],
-            device_data: [
-                { name: "Mobile", value: 52, color: "#6366f1" },
-                { name: "Desktop", value: 35, color: "#22c55e" },
-                { name: "Tablet", value: 13, color: "#f59e0b" }
+            audience: [
+                { name: "Mobile", value: 52 },
+                { name: "Desktop", value: 35 },
+                { name: "Tablet", value: 13 }
             ]
         };
     }

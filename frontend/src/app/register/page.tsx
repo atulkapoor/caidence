@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { register, login } from "@/lib/api";
 
-export default function RegisterPage() {
+function RegisterContent() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
@@ -22,15 +22,13 @@ export default function RegisterPage() {
         setLoading(true);
 
         try {
-            // 1. Register
             await register({
                 ...formData,
-                role: "viewer" // Default role
+                role: "viewer"
             });
 
             toast.success("Account created successfully!");
 
-            // 2. Auto Login (Optional, but good UX)
             try {
                 const loginData = await login({
                     email: formData.email,
@@ -41,7 +39,6 @@ export default function RegisterPage() {
                     router.push("/dashboard");
                 }
             } catch {
-                // If auto-login fails, redirect to login page
                 toast.info("Please sign in with your new account.");
                 router.push("/login");
             }
@@ -117,5 +114,13 @@ export default function RegisterPage() {
                 </Link>
             </div>
         </AuthLayout>
+    );
+}
+
+export default function RegisterPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <RegisterContent />
+        </Suspense>
     );
 }

@@ -8,10 +8,10 @@ import {
     Briefcase, ShoppingBag, Building, Plus, Minus, ChevronDown, ChevronUp, Sliders,
     Quote, Star, Link2, Cpu, Rocket
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 
-export default function LandingPage() {
+function LandingPageContent() {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState("agencies");
     const [spend, setSpend] = useState(10000);
@@ -702,5 +702,13 @@ export default function LandingPage() {
                 </div>
             </footer>
         </div>
+    );
+}
+
+export default function LandingPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <LandingPageContent />
+        </Suspense>
     );
 }

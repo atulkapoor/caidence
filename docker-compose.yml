@@ -23,9 +23,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
       - /app/node_modules
-    command: sh -c "rm -rf .next && rm -f package-lock.json && npm install --legacy-peer-deps && npm install --legacy-peer-deps --save-optional @next/swc-linux-x64-musl && npm run dev -- -H 0.0.0.0"
+    user: root
     restart: always
     environment:
       - NODE_ENV=development

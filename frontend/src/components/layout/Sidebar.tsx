@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
     LayoutDashboard,
     Bot,
@@ -13,10 +13,8 @@ import {
     Presentation,
     BarChart3,
     Settings,
-    Zap,
     Megaphone,
     Map,
-    Brain,
     User,
     Search,
     Building2,
@@ -77,6 +75,7 @@ const navigationGroups = [
 export function Sidebar() {
     const pathname = usePathname();
     const [user, setUser] = useState<UserInfo | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const userJson = localStorage.getItem("user");
@@ -92,6 +91,20 @@ export function Sidebar() {
             }
         }
     }, []);
+
+    // Restore scroll position
+    useEffect(() => {
+        const savedScroll = sessionStorage.getItem("sidebarScroll");
+        if (savedScroll && scrollRef.current) {
+            scrollRef.current.scrollTop = parseInt(savedScroll, 10);
+        }
+    }, []);
+
+    const handleScroll = () => {
+        if (scrollRef.current) {
+            sessionStorage.setItem("sidebarScroll", scrollRef.current.scrollTop.toString());
+        }
+    };
 
     const getInitials = (name: string) => {
         return name
@@ -116,7 +129,11 @@ export function Sidebar() {
                 </div>
             </Link>
 
-            <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
+            <div
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="flex-1 overflow-y-auto py-4 custom-scrollbar"
+            >
                 <nav className="space-y-6 px-3">
                     {navigationGroups.map((group) => (
                         <div key={group.title}>

@@ -167,7 +167,7 @@ export default function AIChatPage() {
                                         : 'bg-white text-slate-700 border-slate-100 rounded-tl-none'
                                         }`}>
                                         {msg.role === 'assistant' && idx === messages.length - 1 ? (
-                                            <TypewriterEffect text={msg.content} />
+                                            <TypewriterEffect text={msg.content} onUpdate={scrollToBottom} />
                                         ) : (
                                             msg.content
                                         )}
