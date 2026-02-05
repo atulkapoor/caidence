@@ -23,15 +23,37 @@ function AnalyticsContent() {
     const [activeTab, setActiveTab] = useTabState("overview");
     const [data, setData] = useState<AnalyticsDashboardResponse | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const loadData = async () => {
             try {
+                console.log("Loading analytics dashboard...");
                 const analytics = await getDashboardAnalytics();
+                console.log("Analytics loaded:", analytics);
                 setData(analytics);
-            } catch (error) {
-                console.error("Failed to load analytics", error);
-                toast.error("Failed to load analytics data");
+                setError(null);
+            } catch (error: any) {
+                console.error("Failed to load analytics:", error);
+                setError(error?.message || "Failed to load analytics");
+                // Still set mock data on error
+                setData({
+                    overview: { total_reach: 1250000, engagement_rate: 4.2, conversions: 892, roi: 3.8 },
+                    trends: [
+                        { date: "Jan", value: 4000, engagement: 2400 },
+                        { date: "Feb", value: 3500, engagement: 1398 },
+                        { date: "Mar", value: 5200, engagement: 9800 },
+                        { date: "Apr", value: 4800, engagement: 3908 },
+                        { date: "May", value: 6100, engagement: 4800 },
+                        { date: "Jun", value: 5400, engagement: 3800 },
+                        { date: "Jul", value: 7200, engagement: 4300 }
+                    ],
+                    audience: [
+                        { name: "Mobile", value: 52 },
+                        { name: "Desktop", value: 35 },
+                        { name: "Tablet", value: 13 }
+                    ]
+                });
             } finally {
                 setLoading(false);
             }
@@ -72,6 +94,12 @@ function AnalyticsContent() {
 
                     {activeTab === "overview" ? (
                         <div className="space-y-8 animate-in fade-in duration-500">
+                            {error && (
+                                <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg">
+                                    <p className="font-medium">⚠️ API Error: {error}</p>
+                                    <p className="text-sm text-amber-700 mt-1">Showing analytics with demo data</p>
+                                </div>
+                            )}
                             {loading ? (
                                 <div className="h-64 flex flex-col items-center justify-center text-slate-400">
                                     <Loader2 className="w-8 h-8 animate-spin mb-4 text-indigo-600" />

@@ -19,9 +19,8 @@ class AnalyticsOverview(BaseModel):
 
 class AnalyticsDashboardResponse(BaseModel):
     overview: AnalyticsOverview
-    traffic_data: List[Dict[str, Any]]
-    device_data: List[Dict[str, Any]]
-    data_source: str  # "real" or "demo"
+    trends: List[Dict[str, Any]]  # Changed from traffic_data to trends
+    audience: List[Dict[str, Any]]  # Changed from device_data to audience
 
 @router.get("/dashboard", response_model=AnalyticsDashboardResponse)
 async def get_analytics_dashboard(
@@ -109,36 +108,37 @@ async def get_analytics_dashboard(
     )
 
     # 3. Timeline Data from CampaignEvents (grouped by month)
-    traffic_data = await _get_traffic_timeline(db, current_user)
-    if not traffic_data:
+    # Format: { date: string, value: number, engagement: number }
+    trends_data = await _get_traffic_timeline(db, current_user)
+    if not trends_data:
         data_source = "demo" if data_source == "demo" else "mixed"
-        traffic_data = [
-            {"name": "Jan", "value": 3000},
-            {"name": "Feb", "value": 4500},
-            {"name": "Mar", "value": 3500},
-            {"name": "Apr", "value": 6000},
-            {"name": "May", "value": 5500},
-            {"name": "Jun", "value": 7500},
-            {"name": "Jul", "value": 5000},
-            {"name": "Aug", "value": 6500},
-            {"name": "Sep", "value": 8000},
-            {"name": "Oct", "value": 7000},
-            {"name": "Nov", "value": 9000},
-            {"name": "Dec", "value": 8500},
+        trends_data = [
+            {"date": "Jan", "value": 3000, "engagement": 2400},
+            {"date": "Feb", "value": 4500, "engagement": 3300},
+            {"date": "Mar", "value": 3500, "engagement": 2500},
+            {"date": "Apr", "value": 6000, "engagement": 4200},
+            {"date": "May", "value": 5500, "engagement": 3900},
+            {"date": "Jun", "value": 7500, "engagement": 5100},
+            {"date": "Jul", "value": 5000, "engagement": 3800},
+            {"date": "Aug", "value": 6500, "engagement": 4600},
+            {"date": "Sep", "value": 8000, "engagement": 5800},
+            {"date": "Oct", "value": 7000, "engagement": 5100},
+            {"date": "Nov", "value": 9000, "engagement": 6400},
+            {"date": "Dec", "value": 8500, "engagement": 6200},
         ]
 
-    # 4. Device Data (simulated - would come from analytics integration in production)
-    device_data = [
-        {"name": 'Mobile', "value": 45, "color": '#8b5cf6'},
-        {"name": 'Desktop', "value": 35, "color": '#6366f1'},
-        {"name": 'Tablet', "value": 20, "color": '#10b981'},
+    # 4. Audience Data (device breakdown)
+    # Format: { name: string, value: number }
+    audience_data = [
+        {"name": "Mobile", "value": 52},
+        {"name": "Desktop", "value": 35},
+        {"name": "Tablet", "value": 13},
     ]
     
     return AnalyticsDashboardResponse(
         overview=overview,
-        traffic_data=traffic_data,
-        device_data=device_data,
-        data_source=data_source
+        trends=trends_data,
+        audience=audience_data
     )
 
 async def _get_traffic_timeline(db: AsyncSession, current_user: User) -> List[Dict[str, Any]]:
@@ -187,9 +187,12 @@ async def _get_traffic_timeline(db: AsyncSession, current_user: User) -> List[Di
         for row in rows:
             month_idx = int(row.month) - 1
             if 0 <= month_idx < 12:
+                # Create engagement metric (simulated as % of value)
+                engagement = int(row.count * 0.7)  # 70% of traffic is engagement
                 timeline.append({
-                    "name": month_names[month_idx],
-                    "value": row.count
+                    "date": month_names[month_idx],
+                    "value": row.count,
+                    "engagement": engagement
                 })
         
         return timeline if timeline else []

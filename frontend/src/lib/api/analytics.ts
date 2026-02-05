@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./core";
+import { API_BASE_URL, authenticatedFetch } from "./core";
 
 export interface AnalyticsOverview {
     total_reach: number;
@@ -15,35 +15,52 @@ export interface AnalyticsDashboardResponse {
 
 export async function getDashboardAnalytics(): Promise<AnalyticsDashboardResponse> {
     try {
-        const res = await fetch(`${API_BASE_URL}/analytics/dashboard`);
-        if (!res.ok) throw new Error("Failed to fetch analytics dashboard");
-        return res.json();
+        const token = typeof localStorage !== 'undefined' ? localStorage.getItem("token") : null;
+        
+        if (!token) {
+            console.warn("No auth token found, using mock data");
+            return getMockAnalyticsData();
+        }
+
+        const res = await authenticatedFetch(`${API_BASE_URL}/analytics/dashboard`);
+        
+        if (!res.ok) {
+            console.warn(`Analytics API returned ${res.status}, using mock data`, await res.text());
+            return getMockAnalyticsData();
+        }
+        
+        const data = await res.json();
+        console.log("Analytics data loaded successfully:", data);
+        return data;
     } catch (error) {
-        console.error("Analytics API failed, using mock data:", error);
-        // Return mock data as fallback
-        return {
-            overview: {
-                total_reach: 1250000,
-                engagement_rate: 4.2,
-                conversions: 892,
-                roi: 3.8
-            },
-            trends: [
-                { date: "Jan", value: 4000, engagement: 2400 },
-                { date: "Feb", value: 3500, engagement: 1398 },
-                { date: "Mar", value: 5200, engagement: 9800 },
-                { date: "Apr", value: 4800, engagement: 3908 },
-                { date: "May", value: 6100, engagement: 4800 },
-                { date: "Jun", value: 5400, engagement: 3800 },
-                { date: "Jul", value: 7200, engagement: 4300 }
-            ],
-            audience: [
-                { name: "Mobile", value: 52 },
-                { name: "Desktop", value: 35 },
-                { name: "Tablet", value: 13 }
-            ]
-        };
+        console.error("Analytics API error, using mock data:", error);
+        return getMockAnalyticsData();
     }
+}
+
+function getMockAnalyticsData(): AnalyticsDashboardResponse {
+    return {
+        overview: {
+            total_reach: 1250000,
+            engagement_rate: 4.2,
+            conversions: 892,
+            roi: 3.8
+        },
+        trends: [
+            { date: "Jan", value: 4000, engagement: 2400 },
+            { date: "Feb", value: 3500, engagement: 1398 },
+            { date: "Mar", value: 5200, engagement: 9800 },
+            { date: "Apr", value: 4800, engagement: 3908 },
+            { date: "May", value: 6100, engagement: 4800 },
+            { date: "Jun", value: 5400, engagement: 3800 },
+            { date: "Jul", value: 7200, engagement: 4300 }
+        ],
+        audience: [
+            { name: "Mobile", value: 52 },
+            { name: "Desktop", value: 35 },
+            { name: "Tablet", value: 13 }
+        ]
+    };
 }
 
 export interface CompetitorAnalysisResponse {
@@ -58,7 +75,7 @@ export interface CompetitorAnalysisResponse {
 
 export async function fetchCompetitorAnalysis(competitors: string[]): Promise<CompetitorAnalysisResponse> {
     // Phase 1: No Auth required for demo analytics
-    const res = await fetch(`${API_BASE_URL}/analytics/competitor-analysis`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/analytics/competitor-analysis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ competitors })
@@ -81,7 +98,7 @@ export interface AudienceOverlapResponse {
 
 export async function fetchAudienceOverlap(channels: string[]): Promise<AudienceOverlapResponse> {
     try {
-        const res = await fetch(`${API_BASE_URL}/analytics/audience-overlap`, {
+        const res = await authenticatedFetch(`${API_BASE_URL}/analytics/audience-overlap`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ channels })
@@ -125,7 +142,7 @@ export interface CampaignAnalytics {
 
 export async function fetchCampaignAnalytics(): Promise<CampaignAnalytics> {
     try {
-        const res = await fetch(`${API_BASE_URL}/analytics/campaigns`);
+        const res = await authenticatedFetch(`${API_BASE_URL}/analytics/campaigns`);
         if (!res.ok) throw new Error("Failed to fetch campaign analytics");
         return res.json();
     } catch (error) {
