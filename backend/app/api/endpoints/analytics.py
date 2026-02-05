@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, extract
 from app.core.database import get_db
-from app.models.models import Campaign, Influencer, CampaignEvent, CampaignInfluencer
+from app.models.models import Campaign, Influencer, CampaignEvent, CampaignInfluencer, User
+from app.api.deps import require_analytics_read
 
 router = APIRouter()
 
@@ -23,16 +24,29 @@ class AnalyticsDashboardResponse(BaseModel):
     data_source: str  # "real" or "demo"
 
 @router.get("/dashboard", response_model=AnalyticsDashboardResponse)
-async def get_analytics_dashboard(db: AsyncSession = Depends(get_db)):
+async def get_analytics_dashboard(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_analytics_read)
+):
     """
     Returns aggregated analytics for the Analytics Suite.
     Uses real data from CampaignEvent table, with smart fallback for empty databases.
     """
     data_source = "real"
     
+    # Build org filter
+    if current_user.role == "super_admin":
+        campaign_filter = select(Campaign.id)
+        event_filter = select(CampaignEvent.id)
+        influencer_filter = select(Influencer.id)
+    else:
+        campaign_filter = select(Campaign.id).join(User, Campaign.owner_id == User.id).where(User.organization_id == current_user.organization_id)
+        event_filter = select(CampaignEvent.id).join(Campaign, CampaignEvent.campaign_id == Campaign.id).join(User, Campaign.owner_id == User.id).where(User.organization_id == current_user.organization_id)
+        influencer_filter = select(Influencer.id)
+    
     # 1. Real Counts from DB
     active_campaigns_count = await db.scalar(
-        select(func.count(Campaign.id)).where(Campaign.status == "active")
+        select(func.count(Campaign.id)).where((Campaign.status == "active") & (Campaign.id.in_(campaign_filter)))
     ) or 0
 
     total_influencers = await db.scalar(
@@ -41,12 +55,12 @@ async def get_analytics_dashboard(db: AsyncSession = Depends(get_db)):
     
     # Count events by type
     total_events = await db.scalar(
-        select(func.count(CampaignEvent.id))
+        select(func.count(CampaignEvent.id)).where(CampaignEvent.id.in_(event_filter))
     ) or 0
     
     # Get conversion events specifically
     conversion_events = await db.scalar(
-        select(func.count(CampaignEvent.id)).where(CampaignEvent.type == "conversion")
+        select(func.count(CampaignEvent.id)).where((CampaignEvent.type == "conversion") & (CampaignEvent.id.in_(event_filter)))
     ) or 0
     
     # Calculate Total Reach from influencers
@@ -55,10 +69,10 @@ async def get_analytics_dashboard(db: AsyncSession = Depends(get_db)):
     
     # Get real engagement data from events
     click_events = await db.scalar(
-        select(func.count(CampaignEvent.id)).where(CampaignEvent.type == "click")
+        select(func.count(CampaignEvent.id)).where((CampaignEvent.type == "click") & (CampaignEvent.id.in_(event_filter)))
     ) or 0
     view_events = await db.scalar(
-        select(func.count(CampaignEvent.id)).where(CampaignEvent.type == "view")
+        select(func.count(CampaignEvent.id)).where((CampaignEvent.type == "view") & (CampaignEvent.id.in_(event_filter)))
     ) or 0
     
     # Calculate engagement rate from real data
@@ -69,19 +83,18 @@ async def get_analytics_dashboard(db: AsyncSession = Depends(get_db)):
     
     # Calculate ROI from event values
     total_revenue = await db.scalar(
-        select(func.sum(CampaignEvent.value)).where(CampaignEvent.type == "conversion")
+        select(func.sum(CampaignEvent.value)).where((CampaignEvent.type == "conversion") & (CampaignEvent.id.in_(event_filter)))
     ) or 0
     
     # 2. Determine if we have real data or need demo fallback
     has_real_data = total_events > 0 or real_reach > 0
     
     if has_real_data:
-        display_reach = real_reach if real_reach > 0 else int(total_influencers * 50000)  # estimate
+        display_reach = real_reach if real_reach > 0 else int(total_influencers * 50000)
         conversions = conversion_events if conversion_events > 0 else int(total_events * 0.1)
         engagement = real_engagement if real_engagement > 0 else round(random.uniform(3.0, 6.0), 2)
         roi = round((total_revenue / 10000) if total_revenue > 0 else (3.0 + active_campaigns_count * 0.15), 2)
     else:
-        # Demo fallback for fresh installations
         data_source = "demo"
         display_reach = 1250000
         conversions = 842
@@ -96,9 +109,8 @@ async def get_analytics_dashboard(db: AsyncSession = Depends(get_db)):
     )
 
     # 3. Timeline Data from CampaignEvents (grouped by month)
-    traffic_data = await _get_traffic_timeline(db)
+    traffic_data = await _get_traffic_timeline(db, current_user)
     if not traffic_data:
-        # Fallback to demo timeline
         data_source = "demo" if data_source == "demo" else "mixed"
         traffic_data = [
             {"name": "Jan", "value": 3000},
@@ -129,7 +141,7 @@ async def get_analytics_dashboard(db: AsyncSession = Depends(get_db)):
         data_source=data_source
     )
 
-async def _get_traffic_timeline(db: AsyncSession) -> List[Dict[str, Any]]:
+async def _get_traffic_timeline(db: AsyncSession, current_user: User) -> List[Dict[str, Any]]:
     """
     Aggregate CampaignEvents by month for timeline chart.
     Returns empty list if no events exist.
@@ -138,28 +150,42 @@ async def _get_traffic_timeline(db: AsyncSession) -> List[Dict[str, Any]]:
                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     
     try:
-        # Get events from last 12 months grouped by month
         twelve_months_ago = datetime.now() - timedelta(days=365)
         
-        result = await db.execute(
-            select(
-                extract('month', CampaignEvent.created_at).label('month'),
-                func.count(CampaignEvent.id).label('count')
+        if current_user.role == "super_admin":
+            result = await db.execute(
+                select(
+                    extract('month', CampaignEvent.created_at).label('month'),
+                    func.count(CampaignEvent.id).label('count')
+                )
+                .where(CampaignEvent.created_at >= twelve_months_ago)
+                .group_by(extract('month', CampaignEvent.created_at))
+                .order_by(extract('month', CampaignEvent.created_at))
             )
-            .where(CampaignEvent.created_at >= twelve_months_ago)
-            .group_by(extract('month', CampaignEvent.created_at))
-            .order_by(extract('month', CampaignEvent.created_at))
-        )
+        else:
+            result = await db.execute(
+                select(
+                    extract('month', CampaignEvent.created_at).label('month'),
+                    func.count(CampaignEvent.id).label('count')
+                )
+                .join(Campaign, CampaignEvent.campaign_id == Campaign.id)
+                .join(User, Campaign.owner_id == User.id)
+                .where(
+                    (CampaignEvent.created_at >= twelve_months_ago) &
+                    (User.organization_id == current_user.organization_id)
+                )
+                .group_by(extract('month', CampaignEvent.created_at))
+                .order_by(extract('month', CampaignEvent.created_at))
+            )
         
         rows = result.all()
         
         if not rows:
             return []
         
-        # Build timeline from DB data
         timeline = []
         for row in rows:
-            month_idx = int(row.month) - 1  # Convert 1-12 to 0-11
+            month_idx = int(row.month) - 1
             if 0 <= month_idx < 12:
                 timeline.append({
                     "name": month_names[month_idx],
@@ -169,7 +195,6 @@ async def _get_traffic_timeline(db: AsyncSession) -> List[Dict[str, Any]]:
         return timeline if timeline else []
         
     except Exception as e:
-        print(f"Error getting traffic timeline: {e}")
         return []
 
 
@@ -184,14 +209,16 @@ class OverlapResponse(BaseModel):
     message: str
 
 @router.post("/audience-overlap", response_model=OverlapResponse)
-async def calculate_audience_overlap(request: OverlapRequest):
+async def calculate_audience_overlap(
+    request: OverlapRequest,
+    current_user: User = Depends(require_analytics_read)
+):
     """
     Simulates audience overlap calculation for selected channels.
     """
     if not request.channels:
          raise HTTPException(status_code=400, detail="No channels provided")
 
-    # Mock data generation
     base_reach = {
         "Instagram": 500000,
         "TikTok": 800000,
@@ -206,9 +233,7 @@ async def calculate_audience_overlap(request: OverlapRequest):
     breakdown = []
     
     for channel in request.channels:
-        # Get reach or default to 100k if unknown
         reach = base_reach.get(channel, 100000)
-        # Add some random variance
         reach = int(reach * random.uniform(0.9, 1.1))
         
         total_raw_reach += reach
@@ -218,14 +243,11 @@ async def calculate_audience_overlap(request: OverlapRequest):
             "color": get_channel_color(channel)
         })
 
-    # Simulate overlap increasing with more channels
     num_channels = len(request.channels)
     if num_channels <= 1:
         overlap_factor = 0.0
     else:
-        # 10-30% overlap per additional channel, capped at 60%
         overlap_factor = min(0.15 * (num_channels - 1), 0.60)
-        # Add randomness
         overlap_factor *= random.uniform(0.8, 1.2)
     
     unique_reach = int(total_raw_reach * (1 - overlap_factor))
@@ -261,14 +283,16 @@ class CredibilityResponse(BaseModel):
     credibility_score: int
     fake_follower_percentage: float
     is_verified: bool
-    risk_level: str # Low, Medium, High
+    risk_level: str
 
 @router.post("/influencer-credibility", response_model=CredibilityResponse)
-async def calculate_credibility(request: CredibilityRequest):
+async def calculate_credibility(
+    request: CredibilityRequest,
+    current_user: User = Depends(require_analytics_read)
+):
     """
     Simulates bot detection and audience quality scoring.
     """
-    # Deterministic mock based on handle length to be consistent
     seed = len(request.handle)
     random.seed(seed)
     
@@ -297,7 +321,10 @@ class CompetitorRequest(BaseModel):
     competitors: List[str]
 
 @router.post("/competitor-analysis")
-async def analyze_competitors(request: CompetitorRequest):
+async def analyze_competitors(
+    request: CompetitorRequest,
+    current_user: User = Depends(require_analytics_read)
+):
     """
     Simulates finding competitor content and share of voice.
     """
@@ -318,7 +345,6 @@ async def analyze_competitors(request: CompetitorRequest):
             "recent_activity": f"{random.randint(2, 15)} posts in last 24h"
         })
         
-    # Add "Others" to close the loop to 100% (or close to it)
     if total_sov < 100:
         results.append({
             "name": "Others / Market",
@@ -329,3 +355,4 @@ async def analyze_competitors(request: CompetitorRequest):
         })
     
     return {"breakdown": results}
+

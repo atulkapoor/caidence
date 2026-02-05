@@ -7,10 +7,11 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 import uuid
+import random
 
 from app.core.database import get_db
 from app.models import Creator, User
-from app.api.endpoints.auth import get_current_active_user
+from app.api.deps import get_current_active_user, require_creators_read, require_creators_write
 from app.services.auth_service import is_super_admin, is_brand_level
 
 router = APIRouter()
@@ -85,10 +86,10 @@ async def list_creators(
     brand_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_creators_read)
 ):
     """
-    List creators in user's brand or all brands if agency/super admin.
+    List creators in user's organization.
     """
     query = select(Creator)
     
@@ -98,11 +99,11 @@ async def list_creators(
     if status:
         query = query.where(Creator.status == status)
     
-    # Permission filtering
-    if not is_super_admin(current_user.role):
-        # Filter by organization's brands
-        # For now, just return all - will implement brand-org filtering later
-        pass
+    # Org filtering
+    if current_user.role != "super_admin":
+        query = query.join(User, Creator.user_id == User.id).where(
+            User.organization_id == current_user.organization_id
+        )
     
     result = await db.execute(query)
     return result.scalars().all()
@@ -112,14 +113,11 @@ async def list_creators(
 async def add_creator(
     creator_data: CreatorCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_creators_write)
 ):
     """
-    Add a creator to a brand's roster.
+    Add a creator to the roster.
     """
-    if not is_brand_level(current_user.role):
-        raise HTTPException(status_code=403, detail="Not authorized to add creators")
-    
     new_creator = Creator(
         brand_id=creator_data.brand_id,
         handle=creator_data.handle,
@@ -133,7 +131,8 @@ async def add_creator(
         follower_count=creator_data.follower_count or 0,
         engagement_rate=creator_data.engagement_rate or 0.0,
         status="active",
-        is_approved=True,  # Added by brand, auto-approved
+        is_approved=True,
+        user_id=current_user.id
     )
     db.add(new_creator)
     await db.commit()
@@ -145,12 +144,22 @@ async def add_creator(
 async def get_creator(
     creator_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_creators_read)
 ):
     """
     Get creator details.
     """
-    result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    if current_user.role == "super_admin":
+        result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    else:
+        result = await db.execute(
+            select(Creator)
+            .join(User, Creator.user_id == User.id)
+            .where(
+                (Creator.id == creator_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
     creator = result.scalar_one_or_none()
     
     if not creator:
@@ -164,18 +173,27 @@ async def update_creator(
     creator_id: int,
     creator_data: CreatorUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_creators_write)
 ):
     """
     Update creator details.
     """
-    result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    if current_user.role == "super_admin":
+        result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    else:
+        result = await db.execute(
+            select(Creator)
+            .join(User, Creator.user_id == User.id)
+            .where(
+                (Creator.id == creator_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
     creator = result.scalar_one_or_none()
     
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
     
-    # Update fields
     for field, value in creator_data.dict(exclude_unset=True).items():
         setattr(creator, field, value)
     
@@ -188,12 +206,22 @@ async def update_creator(
 async def remove_creator(
     creator_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_creators_write)
 ):
     """
-    Remove creator from roster (soft delete to 'past' status).
+    Remove creator from roster.
     """
-    result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    if current_user.role == "super_admin":
+        result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    else:
+        result = await db.execute(
+            select(Creator)
+            .join(User, Creator.user_id == User.id)
+            .where(
+                (Creator.id == creator_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
     creator = result.scalar_one_or_none()
     
     if not creator:
@@ -209,12 +237,22 @@ async def remove_creator(
 async def generate_affiliate_link(
     creator_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_creators_write)
 ):
     """
     Generate unique affiliate code for creator.
     """
-    result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    if current_user.role == "super_admin":
+        result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    else:
+        result = await db.execute(
+            select(Creator)
+            .join(User, Creator.user_id == User.id)
+            .where(
+                (Creator.id == creator_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
     creator = result.scalar_one_or_none()
     
     if not creator:
@@ -235,19 +273,27 @@ async def generate_affiliate_link(
 async def get_creator_performance(
     creator_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_creators_read)
 ):
     """
-    Get creator performance metrics (mock data for now).
+    Get creator performance metrics.
     """
-    result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    if current_user.role == "super_admin":
+        result = await db.execute(select(Creator).where(Creator.id == creator_id))
+    else:
+        result = await db.execute(
+            select(Creator)
+            .join(User, Creator.user_id == User.id)
+            .where(
+                (Creator.id == creator_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
     creator = result.scalar_one_or_none()
     
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
     
-    # Mock performance data
-    import random
     clicks = random.randint(500, 5000)
     conversions = random.randint(20, 200)
     revenue = conversions * random.uniform(50, 150)
@@ -259,3 +305,4 @@ async def get_creator_performance(
         total_revenue=round(revenue, 2),
         commission_earned=round(revenue * creator.commission_rate, 2)
     )
+

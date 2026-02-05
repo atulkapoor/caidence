@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.models import models
 from app.models.models import Campaign, CampaignEvent, Influencer, CampaignInfluencer, User
-from app.api.deps import get_current_active_user, require_permission
+from app.api.deps import require_campaign_read, require_campaign_write
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -26,9 +26,21 @@ async def read_campaigns(
     skip: int = 0, 
     limit: int = 100, 
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("read", "campaign"))
+    current_user: User = Depends(require_campaign_read)
 ):
-    result = await db.execute(select(Campaign).order_by(Campaign.created_at.desc()).offset(skip).limit(limit))
+    if current_user.role == "super_admin":
+        result = await db.execute(
+            select(Campaign).order_by(Campaign.created_at.desc()).offset(skip).limit(limit)
+        )
+    else:
+        result = await db.execute(
+            select(Campaign)
+            .join(User, Campaign.owner_id == User.id)
+            .where(User.organization_id == current_user.organization_id)
+            .order_by(Campaign.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
     campaigns = result.scalars().all()
     return campaigns
 
@@ -36,9 +48,8 @@ async def read_campaigns(
 async def create_campaign(
     campaign: schemas.CampaignCreate, 
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("write", "campaign"))
+    current_user: User = Depends(require_campaign_write)
 ):
-    # Use authenticated user's ID instead of hardcoded value
     db_campaign = Campaign(**campaign.dict(), owner_id=current_user.id) 
     db.add(db_campaign)
     await db.commit()
@@ -46,20 +57,51 @@ async def create_campaign(
     return db_campaign
 
 @router.get("/{campaign_id}", response_model=schemas.CampaignFullResponse)
-async def read_campaign(campaign_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Campaign)
-        .options(selectinload(Campaign.influencers), selectinload(Campaign.events))
-        .where(Campaign.id == campaign_id)
-    )
+async def read_campaign(
+    campaign_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_campaign_read)
+):
+    if current_user.role == "super_admin":
+        result = await db.execute(
+            select(Campaign)
+            .options(selectinload(Campaign.influencers), selectinload(Campaign.events))
+            .where(Campaign.id == campaign_id)
+        )
+    else:
+        result = await db.execute(
+            select(Campaign)
+            .options(selectinload(Campaign.influencers), selectinload(Campaign.events))
+            .join(User, Campaign.owner_id == User.id)
+            .where(
+                (Campaign.id == campaign_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
     campaign = result.scalar_one_or_none()
-    if campaign is None:
+    if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return campaign
 
 @router.post("/{campaign_id}/launch")
-async def launch_campaign(campaign_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+async def launch_campaign(
+    campaign_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_campaign_write)
+):
+    if current_user.role == "super_admin":
+        result = await db.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        )
+    else:
+        result = await db.execute(
+            select(Campaign)
+            .join(User, Campaign.owner_id == User.id)
+            .where(
+                (Campaign.id == campaign_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
     campaign = result.scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -70,7 +112,7 @@ async def launch_campaign(campaign_id: int, db: AsyncSession = Depends(get_db)):
     event = CampaignEvent(
         campaign_id=campaign.id,
         type="launch",
-        value=0, # No monetary value for launch itself
+        value=0,
         metadata_json='{"triggered_by": "user_action"}'
     )
     db.add(event)
@@ -78,29 +120,41 @@ async def launch_campaign(campaign_id: int, db: AsyncSession = Depends(get_db)):
     return {"status": "launched", "campaign_id": campaign.id}
 
 @router.post("/{campaign_id}/influencers")
-async def add_influencer_to_campaign(campaign_id: int, influencer_handle: str, db: AsyncSession = Depends(get_db)):
-    # 1. Check Campaign
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+async def add_influencer_to_campaign(
+    campaign_id: int,
+    influencer_handle: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_campaign_write)
+):
+    if current_user.role == "super_admin":
+        result = await db.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        )
+    else:
+        result = await db.execute(
+            select(Campaign)
+            .join(User, Campaign.owner_id == User.id)
+            .where(
+                (Campaign.id == campaign_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
     campaign = result.scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    # 2. Check/Create Influencer (Simple Logic: If not exists, create stub)
     result = await db.execute(select(Influencer).where(Influencer.handle == influencer_handle))
     influencer = result.scalar_one_or_none()
     
     if not influencer:
-        # Create minimal influencer record
         influencer = Influencer(
             handle=influencer_handle,
-            platform="Instagram", # Defaulting for now
+            platform="Instagram",
             followers=0
         )
         db.add(influencer)
-        await db.flush() # Get ID
+        await db.flush()
         
-    # 3. Create Link
-    # Check if already linked
     link_result = await db.execute(select(CampaignInfluencer).where(
         (CampaignInfluencer.campaign_id == campaign.id) & 
         (CampaignInfluencer.influencer_id == influencer.id)
@@ -115,10 +169,27 @@ async def add_influencer_to_campaign(campaign_id: int, influencer_handle: str, d
     return {"status": "added", "influencer": influencer.handle}
 
 @router.put("/{campaign_id}", response_model=schemas.Campaign)
-async def update_campaign(campaign_id: int, campaign: CampaignUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+async def update_campaign(
+    campaign_id: int,
+    campaign: CampaignUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_campaign_write)
+):
+    if current_user.role == "super_admin":
+        result = await db.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        )
+    else:
+        result = await db.execute(
+            select(Campaign)
+            .join(User, Campaign.owner_id == User.id)
+            .where(
+                (Campaign.id == campaign_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
     db_campaign = result.scalar_one_or_none()
-    if db_campaign is None:
+    if not db_campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     
     for key, value in campaign.dict().items():
@@ -128,12 +199,37 @@ async def update_campaign(campaign_id: int, campaign: CampaignUpdate, db: AsyncS
     await db.refresh(db_campaign)
     return db_campaign
 
+@router.delete("/{campaign_id}")
+async def delete_campaign(
+    campaign_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_campaign_write)
+):
+    if current_user.role == "super_admin":
+        result = await db.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        )
+    else:
+        result = await db.execute(
+            select(Campaign)
+            .join(User, Campaign.owner_id == User.id)
+            .where(
+                (Campaign.id == campaign_id) &
+                (User.organization_id == current_user.organization_id)
+            )
+        )
+    db_campaign = result.scalar_one_or_none()
+    if not db_campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
     await db.delete(db_campaign)
     await db.commit()
     return {"ok": True}
 
 @router.get("/analytics/stats")
-async def get_campaign_analytics():
+async def get_campaign_analytics(
+    current_user: User = Depends(require_campaign_read)
+):
     """
     Returns aggregated analytics for the campaign dashboard.
     In a real app, this would aggregate data from an Events/Metrics table.
@@ -160,3 +256,4 @@ async def get_campaign_analytics():
             {"name": "Display", "value": 10}
         ]
     }
+

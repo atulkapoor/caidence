@@ -4,11 +4,17 @@ from typing import List
 from app.schemas.schemas import InfluencerProfile, DiscoveryRequest
 from app.services.discovery_service import DiscoveryService
 from app.core.database import get_db
+from app.models.models import User
+from app.api.deps import require_discovery_read
 
 router = APIRouter()
 
 @router.post("/search", response_model=List[InfluencerProfile])
-async def search_influencers(request: DiscoveryRequest, db: AsyncSession = Depends(get_db)):
+async def search_influencers(
+    request: DiscoveryRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_discovery_read)
+):
     """
     Search for influencers based on text query and filters.
     Priority: Database -> Modash API -> Mock data
@@ -20,7 +26,11 @@ async def search_influencers(request: DiscoveryRequest, db: AsyncSession = Depen
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/image-search", response_model=List[InfluencerProfile])
-async def search_by_image(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def search_by_image(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_discovery_read)
+):
     """
     Search for influencers matching the visual style of an uploaded image.
     """
@@ -31,7 +41,11 @@ async def search_by_image(file: UploadFile = File(...), db: AsyncSession = Depen
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/influencers/{handle}", response_model=InfluencerProfile)
-async def get_influencer_profile(handle: str, db: AsyncSession = Depends(get_db)):
+async def get_influencer_profile(
+    handle: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_discovery_read)
+):
     """
     Get detailed profile for a specific influencer.
     Priority: Database -> Modash API -> Mock data
@@ -43,4 +57,5 @@ async def get_influencer_profile(handle: str, db: AsyncSession = Depends(get_db)
         return profile
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 

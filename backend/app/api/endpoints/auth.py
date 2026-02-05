@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_current_active_user, get_db, require_super_admin
 from app.models.models import User
 from app.services.auth_service import verify_password, get_password_hash, create_access_token
 
@@ -120,10 +120,11 @@ async def get_me(current_user: User = Depends(get_current_active_user)):
 async def set_password(
     email: str,
     password: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_admin)
 ):
     """
-    Set password for invited user (no email verification for now).
+    Set password for invited user. Requires super admin authorization.
     """
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
@@ -135,6 +136,7 @@ async def set_password(
     await db.commit()
     
     return {"message": "Password set successfully"}
+
 @router.post("/recover-password")
 async def recover_password(
     email: str,
@@ -159,3 +161,4 @@ async def recover_password(
     
     # Always return success to prevent email enumeration
     return {"message": "If this email is registered, a recovery link has been sent."}
+

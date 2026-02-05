@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.database import get_db
-from app.models.models import Influencer, Campaign, CampaignInfluencer
+from app.models.models import Influencer, Campaign, CampaignInfluencer, User
 from app.models.creator import Creator
+from app.api.deps import require_crm_read, require_crm_write
 
 router = APIRouter()
 
@@ -30,7 +31,10 @@ class RelationshipProfile(BaseModel):
     data_source: str = "real"  # "real" or "demo"
 
 @router.get("/relationships", response_model=List[RelationshipProfile])
-async def get_relationships(db: AsyncSession = Depends(get_db)):
+async def get_relationships(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_read)
+):
     """
     Returns CRM data for influencer relationships.
     Queries real Creators and Influencers with their campaign history.
@@ -38,15 +42,24 @@ async def get_relationships(db: AsyncSession = Depends(get_db)):
     """
     profiles = []
     
-    # 1. Query Creators (richer relationship data)
-    creators_result = await db.execute(
-        select(Creator).order_by(Creator.created_at.desc()).limit(20)
-    )
+    # 1. Query Creators (richer relationship data) with org filtering
+    if current_user.role == "super_admin":
+        creators_result = await db.execute(
+            select(Creator).order_by(Creator.created_at.desc()).limit(20)
+        )
+    else:
+        creators_result = await db.execute(
+            select(Creator)
+            .join(User, Creator.user_id == User.id)
+            .where(User.organization_id == current_user.organization_id)
+            .order_by(Creator.created_at.desc())
+            .limit(20)
+        )
     creators = creators_result.scalars().all()
     
     for creator in creators:
         # Get campaign history for this creator's linked influencer
-        campaign_history = await _get_creator_campaign_history(db, creator.handle)
+        campaign_history = await _get_creator_campaign_history(db, creator.handle, current_user)
         
         profiles.append(RelationshipProfile(
             handle=f"@{creator.handle.lstrip('@')}",
@@ -75,7 +88,7 @@ async def get_relationships(db: AsyncSession = Depends(get_db)):
                 continue
             
             # Get campaign history
-            campaign_history = await _get_influencer_campaign_history(db, influencer.id)
+            campaign_history = await _get_influencer_campaign_history(db, influencer.id, current_user)
             
             profiles.append(RelationshipProfile(
                 handle=handle,
@@ -106,31 +119,43 @@ def _map_creator_status(status: str) -> str:
     }
     return mapping.get(status, "Active")
 
-async def _get_creator_campaign_history(db: AsyncSession, handle: str) -> List[CampaignHistory]:
+async def _get_creator_campaign_history(db: AsyncSession, handle: str, current_user: User) -> List[CampaignHistory]:
     """Get campaign history for a creator by their handle."""
     try:
-        # Find linked influencer
         result = await db.execute(
             select(Influencer).where(Influencer.handle.ilike(f"%{handle.lstrip('@')}%"))
         )
         influencer = result.scalar_one_or_none()
         
         if influencer:
-            return await _get_influencer_campaign_history(db, influencer.id)
+            return await _get_influencer_campaign_history(db, influencer.id, current_user)
         return []
     except Exception:
         return []
 
-async def _get_influencer_campaign_history(db: AsyncSession, influencer_id: int) -> List[CampaignHistory]:
-    """Get campaign history for an influencer."""
+async def _get_influencer_campaign_history(db: AsyncSession, influencer_id: int, current_user: User) -> List[CampaignHistory]:
+    """Get campaign history for an influencer with org filtering."""
     try:
-        result = await db.execute(
-            select(CampaignInfluencer, Campaign)
-            .join(Campaign, CampaignInfluencer.campaign_id == Campaign.id)
-            .where(CampaignInfluencer.influencer_id == influencer_id)
-            .order_by(CampaignInfluencer.joined_at.desc())
-            .limit(5)
-        )
+        if current_user.role == "super_admin":
+            result = await db.execute(
+                select(CampaignInfluencer, Campaign)
+                .join(Campaign, CampaignInfluencer.campaign_id == Campaign.id)
+                .where(CampaignInfluencer.influencer_id == influencer_id)
+                .order_by(CampaignInfluencer.joined_at.desc())
+                .limit(5)
+            )
+        else:
+            result = await db.execute(
+                select(CampaignInfluencer, Campaign)
+                .join(Campaign, CampaignInfluencer.campaign_id == Campaign.id)
+                .join(User, Campaign.owner_id == User.id)
+                .where(
+                    (CampaignInfluencer.influencer_id == influencer_id) &
+                    (User.organization_id == current_user.organization_id)
+                )
+                .order_by(CampaignInfluencer.joined_at.desc())
+                .limit(5)
+            )
         rows = result.all()
         
         history = []
@@ -138,7 +163,7 @@ async def _get_influencer_campaign_history(db: AsyncSession, influencer_id: int)
             history.append(CampaignHistory(
                 campaign_name=campaign.title or f"Campaign {campaign.id}",
                 date=ci.joined_at.strftime("%Y-%m-%d") if ci.joined_at else datetime.now().strftime("%Y-%m-%d"),
-                roi_multiple=round(random.uniform(1.5, 4.5), 2),  # Would calculate from events in production
+                roi_multiple=round(random.uniform(1.5, 4.5), 2),
                 status="Completed" if campaign.status == "completed" else "Active"
             ))
         return history
@@ -182,7 +207,10 @@ def _generate_demo_relationships() -> List[RelationshipProfile]:
     return profiles
 
 @router.post("/generate-report")
-async def generate_xray_report(handle: str):
+async def generate_xray_report(
+    handle: str,
+    current_user: User = Depends(require_crm_write)
+):
     """
     Generates a PDF 'X-Ray' report for an influencer.
     """
@@ -192,4 +220,5 @@ async def generate_xray_report(handle: str):
         "download_url": "#",
         "generated_at": datetime.now().isoformat()
     }
+
 
