@@ -9,6 +9,17 @@ import { toast } from "sonner";
 
 const API_Base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Map Tailwind color strings to actual CSS gradients
+const gradientMap: Record<string, string> = {
+    "from-blue-500 to-blue-600": "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+    "from-emerald-500 to-teal-500": "linear-gradient(135deg, #10b981 0%, #14b8a6 100%)",
+    "from-violet-500 to-purple-500": "linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)",
+    "from-orange-500 to-amber-500": "linear-gradient(135deg, #f97316 0%, #f59e0b 100%)",
+    "from-pink-500 to-rose-500": "linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)",
+    "from-cyan-500 to-blue-500": "linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)",
+    "from-indigo-500 to-blue-500": "linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)",
+};
+
 export default function ToolRunnerPage() {
     const params = useParams();
     const router = useRouter();
@@ -33,6 +44,9 @@ export default function ToolRunnerPage() {
             </DashboardLayout>
         );
     }
+
+    // Assign icon to proper variable for rendering
+    const IconComponent = tool.icon;
 
     const handleInputChange = (name: string, value: string) => {
         setFormValues((prev) => ({ ...prev, [name]: value }));
@@ -114,8 +128,8 @@ export default function ToolRunnerPage() {
                     {/* Left Column: Input Form */}
                     <div className="col-span-1 lg:col-span-1 space-y-6">
                         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-                            <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${tool.color} flex items-center justify-center text-white shadow-lg mb-4`}>
-                                <tool.icon className="w-6 h-6" />
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-lg mb-4" style={{ background: gradientMap[tool.color] || "linear-gradient(135deg, #6b7280 0%, #4b5563 100%)" }}>
+                                <IconComponent className="w-6 h-6" />
                             </div>
                             <h1 className="text-2xl font-bold text-slate-900 mb-2">{tool.title}</h1>
                             <p className="text-slate-500 text-sm mb-8">{tool.description}</p>
@@ -155,9 +169,8 @@ export default function ToolRunnerPage() {
                                 <button
                                     onClick={handleGenerate}
                                     disabled={loading}
-                                    className={`w-full py-3 mt-4 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2
-                                        bg-gradient-to-r ${tool.color} hover:opacity-90 disabled:opacity-70 disabled:cursor-not-allowed
-                                    `}
+                                    style={{ background: gradientMap[tool.color] || "linear-gradient(135deg, #6b7280 0%, #4b5563 100%)" }}
+                                    className="w-full py-3 mt-4 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-70 disabled:cursor-not-allowed"
                                 >
                                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
                                     {loading ? "Generating..." : "Generate Content"}
