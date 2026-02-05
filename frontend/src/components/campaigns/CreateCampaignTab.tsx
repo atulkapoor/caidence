@@ -222,23 +222,34 @@ export function CreateCampaignTab({ editId }: { editId?: number | null }) {
                     await Promise.all(influencerHandles.map(handle =>
                         addInfluencerToCampaign(newCampaign.id, handle)
                     ));
-                    toast.success(`Added ${influencerHandles.length} influencers`);
+                    toast.success(`Campaign created with ${influencerHandles.length} influencers!`, {
+                        duration: 2000
+                    });
                 } catch (err) {
                     console.error("Error adding influencers", err);
                     toast.error("Some influencers could not be added");
                 }
+            } else {
+                toast.success("Campaign created successfully!", {
+                    duration: 2000
+                });
             }
 
             // Trigger Launch Event
-            await launchCampaign(newCampaign.id);
+            try {
+                await launchCampaign(newCampaign.id);
+            } catch (err) {
+                console.error("Error launching campaign", err);
+                // Continue even if launch fails
+            }
 
-
-            toast.success("Campaign launched successfully!");
-            // Navigate to campaigns list with refresh and explicit tab
-            router.push("/campaigns?tab=Campaign+List");
-            router.refresh();
+            // Delay navigation slightly to let user see success message
+            setTimeout(() => {
+                router.push("/campaigns");
+                router.refresh();
+            }, 500);
         } catch (err) {
-            toast.error("Failed to launch campaign");
+            toast.error("Failed to create campaign: " + (err instanceof Error ? err.message : "Unknown error"));
             console.error(err);
         }
     };

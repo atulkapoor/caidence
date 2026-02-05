@@ -318,10 +318,13 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                         <input
                             required
                             type="email"
+                            placeholder="user@example.com"
                             className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
                             value={formData.email}
                             onChange={e => setFormData({ ...formData, email: e.target.value })}
                         />
+                        <p className="text-xs text-slate-500 mt-1">Format: user@company.com</p>
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Role</label>

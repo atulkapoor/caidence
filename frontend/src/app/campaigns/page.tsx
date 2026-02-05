@@ -30,6 +30,7 @@ function CampaignContent() {
     const [statusFilter, setStatusFilter] = useState<string>("free-all"); // "free-all" is logic for "All"
     const [searchQuery, setSearchQuery] = useState("");
     const [editId, setEditId] = useState<number | null>(null);
+    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
 
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -201,21 +202,29 @@ function CampaignContent() {
                                             className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                                         />
                                     </div>
-                                    <div className="relative group">
-                                        <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 min-w-[140px] justify-between">
-                                            <span className="flex items-center gap-2"><Filter className="w-4 h-4" /> {statusFilter === "free-all" ? "All Status" : statusFilter}</span>
+                                    <div className="relative">
+                                        <button 
+                                            onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                                            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 min-w-[140px] justify-between"
+                                        >
+                                            <span className="flex items-center gap-2"><Filter className="w-4 h-4" /> {statusFilter === "free-all" ? "All Status" : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}</span>
                                         </button>
-                                        <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl z-20 hidden group-hover:block animate-in fade-in zoom-in-95 duration-200">
-                                            {["All", "Active", "Draft", "Paused", "Completed"].map(s => (
-                                                <button
-                                                    key={s}
-                                                    onClick={() => setStatusFilter(s === "All" ? "free-all" : s.toLowerCase())}
-                                                    className="w-full text-left px-4 py-2 hover:bg-slate-50 text-sm font-medium capitalize first:rounded-t-xl last:rounded-b-xl"
-                                                >
-                                                    {s}
-                                                </button>
-                                            ))}
-                                        </div>
+                                        {isStatusDropdownOpen && (
+                                            <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl z-20 animate-in fade-in zoom-in-95 duration-200">
+                                                {["All", "Active", "Draft", "Paused", "Completed"].map(s => (
+                                                    <button
+                                                        key={s}
+                                                        onClick={() => {
+                                                            setStatusFilter(s === "All" ? "free-all" : s.toLowerCase());
+                                                            setIsStatusDropdownOpen(false);
+                                                        }}
+                                                        className="w-full text-left px-4 py-2 hover:bg-slate-50 text-sm font-medium capitalize first:rounded-t-xl last:rounded-b-xl"
+                                                    >
+                                                        {s}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
