@@ -208,8 +208,7 @@ async def update_user_permission(
     # Check if permission exists
     result = await db.execute(
         select(Permission).where(
-            Permission.user_id == user_id,
-            Permission.resource == perm_data.module # Mapping
+            (Permission.user_id == user_id) & (Permission.resource == perm_data.module)
         )
     )
     existing_perm = result.scalar_one_or_none()
@@ -227,6 +226,31 @@ async def update_user_permission(
     
     await db.commit()
     return {"message": "Permission updated"}
+
+
+@router.delete("/users/{user_id}/permissions/{resource}")
+async def remove_user_permission(
+    user_id: int,
+    resource: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_admin)
+):
+    """
+    Remove a specific permission override for a user.
+    """
+    result = await db.execute(
+        select(Permission).where(
+            (Permission.user_id == user_id) & (Permission.resource == resource)
+        )
+    )
+    perm = result.scalar_one_or_none()
+    
+    if not perm:
+        raise HTTPException(status_code=404, detail="Permission not found")
+    
+    await db.delete(perm)
+    await db.commit()
+    return {"message": "Permission removed"}
 
 
 @router.post("/invite", response_model=UserAdminResponse)
@@ -259,13 +283,13 @@ async def invite_team_member(
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    await db.refresh(new_user)
     
-    # Send email
+    # Send email (non-critical, user created regardless)
     try:
         await send_invite_email(new_user.email, invite_data.password)
     except Exception as e:
-        print(f"Failed to send email: {e}")
+        # Log error but don't fail user creation
+        print(f"Failed to send invite email to {new_user.email}: {e}")
 
     return new_user
 

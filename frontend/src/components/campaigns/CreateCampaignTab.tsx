@@ -497,19 +497,23 @@ export function CreateCampaignTab({ editId }: { editId?: number | null }) {
                             <label className="text-sm font-bold text-slate-700">Start Date</label>
                             <input
                                 type="date"
-                                className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none"
+                                className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
+                                min={new Date().toISOString().split('T')[0]}
                             />
+                            <p className="text-xs text-slate-400">Campaign begins on this date</p>
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-slate-700">End Date</label>
                             <input
                                 type="date"
-                                className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none"
+                                className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
+                                min={startDate || new Date().toISOString().split('T')[0]}
                             />
+                            <p className="text-xs text-slate-400">Must be after start date</p>
                         </div>
                     </div>
 

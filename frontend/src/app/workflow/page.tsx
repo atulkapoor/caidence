@@ -3,6 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Plus, Search, Layers, Play, Clock, MoreVertical, Trash2, ArrowRight } from "lucide-react";
 import { useEffect, useState, Suspense } from "react";
+import { useModalScroll } from "@/hooks/useModalScroll";
 import Link from "next/link";
 import { fetchWorkflows, createWorkflow, Workflow } from "@/lib/api";
 import { useRouter } from "next/navigation";

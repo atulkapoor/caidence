@@ -1,13 +1,17 @@
 "use client";
 
+"use client";
+
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { User, Mail, Building, MapPin, Briefcase, Save, Loader2, FileText, Globe } from "lucide-react";
 import { useEffect, useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import { getProfile, updateProfile, UserProfile } from "@/lib/api/profile";
 import { toast } from "sonner";
 import Image from "next/image";
 
 function SettingsContent() {
+    const router = useRouter();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -53,6 +57,8 @@ function SettingsContent() {
             const updated = await updateProfile(formData);
             setProfile(updated);
             toast.success("Profile updated successfully");
+            // Refresh page to reload data from backend
+            router.refresh();
         } catch (error) {
             console.error("Failed to update profile", error);
             toast.error("Failed to update profile");

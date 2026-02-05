@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
+import { useModalScroll } from "@/hooks/useModalScroll";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Users, Plus, Search, Filter, MoreHorizontal, Link2, FileText, Instagram, Youtube } from "lucide-react";
 import { fetchCreators, addCreator, deleteCreator, generateAffiliateCode, Creator } from "@/lib/api";
@@ -16,6 +17,8 @@ function CreatorsContent() {
     const [newHandle, setNewHandle] = useState("");
     const [newPlatform, setNewPlatform] = useState("Instagram");
     const [adding, setAdding] = useState(false);
+
+    useModalScroll(showAddModal);
 
     useEffect(() => {
         loadData();

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { useModalScroll } from "@/hooks/useModalScroll";
 import { Building2, Users, Briefcase, DollarSign, Plus, Settings, MoreHorizontal, X, Loader2 } from "lucide-react";
 import { fetchBrands, createBrand, Brand } from "@/lib/api";
 import { toast } from "sonner";
@@ -10,6 +11,8 @@ export default function AgencyPage() {
     const [brands, setBrands] = useState<Brand[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
+
+    useModalScroll(showCreateModal);
 
     const loadBrands = async () => {
         setLoading(true);

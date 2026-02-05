@@ -4,6 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { generateDesign, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
+import { useModalScroll } from "@/hooks/useModalScroll";
 // import Link from "next/link"; // Unused
 import { toast } from "sonner";
 import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight } from "lucide-react";
@@ -27,6 +28,7 @@ function DesignStudioContent() {
     const [searchQuery, setSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState("All Types");
     const [previewDesign, setPreviewDesign] = useState<DesignAsset | null>(null);
+    useModalScroll(!!previewDesign);
 
     const filteredDesigns = recentDesigns.filter(d => {
         const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase()) || d.prompt.toLowerCase().includes(searchQuery.toLowerCase());

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Save, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { usePreferences } from "@/context/PreferencesContext";
 import { getProfile, updateProfile, type UserProfile } from "@/lib/api/profile";
 
 export function ProfileForm() {
+    const router = useRouter();
     const { industry, setIndustry } = usePreferences();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -70,6 +72,8 @@ export function ProfileForm() {
                 industry: industry,
             });
             toast.success("Profile updated successfully!");
+            // Refresh page to reload data from backend
+            router.refresh();
         } catch (error) {
             console.error("Failed to save profile:", error);
             toast.error("Failed to save profile");
@@ -108,6 +112,7 @@ export function ProfileForm() {
                             type="text"
                             value={formData.full_name}
                             onChange={(e) => handleChange("full_name", e.target.value)}
+                            placeholder="John Doe"
                             className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 transition-all font-medium"
                         />
                     </div>
@@ -120,6 +125,7 @@ export function ProfileForm() {
                             readOnly
                             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-500 cursor-not-allowed font-medium"
                         />
+                        <p className="text-xs text-slate-400">Contact support to change email</p>
                     </div>
 
                     <div className="space-y-2">
@@ -128,6 +134,7 @@ export function ProfileForm() {
                             type="text"
                             value={formData.company}
                             onChange={(e) => handleChange("company", e.target.value)}
+                            placeholder="Your company name"
                             className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 transition-all font-medium"
                         />
                     </div>
@@ -155,6 +162,7 @@ export function ProfileForm() {
                             type="text"
                             value={formData.location}
                             onChange={(e) => handleChange("location", e.target.value)}
+                            placeholder="City, Country (e.g., San Francisco, USA)"
                             className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 transition-all font-medium"
                         />
                     </div>
@@ -166,6 +174,7 @@ export function ProfileForm() {
                         rows={4}
                         value={formData.bio}
                         onChange={(e) => handleChange("bio", e.target.value)}
+                        placeholder="Tell us about yourself, your expertise, and interests..."
                         className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 transition-all resize-none font-medium leading-relaxed"
                     />
                 </div>

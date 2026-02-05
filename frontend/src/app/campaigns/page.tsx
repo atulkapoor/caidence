@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
+import { useModalScroll } from "@/hooks/useModalScroll";
 import { CampaignCard } from "@/components/campaigns/CampaignCard";
 import { Plus, Search, Filter, Calendar as CalendarIcon, BarChart3, List, LayoutGrid, Check, X } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -25,6 +26,8 @@ function CampaignContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
+
+    useModalScroll(isCreateModalOpen || isAgentModalOpen);
 
     // Filters
     const [statusFilter, setStatusFilter] = useState<string>("free-all"); // "free-all" is logic for "All"

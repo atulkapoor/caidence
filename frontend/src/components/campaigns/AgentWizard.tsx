@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sparkles, ArrowRight, Check, X, Loader2 } from "lucide-react";
 import { CampaignDraft, generateCampaignPlan, createCampaign } from "@/lib/api";
 import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
+import { useModalScroll } from "@/hooks/useModalScroll";
 
 interface AgentWizardProps {
     isOpen: boolean;
@@ -10,6 +11,7 @@ interface AgentWizardProps {
 }
 
 export function AgentWizard({ isOpen, onClose, onSuccess }: AgentWizardProps) {
+    useModalScroll(isOpen);
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
 

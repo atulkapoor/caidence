@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Calendar, momentLocalizer, Views } from "react-big-calendar";
+import { useModalScroll } from "@/hooks/useModalScroll";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { Plus, Twitter, Linkedin, Instagram, Facebook, Target } from "lucide-react";
@@ -81,6 +82,7 @@ export function SocialCalendar({ campaigns = [] }: SocialCalendarProps) {
     const [events, setEvents] = useState<SocialPost[]>([...mockEvents, ...campaignEvents]);
     const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
     const [selectedSlot, setSelectedSlot] = useState<{ start: Date; end: Date } | null>(null);
+    useModalScroll(isSchedulerOpen);
 
     // Update events when campaigns change
     // Note: In a real app we'd use useEffect to sync prop changes, but simplistic approach here:
@@ -123,7 +125,7 @@ export function SocialCalendar({ campaigns = [] }: SocialCalendarProps) {
     };
 
     return (
-        <div className="h-[800px] bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+        <div className="h-[800px] bg-white p-6 rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h2 className="text-xl font-bold text-slate-900">Social Media Calendar</h2>
@@ -138,26 +140,28 @@ export function SocialCalendar({ campaigns = [] }: SocialCalendarProps) {
                 </button>
             </div>
 
-            <Calendar
-                localizer={localizer}
-                events={events}
-                startAccessor="start"
-                endAccessor="end"
-                style={{ height: "100%" }}
-                views={[Views.MONTH, Views.WEEK, Views.DAY]}
-                defaultView={Views.MONTH}
-                selectable
-                onSelectSlot={handleSelectSlot}
-                eventPropGetter={eventStyleGetter}
-                components={{
-                    event: ({ event }) => (
-                        <div className="flex items-center gap-1.5 p-1">
-                            {platformIcons[event.platform]}
-                            <span className="truncate">{event.title}</span>
-                        </div>
-                    ),
+            <div className="flex-1 overflow-hidden">
+                <Calendar
+                    localizer={localizer}
+                    events={events}
+                    startAccessor="start"
+                    endAccessor="end"
+                    style={{ height: "100%" }}
+                    views={[Views.MONTH, Views.WEEK, Views.DAY]}
+                    defaultView={Views.MONTH}
+                    selectable
+                    onSelectSlot={handleSelectSlot}
+                    eventPropGetter={eventStyleGetter}
+                    components={{
+                        event: ({ event }) => (
+                            <div className="flex items-center gap-1.5 p-1 truncate">
+                                {platformIcons[event.platform]}
+                                <span className="truncate text-xs">{event.title}</span>
+                            </div>
+                        ),
                 }}
             />
+            </div>
 
             {/* Post Scheduler Modal (Replaced with actual Dialog if available, using strict HTML/Tailwind overlay for now if Dialog component is strictly specific) */}
             {isSchedulerOpen && (
@@ -263,8 +267,10 @@ function PostSchedulerModal({ isOpen, onClose, initialDate }: { isOpen: boolean;
                             type="datetime-local"
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
-                            className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 focus:outline-none focus:border-indigo-500"
+                            min={new Date().toISOString().slice(0, 16)}
+                            className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         />
+                        <p className="text-xs text-slate-400">Select a future date and time for scheduling</p>
                     </div>
                 </div>
 

@@ -7,6 +7,7 @@ import { generateContent, fetchContentGenerations, ContentGeneration } from "@/l
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
+import { useModalScroll } from "@/hooks/useModalScroll";
 
 // Implementation of Typewriter effect component
 import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
@@ -32,6 +33,7 @@ function ContentStudioContent() {
     const [searchQuery, setSearchQuery] = useState("");
     const [filterPlatform, setFilterPlatform] = useState("All Platforms");
     const [previewContent, setPreviewContent] = useState<ContentGeneration | null>(null);
+    useModalScroll(!!previewContent);
 
     // Lists
     const platforms = [

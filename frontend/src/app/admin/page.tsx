@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useTabState } from "@/hooks/useTabState";
+import { useModalScroll } from "@/hooks/useModalScroll";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Users, Building, CreditCard, Shield, UserPlus, Search, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -125,6 +126,8 @@ function UserManagement() {
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [showInviteModal, setShowInviteModal] = useState(false);
+
+    useModalScroll(showInviteModal);
 
     const loadUsers = async () => {
         setLoading(true);
@@ -357,10 +360,12 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                         <input
                             required
                             type="text"
+                            placeholder="Min. 8 characters (uppercase, lowercase, number)"
                             className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50"
                             value={formData.password}
                             onChange={e => setFormData({ ...formData, password: e.target.value })}
                         />
+                        <p className="text-xs text-slate-500 mt-1">User will be prompted to change on first login</p>
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4">

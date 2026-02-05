@@ -130,6 +130,8 @@ function WorkflowDetailContent({ params }: PageProps) {
             const updated = await fetchWorkflowById(workflow.id);
             setWorkflow(updated);
             alert("Workflow saved successfully!");
+            // Refresh page to reload data from backend
+            router.refresh();
         } catch (error) {
             console.error("Failed to save", error);
             alert("Failed to save workflow");

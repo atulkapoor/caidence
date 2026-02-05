@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Campaign, fetchCampaigns } from "@/lib/api/campaigns";
 import { Search, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useModalScroll } from "@/hooks/useModalScroll";
 
 interface CampaignSelectorProps {
     isOpen: boolean;
@@ -11,6 +12,7 @@ interface CampaignSelectorProps {
 }
 
 export function CampaignSelector({ isOpen, onClose, onSelect, title = "Select Campaign" }: CampaignSelectorProps) {
+    useModalScroll(isOpen);
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");

@@ -1,5 +1,6 @@
 import { X, Sparkles, User, Users, Activity, ExternalLink, Camera, Mic } from "lucide-react";
 import { InfluencerProfile } from "@/lib/api";
+import { useModalScroll } from "@/hooks/useModalScroll";
 
 interface Props {
     isOpen: boolean;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function InfluencerProfileModal({ isOpen, onClose, profile }: Props) {
+    useModalScroll(isOpen);
     if (!isOpen || !profile) return null;
 
     return (

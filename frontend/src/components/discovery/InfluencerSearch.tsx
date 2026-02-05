@@ -7,6 +7,7 @@ import { InfluencerProfileModal } from "./InfluencerProfileModal";
 import { CampaignSelector } from "@/components/campaigns/CampaignSelector";
 import { addInfluencerToCampaign } from "@/lib/api/campaigns";
 import { toast } from "sonner";
+import { useModalScroll } from "@/hooks/useModalScroll";
 
 // --- Advanced Filter Sidebar Component (Modash-inspired) ---
 interface FilterSidebarProps {
@@ -17,6 +18,7 @@ interface FilterSidebarProps {
 }
 
 function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSidebarProps) {
+    useModalScroll(isOpen);
     const [localFilters, setLocalFilters] = useState<SearchFilters>(filters);
 
     const platforms = ["Instagram", "TikTok", "YouTube", "LinkedIn", "Twitter"];
@@ -262,6 +264,8 @@ export function InfluencerSearch() {
     const [selectedProfile, setSelectedProfile] = useState<InfluencerProfile | null>(null);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isCampaignSelectorOpen, setIsCampaignSelectorOpen] = useState(false);
+
+    useModalScroll(isProfileOpen || isCampaignSelectorOpen);
 
     const handleViewProfile = async (handle: string) => {
         try {
