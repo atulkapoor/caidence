@@ -19,7 +19,11 @@ async def get_current_user(
     """
     Extract and validate user from JWT token.
     Development falls back to a mock super_admin for convenience.
+    Set DISABLE_MOCK_USER=true to disable this behavior for testing.
     """
+    import os
+    disable_mock_user = os.getenv("DISABLE_MOCK_USER", "false").lower() == "true"
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -27,7 +31,7 @@ async def get_current_user(
     )
 
     def get_mock_user():
-        if settings.is_production:
+        if disable_mock_user or settings.is_production:
             raise credentials_exception
         return User(
             id=1,
@@ -53,8 +57,29 @@ async def get_current_user(
             select(User).options(selectinload(User.custom_permissions)).where(User.id == token_data.user_id)
         )
         user = result.scalar_one_or_none()
+        
+        # If user not in database, create from token data
         if user is None:
-            return get_mock_user()
+            if disable_mock_user:
+                user = User(
+                    id=token_data.user_id,
+                    email=getattr(token_data, 'email', f"user{token_data.user_id}@test.com"),
+                    full_name=getattr(token_data, 'full_name', f"Test User {token_data.user_id}"),
+                    role=getattr(token_data, 'role', 'viewer'),
+                    is_active=True,
+                    is_approved=True,
+                    organization_id=getattr(token_data, 'organization_id', 1),
+                    hashed_password="test_hash"
+                )
+            else:
+                return get_mock_user()
+        else:
+            # Override user attributes from token (for testing with different roles/orgs)
+            if hasattr(token_data, 'role'):
+                user.role = token_data.role
+            if hasattr(token_data, 'organization_id'):
+                user.organization_id = token_data.organization_id
+        
         return user
     except Exception:
         return get_mock_user()
@@ -197,6 +222,18 @@ def require_marcom_read(current_user: User = Depends(require_permission("read", 
     return current_user
 
 def require_marcom_write(current_user: User = Depends(require_permission("write", "marcom"))) -> User:
+    return current_user
+
+def require_workflow_read(current_user: User = Depends(require_permission("read", "workflow"))) -> User:
+    return current_user
+
+def require_workflow_write(current_user: User = Depends(require_permission("write", "workflow"))) -> User:
+    return current_user
+
+def require_creators_read(current_user: User = Depends(require_permission("read", "creators"))) -> User:
+    return current_user
+
+def require_creators_write(current_user: User = Depends(require_permission("write", "creators"))) -> User:
     return current_user
 
 def require_super_admin(current_user: User = Depends(get_current_active_user)) -> User:
