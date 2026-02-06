@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -231,4 +231,63 @@ class Comment(Base):
     
     user = relationship("User")
     campaign = relationship("Campaign")
+
+
+class CreatorSearch(Base):
+    """Log of creator searches from Influencers Club API for analytics and caching"""
+    __tablename__ = "creator_searches"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    query = Column(String)
+    platform = Column(String, nullable=True)
+    filters = Column(Text)  # JSON string
+    result_count = Column(Integer, default=0)
+    credits_used = Column(Float, default=0.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    user = relationship("User")
+
+
+class CreditAccount(Base):
+    """User credit account tracking balance and usage"""
+    __tablename__ = "credit_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, index=True, nullable=False)
+    
+    # Credit balances
+    balance = Column(Float, default=0.0)  # Current available credits
+    monthly_allotment = Column(Float, default=1000.0)  # Monthly limit
+    total_spent = Column(Float, default=0.0)  # Lifetime spent
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    reset_at = Column(DateTime(timezone=True), nullable=True)  # Last monthly reset
+    
+    user = relationship("User", backref="credit_account")
+
+
+class CreditTransaction(Base):
+    """Log of credit transactions for audit trail"""
+    __tablename__ = "credit_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    credit_account_id = Column(Integer, ForeignKey("credit_accounts.id"), index=True, nullable=False)
+    
+    # Transaction details
+    transaction_type = Column(String)  # 'discovery_search', 'creator_enrich', 'monthly_reset', 'manual_purchase'
+    amount = Column(Float, nullable=False)  # Credits spent (negative) or added (positive)
+    balance_before = Column(Float)
+    balance_after = Column(Float)
+    
+    # Metadata
+    description = Column(Text, nullable=True)
+    api_call_id = Column(String, nullable=True)  # Correlate with API logs
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    user = relationship("User")
+    credit_account = relationship("CreditAccount")
 

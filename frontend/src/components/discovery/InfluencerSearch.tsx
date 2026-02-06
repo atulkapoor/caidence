@@ -21,7 +21,7 @@ function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSide
     useModalScroll(isOpen);
     const [localFilters, setLocalFilters] = useState<SearchFilters>(filters);
 
-    const platforms = ["Instagram", "TikTok", "YouTube", "LinkedIn", "Twitter"];
+    const platforms = ["instagram", "tiktok", "youtube", "linkedin", "twitter"];
     const locations = [
         { label: "United States", value: "US" },
         { label: "United Kingdom", value: "UK" },
@@ -82,7 +82,7 @@ function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSide
                                         : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                                         }`}
                                 >
-                                    {platform}
+                                    {platform.charAt(0).toUpperCase() + platform.slice(1)}
                                 </button>
                             ))}
                         </div>
@@ -244,7 +244,9 @@ export function InfluencerSearch() {
             const performSearch = async () => {
                 setLoading(true);
                 try {
-                    const data = await searchInfluencers(query, activeFilters);
+                    const filtersWithDefault = { ...activeFilters } as any;
+                    if (!filtersWithDefault.platform) filtersWithDefault.platform = 'instagram';
+                    const data = await searchInfluencers(query, filtersWithDefault);
                     setResults(data);
                     setHasSearched(true);
                 } catch (err) {
@@ -297,13 +299,21 @@ export function InfluencerSearch() {
     const handleSearch = async () => {
         if (!query.trim() && Object.keys(activeFilters).length === 0) return;
         setLoading(true);
-        setHasSearched(false);
         try {
-            const data = await searchInfluencers(query, activeFilters);
-            setResults(data);
+            // Ensure a default platform is set so backend validation doesn't return 400
+            const filtersWithDefault = { ...activeFilters } as any;
+            if (!filtersWithDefault.platform) filtersWithDefault.platform = 'instagram';
+            const data = await searchInfluencers(query, filtersWithDefault);
+            setResults(data || []);
             setHasSearched(true);
+            if (!data || data.length === 0) {
+                toast.info("No results found for your search");
+            }
         } catch (err) {
-            console.error(err);
+            console.error("Search error:", err);
+            toast.error(err instanceof Error ? err.message : "Search failed");
+            setHasSearched(true);
+            setResults([]);
         } finally {
             setLoading(false);
         }
@@ -314,12 +324,16 @@ export function InfluencerSearch() {
         setLoading(true);
         try {
             // In production, this would call a specific lookalike API
-            const data = await searchInfluencers(`similar to ${handle}`, activeFilters);
-            setResults(data);
+            const filtersWithDefault = { ...activeFilters } as any;
+            if (!filtersWithDefault.platform) filtersWithDefault.platform = 'instagram';
+            const data = await searchInfluencers(`similar to ${handle}`, filtersWithDefault);
+            setResults(data || []);
             setHasSearched(true);
-            toast.success(`Finding creators similar to ${handle}`);
+            toast.success(`Found ${data?.length || 0} creators similar to ${handle}`);
         } catch (err) {
-            console.error(err);
+            console.error("Lookalike search error:", err);
+            toast.error("Failed to find similar creators");
+            setResults([]);
         } finally {
             setLoading(false);
         }
@@ -459,8 +473,8 @@ export function InfluencerSearch() {
                         <span className="text-sm font-bold text-slate-400 py-1.5 uppercase tracking-wide text-[10px] self-center mr-2">Quick Filters:</span>
                         {[
                             { label: "> 100k Reach", key: 'min_reach', value: 100000 },
-                            { label: "Instagram Only", key: 'platform', value: 'Instagram' },
-                            { label: "TikTok Only", key: 'platform', value: 'TikTok' },
+                            { label: "Instagram Only", key: 'platform', value: 'instagram' },
+                            { label: "TikTok Only", key: 'platform', value: 'tiktok' },
                             { label: "USA Audience", key: 'geo', value: 'US' },
                             { label: "High Engagement", key: 'engagement', value: 5 },
                         ].map(f => (
@@ -573,9 +587,12 @@ export function InfluencerSearch() {
                                         {selectedItems.has(profile.handle) && <CheckCircle2 className="w-4 h-4" />}
                                     </button>
 
-                                    {/* Header with Color Analysis */}
-                                    <div className="h-28 relative overflow-hidden" style={{ backgroundColor: profile.avatar_color }}>
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+                                    {/* Header with Color Analysis or Image */}
+                                    <div className="h-28 relative overflow-hidden" style={{ backgroundColor: profile.image_url ? undefined : profile.avatar_color }}>
+                                        {profile.image_url && (
+                                            <img src={profile.image_url} alt={profile.handle} className="w-full h-full object-cover" />
+                                        )}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
                                         <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5 shadow-lg text-slate-900 border border-white/50">
                                             <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                                             {profile.match_score}% Match
@@ -585,13 +602,17 @@ export function InfluencerSearch() {
                                     <div className="p-6 relative flex-1 flex flex-col">
                                         {/* Avatar & Ident */}
                                         <div className="flex justify-between items-start mb-6">
-                                            <div className="w-20 h-20 rounded-2xl border-4 border-white shadow-lg -mt-16 bg-white flex items-center justify-center text-2xl font-black text-slate-300 relative z-10">
-                                                {profile.handle.substring(1, 3).toUpperCase()}
+                                            <div className="w-20 h-20 rounded-2xl border-4 border-white shadow-lg -mt-16 bg-white flex items-center justify-center text-2xl font-black text-slate-300 relative z-10 overflow-hidden">
+                                                {profile.image_url ? (
+                                                    <img src={profile.image_url} alt={profile.handle} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    profile.handle.substring(0, 2).toUpperCase()
+                                                )}
                                                 <div className="absolute bottom-[-6px] right-[-6px] w-8 h-8 rounded-full border-4 border-white bg-white flex items-center justify-center shadow-sm">
-                                                    {profile.platform === 'Instagram' && <Instagram className="w-4 h-4 text-pink-600" />}
-                                                    {profile.platform === 'TikTok' && <Video className="w-4 h-4 text-black" />}
-                                                    {profile.platform === 'YouTube' && <Youtube className="w-4 h-4 text-red-600" />}
-                                                    {profile.platform === 'LinkedIn' && <Linkedin className="w-4 h-4 text-blue-700" />}
+                                                    {profile.platform === 'INSTAGRAM' && <Instagram className="w-4 h-4 text-pink-600" />}
+                                                    {profile.platform === 'TIKTOK' && <Video className="w-4 h-4 text-black" />}
+                                                    {profile.platform === 'YOUTUBE' && <Youtube className="w-4 h-4 text-red-600" />}
+                                                    {profile.platform === 'LINKEDIN' && <Linkedin className="w-4 h-4 text-blue-700" />}
                                                 </div>
                                             </div>
                                             <div className="text-right">

@@ -76,8 +76,8 @@ class InfluencersClubClient:
         self.request_count += 1
     
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10)
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5)
     )
     async def _make_request(
         self,
@@ -104,6 +104,7 @@ class InfluencersClubClient:
         await self._check_rate_limit()
         
         url = f"{self.base_url}/{endpoint}"
+        logger.debug(f"API Request: {method} {url} with payload: {json}")
         
         try:
             response = await self.client.request(
@@ -113,28 +114,38 @@ class InfluencersClubClient:
                 params=params,
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            logger.debug(f"API Response: {method} {url} returned {len(str(data))} chars")
+            return data
         
         except httpx.HTTPStatusError as e:
+            error_text = e.response.text
+            logger.error(f"API error: {method} {endpoint} returned {e.response.status_code}. Response: {error_text}")
+            
             if e.response.status_code == 429:  # Rate limited
                 logger.warning("API rate limit hit, retrying...")
                 raise
             elif e.response.status_code == 401:
-                logger.error("Invalid API key")
-                raise ValueError("Invalid Influencers Club API key") from e
+                raise ValueError(f"Invalid Influencers Club API key: {error_text}") from e
             elif e.response.status_code == 403:
-                logger.error("Insufficient permissions")
-                raise PermissionError("Insufficient permissions for this operation") from e
+                raise PermissionError(f"Insufficient permissions: {error_text}") from e
+            elif e.response.status_code == 400:
+                # Likely a payload format issue
+                logger.error(f"Bad request (400). Payload: {json}")
+                raise ValueError(f"Invalid request format: {error_text}") from e
             else:
-                logger.error(f"API error: {e.response.status_code} - {e.response.text}")
-                raise
+                raise ValueError(f"API error {e.response.status_code}: {error_text}") from e
+        
+        except httpx.RequestError as e:
+            logger.error(f"Network request error: {str(e)}")
+            raise ValueError(f"Failed to connect to API: {str(e)}") from e
     
     async def discover_creators(
         self,
         platform: str,
         filters: Dict[str, Any],
         limit: int = 20,
-        offset: int = 0,
+        page: int = 1,
     ) -> Dict[str, Any]:
         """
         Discover creators with advanced filtering.
@@ -149,12 +160,13 @@ class InfluencersClubClient:
             Discovery results with creator profiles
         """
         limit = min(max(limit, 1), 50)  # Enforce 1-50 range
-        
+        # API expects a `paging` object with `limit` and `page`
+        page = max(1, int(page or 1))
+
         payload = {
             "platform": platform,
-            "limit": limit,
-            "offset": offset,
-            **filters  # Merge filter criteria
+            "filters": (filters or {}),
+            "paging": {"limit": limit, "page": page},
         }
         
         logger.info(f"Discovering creators on {platform} with filters: {filters}")
@@ -203,6 +215,10 @@ class InfluencersClubClient:
         )
         
         return response
+
+        # Backwards-compatible alias expected by API routes
+        async def enrich_creator_handle(self, platform: str, handle: str, enrichment_mode: str = "full") -> Dict[str, Any]:
+            return await self.enrich_handle(handle=handle, platform=platform, enrichment_mode=enrichment_mode)
     
     async def enrich_email(
         self,
@@ -291,10 +307,20 @@ class InfluencersClubClient:
         logger.info("Fetching API credit balance")
         
         response = await self._make_request("GET", "")
+
+        # Extract credits from response, handling multiple possible field names
+        available = next(
+            (response.get(key) for key in ["credits_available", "available_credits", "balance"]),
+            0
+        )
+        used = next(
+            (response.get(key) for key in ["credits_used", "used_credits", "consumed"]),
+            0
+        )
         
         return {
-            "available_credits": response.get("credits_available", 0),
-            "used_credits": response.get("credits_used", 0),
+            "available_credits": available,
+            "used_credits": used,
         }
     
     async def batch_enrich_handles(
@@ -399,6 +425,36 @@ class InfluencersClubClient:
             filters=filters,
             limit=limit,
         )
+
+    async def find_similar_creators(
+        self,
+        platform: str,
+        filter_key: str,
+        filter_value: str,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 20,
+        page: int = 1,
+    ) -> Dict[str, Any]:
+        """Find creators similar to a reference creator. This uses discovery with a reference filter."""
+        merged_filters = {**(filters or {}), filter_key: filter_value}
+        return await self.discover_creators(platform=platform, filters=merged_filters, limit=limit, page=page)
+
+    # Classifier helpers used by endpoints
+    async def get_languages(self) -> List[str]:
+        resp = await self._make_request("GET", "classifiers/languages")
+        return resp.get("languages", resp.get("data", []))
+
+    async def get_locations(self, platform: str) -> List[str]:
+        resp = await self._make_request("GET", f"classifiers/locations/{platform}")
+        return resp.get("locations", resp.get("data", []))
+
+    async def get_youtube_topics(self) -> List[str]:
+        resp = await self._make_request("GET", "classifiers/yt-topics")
+        return resp.get("topics", resp.get("data", []))
+
+    async def get_twitch_games(self) -> List[str]:
+        resp = await self._make_request("GET", "classifiers/twitch-games")
+        return resp.get("games", resp.get("data", []))
 
 
 async def get_influencers_client(api_key: str) -> InfluencersClubClient:
