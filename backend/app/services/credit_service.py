@@ -51,6 +51,7 @@ class CreditService:
                 user_id=user_id,
                 balance=initial_balance,
                 monthly_allotment=initial_balance,
+                total_spent=0.0,
             )
             session.add(account)
             await session.flush()  # Flush to get the ID
