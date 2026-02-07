@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Bell, Mail, Smartphone, Globe } from "lucide-react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function NotificationSettings() {
     const [settings, setSettings] = useState({
@@ -14,11 +16,47 @@ export default function NotificationSettings() {
         pushNotifications: true,
     });
 
+    // Load saved settings from backend on mount
+    useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+                const headers: Record<string, string> = {};
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const res = await fetch(`${API_BASE}/api/v1/profile/preferences`, { headers });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.notification_settings) {
+                        setSettings(prev => ({ ...prev, ...data.notification_settings }));
+                    }
+                }
+            } catch {
+                // Use defaults if load fails
+            }
+        };
+        loadSettings();
+    }, []);
+
+    const saveSettings = async (newSettings: typeof settings) => {
+        try {
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            await fetch(`${API_BASE}/api/v1/profile/preferences`, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({ notification_settings: newSettings }),
+            });
+        } catch {
+            // Silently fail - settings are still updated locally
+        }
+    };
+
     const handleToggle = (key: keyof typeof settings) => {
         setSettings((prev) => {
             const newState = { ...prev, [key]: !prev[key] };
-            // Show toast on change
             toast.success(`${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} ${newState[key] ? 'enabled' : 'disabled'}`);
+            saveSettings(newState);
             return newState;
         });
     };

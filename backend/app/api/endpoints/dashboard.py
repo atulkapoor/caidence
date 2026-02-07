@@ -141,21 +141,25 @@ async def get_dashboard_stats(time_range: str = Query("6m", alias="range"), db: 
             "engagement": performance_map[key]["engagement"]
         })
 
-    # 4. Featured Campaign (Real Active Only)
+    # 4. Featured Campaign (active first, then any recent campaign)
     featured = None
-    if active_count > 0:
-        # Fetch the most recently updated active campaign
-        feat_query = await db.execute(select(models.Campaign).where(models.Campaign.status == "active").order_by(models.Campaign.updated_at.desc()).limit(1))
-        feat_campaign = feat_query.scalar_one_or_none()
-        if feat_campaign:
-            featured = {
-                "title": feat_campaign.title,
-                "status": "active",
-                "description": "Active campaign managed by C(AI)DENCE.", # Dynamic description if available?
-                "progress": 0, # Calculate real progress if possible, else 0
-                "budget": "Not set",
-                "channels": 0 
-            }
+    feat_query = await db.execute(
+        select(models.Campaign).order_by(
+            # Prefer active campaigns, then most recently updated
+            (models.Campaign.status == "active").desc(),
+            models.Campaign.updated_at.desc()
+        ).limit(1)
+    )
+    feat_campaign = feat_query.scalar_one_or_none()
+    if feat_campaign:
+        featured = {
+            "title": feat_campaign.title,
+            "status": feat_campaign.status or "draft",
+            "description": feat_campaign.description or "Campaign managed by C(AI)DENCE.",
+            "progress": feat_campaign.progress if hasattr(feat_campaign, 'progress') and feat_campaign.progress else 0,
+            "budget": feat_campaign.budget or "Not set",
+            "channels": len(feat_campaign.channels.split(",")) if hasattr(feat_campaign, 'channels') and feat_campaign.channels else 0
+        }
 
     return {
         "stats": stats,

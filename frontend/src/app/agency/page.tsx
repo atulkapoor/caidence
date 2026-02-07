@@ -3,14 +3,27 @@
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useModalScroll } from "@/hooks/useModalScroll";
-import { Building2, Users, Briefcase, DollarSign, Plus, Settings, MoreHorizontal, X, Loader2 } from "lucide-react";
+import { Building2, Users, Briefcase, DollarSign, Plus, Settings, MoreHorizontal, X, Loader2, ShieldAlert } from "lucide-react";
 import { fetchBrands, createBrand, Brand } from "@/lib/api";
+import { isAgencyLevel, type UserRole } from "@/lib/permissions";
 import { toast } from "sonner";
 
 export default function AgencyPage() {
     const [brands, setBrands] = useState<Brand[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [userRole, setUserRole] = useState<UserRole>("viewer");
+
+    // Detect user role from stored profile
+    useEffect(() => {
+        try {
+            const profile = localStorage.getItem('user_profile');
+            if (profile) {
+                const parsed = JSON.parse(profile);
+                if (parsed.role) setUserRole(parsed.role as UserRole);
+            }
+        } catch { /* use default */ }
+    }, []);
 
     useModalScroll(showCreateModal);
 
@@ -48,13 +61,20 @@ export default function AgencyPage() {
                         <h1 className="text-2xl font-black tracking-tight text-slate-900">Agency Dashboard</h1>
                         <p className="text-slate-500">Manage all your brands and campaigns from one place.</p>
                     </div>
-                    <button
-                        onClick={() => setShowCreateModal(true)}
-                        className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl font-bold hover:bg-slate-800 transition-colors shadow-lg hover:shadow-xl hover:-translate-y-0.5"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Add Brand
-                    </button>
+                    {isAgencyLevel(userRole) ? (
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl font-bold hover:bg-slate-800 transition-colors shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Brand
+                        </button>
+                    ) : (
+                        <div className="flex items-center gap-2 text-xs text-slate-400 font-medium bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+                            <ShieldAlert className="w-4 h-4" />
+                            Agency role required to create brands
+                        </div>
+                    )}
                 </header>
 
                 {/* KPI Cards */}
@@ -79,11 +99,19 @@ export default function AgencyPage() {
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-xl font-bold text-slate-900">Your Brands</h2>
                         <div className="flex gap-2">
-                            <select className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-900">
+                            <select
+                                className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                size={1}
+                            >
                                 <option>All Industries</option>
                                 <option>Technology</option>
                                 <option>Fashion</option>
-                                <option>Fitness</option>
+                                <option>Beauty</option>
+                                <option>Health & Fitness</option>
+                                <option>Food & Beverage</option>
+                                <option>Travel</option>
+                                <option>Finance</option>
+                                <option>Other</option>
                             </select>
                         </div>
                     </div>

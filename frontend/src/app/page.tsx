@@ -95,9 +95,15 @@ function LandingPageContent() {
                             <Link href="/register" className="w-full sm:w-auto px-8 py-4 bg-indigo-600 text-white font-bold rounded-2xl text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2">
                                 Start 7-Day Free Trial
                             </Link>
-                            <Link href="#" className="w-full sm:w-auto px-8 py-4 bg-white text-slate-700 font-bold rounded-2xl text-lg border border-slate-300 hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm flex items-center justify-center gap-2 group">
+                            <button
+                                onClick={() => {
+                                    const roi = document.getElementById('roi-calculator');
+                                    if (roi) roi.scrollIntoView({ behavior: 'smooth' });
+                                }}
+                                className="w-full sm:w-auto px-8 py-4 bg-white text-slate-700 font-bold rounded-2xl text-lg border border-slate-300 hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm flex items-center justify-center gap-2 group"
+                            >
                                 <PlayCircle className="w-5 h-5 text-indigo-600 group-hover:scale-110 transition-transform" /> Watch Demo
-                            </Link>
+                            </button>
                         </div>
 
                         <div className="flex items-center gap-4 text-sm font-bold text-slate-500 pt-4">
@@ -321,7 +327,7 @@ function LandingPageContent() {
             </section>
 
             {/* --- ROI CALCULATOR --- */}
-            <section id="roi" className="py-24 px-6 bg-slate-900 text-white relative overflow-hidden">
+            <section id="roi-calculator" className="py-24 px-6 bg-slate-900 text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-indigo-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                 <div className="max-w-7xl mx-auto relative z-10">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
@@ -341,7 +347,7 @@ function LandingPageContent() {
                                     <input
                                         type="range" min="1000" max="100000" step="1000"
                                         value={spend} onChange={(e) => setSpend(parseInt(e.target.value))}
-                                        className="w-full cursor-pointer accent-indigo-500"
+                                        className="w-full cursor-pointer accent-indigo-500 h-2 rounded-lg appearance-none bg-slate-700 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer touch-manipulation"
                                     />
                                 </div>
                                 <div>
@@ -352,7 +358,7 @@ function LandingPageContent() {
                                     <input
                                         type="range" min="10" max="200" step="5"
                                         value={cpa} onChange={(e) => setCpa(parseInt(e.target.value))}
-                                        className="w-full cursor-pointer accent-indigo-500"
+                                        className="w-full cursor-pointer accent-indigo-500 h-2 rounded-lg appearance-none bg-slate-700 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer touch-manipulation"
                                     />
                                 </div>
                             </div>
@@ -651,9 +657,12 @@ function LandingPageContent() {
                         <Link href="/register" className="px-8 py-4 bg-white text-indigo-600 font-bold rounded-2xl text-lg hover:bg-indigo-50 transition-all shadow-xl flex items-center justify-center gap-2">
                             Start Free Trial <ArrowRight className="w-5 h-5" />
                         </Link>
-                        <Link href="#" className="px-8 py-4 bg-transparent border-2 border-white/50 text-white font-bold rounded-2xl text-lg hover:bg-white/10 transition-all flex items-center justify-center gap-2">
+                        <button
+                            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                            className="px-8 py-4 bg-transparent border-2 border-white/50 text-white font-bold rounded-2xl text-lg hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                        >
                             <PlayCircle className="w-5 h-5" /> Watch Demo
-                        </Link>
+                        </button>
                     </div>
                 </div>
             </section>

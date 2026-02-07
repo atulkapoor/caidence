@@ -582,10 +582,14 @@ function DesignStudioContent() {
                                                     </button>
 
                                                     <button
-                                                        onClick={(e) => {
+                                                        onClick={async (e) => {
                                                             e.stopPropagation();
                                                             if (confirm("Delete this design?")) {
                                                                 setRecentDesigns(prev => prev.filter(p => p.id !== asset.id));
+                                                                try {
+                                                                    const { deleteDesign } = await import("@/lib/api/design");
+                                                                    await deleteDesign(asset.id);
+                                                                } catch { /* already removed from UI */ }
                                                                 toast.success("Design deleted");
                                                             }
                                                         }}

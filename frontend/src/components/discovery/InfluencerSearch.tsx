@@ -385,13 +385,13 @@ export function InfluencerSearch() {
                     <div className="max-w-3xl mx-auto relative flex items-center mb-6">
                         <Search className="absolute left-6 w-6 h-6 text-slate-400" />
                         <input
-                            className="w-full pl-16 pr-52 py-5 rounded-2xl border border-slate-200 shadow-sm text-lg font-medium focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300"
+                            className="w-full pl-16 pr-16 sm:pr-52 py-5 rounded-2xl border border-slate-200 shadow-sm text-lg font-medium focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-300"
                             placeholder="Try 'Tech reviewers with energetic vibe'..."
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         />
-                        <div className="absolute right-3 flex gap-2">
+                        <div className="absolute right-3 flex gap-2 shrink-0">
                             {/* AI Input Buttons */}
                             <input
                                 type="file"
@@ -420,12 +420,36 @@ export function InfluencerSearch() {
                             />
                             <button
                                 onClick={() => document.getElementById('visual-search-input')?.click()}
-                                className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shrink-0"
                                 title="Search by Inspiration Image"
                             >
                                 <Camera className="w-5 h-5" />
                             </button>
-                            <button onClick={() => toast.info("Voice Search is coming soon!")} className="p-3 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-all" title="Search by Voice Tone">
+                            <button
+                                onClick={() => {
+                                    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                                    if (!SpeechRecognition) {
+                                        toast.error("Voice search is not supported in this browser");
+                                        return;
+                                    }
+                                    const recognition = new SpeechRecognition();
+                                    recognition.lang = 'en-US';
+                                    recognition.interimResults = false;
+                                    recognition.maxAlternatives = 1;
+                                    toast.info("Listening... speak your search query");
+                                    recognition.start();
+                                    recognition.onresult = (event: any) => {
+                                        const transcript = event.results[0][0].transcript;
+                                        setQuery(transcript);
+                                        toast.success(`Heard: "${transcript}"`);
+                                    };
+                                    recognition.onerror = () => {
+                                        toast.error("Voice recognition failed. Please try again.");
+                                    };
+                                }}
+                                className="p-3 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-all shrink-0"
+                                title="Search by Voice"
+                            >
                                 <Mic className="w-5 h-5" />
                             </button>
                             <button

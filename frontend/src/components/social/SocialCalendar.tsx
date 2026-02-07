@@ -5,7 +5,7 @@ import { Calendar, momentLocalizer, Views } from "react-big-calendar";
 import { useModalScroll } from "@/hooks/useModalScroll";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
-import { Plus, Twitter, Linkedin, Instagram, Facebook, Target } from "lucide-react";
+import { Plus, Twitter, Linkedin, Instagram, Facebook, Target, Clock } from "lucide-react";
 // Removed unused Dialog import
 
 // Setup the localizer by providing the moment (or globalize, or Luxon) instance
@@ -263,14 +263,18 @@ function PostSchedulerModal({ isOpen, onClose, initialDate }: { isOpen: boolean;
                     {/* Date Picker */}
                     <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Schedule Time</label>
-                        <input
-                            type="datetime-local"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            min={new Date().toISOString().slice(0, 16)}
-                            className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                        <p className="text-xs text-slate-400">Select a future date and time for scheduling</p>
+                        <div className="relative">
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            <input
+                                type="datetime-local"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                                min={new Date().toISOString().slice(0, 16)}
+                                className="w-full pl-10 pr-3 py-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer"
+                            />
+                        </div>
+                        <p className="text-xs text-slate-400">Click anywhere on the field to open the date picker</p>
                     </div>
                 </div>
 

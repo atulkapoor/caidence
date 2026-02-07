@@ -96,7 +96,27 @@ export default function PresentationDetailPage({ params }: PageProps) {
     }
 
     const handleDownloadPPT = async () => {
-        toast.info("PPT Download is currently disabled for maintenance.");
+        try {
+            // Build a plain-text slide deck for download
+            let textContent = `${presentation.title}\n${'='.repeat(presentation.title.length)}\n\n`;
+            slides.forEach((s: any, i: number) => {
+                textContent += `--- Slide ${i + 1}: ${s.title || 'Untitled'} ---\n${s.content || ''}\n\n`;
+            });
+
+            const blob = new Blob([textContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${presentation.title.replace(/\s+/g, '_')}_slides.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            toast.success("Presentation downloaded!");
+        } catch (error) {
+            console.error("Download failed", error);
+            toast.error("Failed to download presentation");
+        }
     };
 
     const handleRegenerateSlide = async (index: number) => {

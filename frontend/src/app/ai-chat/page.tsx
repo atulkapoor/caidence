@@ -63,6 +63,18 @@ export default function AIChatPage() {
                 } catch (e) {
                     console.error("Failed to read file", e);
                 }
+            } else if (attachedFile.type.startsWith('image/')) {
+                // Convert image to base64 for AI analysis
+                try {
+                    const arrayBuffer = await attachedFile.arrayBuffer();
+                    const base64 = btoa(
+                        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+                    );
+                    userMsg = `${userMsg}\n\n[Attached Image: ${attachedFile.name}, type: ${attachedFile.type}]\nPlease analyze this image and describe what you see. The image data is provided as base64.\nImage (base64, truncated): ${base64.substring(0, 8000)}`;
+                } catch (e) {
+                    console.error("Failed to read image", e);
+                    userMsg = `${userMsg} [Attached Image: ${attachedFile.name} - failed to read]`;
+                }
             } else {
                 userMsg = `${userMsg} [Attached File: ${attachedFile.name} (Content not read - binary format)]`;
             }

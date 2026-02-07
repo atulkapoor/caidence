@@ -495,24 +495,32 @@ export function CreateCampaignTab({ editId }: { editId?: number | null }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-slate-700">Start Date</label>
-                            <input
-                                type="date"
-                                className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                min={new Date().toISOString().split('T')[0]}
-                            />
+                            <div className="relative">
+                                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                <input
+                                    type="date"
+                                    className="w-full pl-10 pr-3 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium cursor-pointer"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                                    min={new Date().toISOString().split('T')[0]}
+                                />
+                            </div>
                             <p className="text-xs text-slate-400">Campaign begins on this date</p>
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-slate-700">End Date</label>
-                            <input
-                                type="date"
-                                className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                min={startDate || new Date().toISOString().split('T')[0]}
-                            />
+                            <div className="relative">
+                                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                <input
+                                    type="date"
+                                    className="w-full pl-10 pr-3 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none font-medium cursor-pointer"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                                    min={startDate || new Date().toISOString().split('T')[0]}
+                                />
+                            </div>
                             <p className="text-xs text-slate-400">Must be after start date</p>
                         </div>
                     </div>

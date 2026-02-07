@@ -1,4 +1,4 @@
-import { MoreHorizontal, BarChart2, Edit, Copy, Archive, Trash2 } from "lucide-react";
+import { MoreHorizontal, BarChart2, Edit, Copy, Archive, Trash2, Info, LinkIcon } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -143,6 +143,20 @@ export function CampaignCard({ title, description, status, progress, budget, spe
                     </div>
 
                     <div className="flex gap-2">
+                        <button
+                            onClick={() => toast.info(`Campaign "${title}" — Status: ${status}, Budget: ${budget}, Progress: ${progress}%`)}
+                            className="p-2 rounded-lg border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                            title="Campaign Info"
+                        >
+                            <Info className="w-4 h-4" />
+                        </button>
+                        <Link
+                            href={`/campaigns?edit=${id}`}
+                            className="p-2 rounded-lg border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                            title="Open Campaign"
+                        >
+                            <LinkIcon className="w-4 h-4" />
+                        </Link>
                         <Link
                             href={`/analytics?campaign=${id}`}
                             className="p-2 rounded-lg border border-slate-200 text-slate-400 hover:text-[#5225a7] hover:border-[#5225a7] hover:bg-white transition-colors flex items-center gap-2 text-xs font-bold group/btn"

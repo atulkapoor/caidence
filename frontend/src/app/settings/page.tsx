@@ -174,13 +174,28 @@ function SettingsContent() {
                                             <Briefcase className="w-4 h-4 text-slate-400" />
                                             Industry
                                         </label>
-                                        <input
-                                            type="text"
+                                        <select
                                             value={formData.industry}
                                             onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm font-medium"
-                                            placeholder="e.g. Technology, Retail"
-                                        />
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm font-medium bg-white"
+                                        >
+                                            <option value="">Select an industry...</option>
+                                            <option value="Technology">Technology</option>
+                                            <option value="E-Commerce">E-Commerce</option>
+                                            <option value="Real Estate">Real Estate</option>
+                                            <option value="Healthcare">Healthcare</option>
+                                            <option value="Fashion">Fashion</option>
+                                            <option value="Beauty">Beauty</option>
+                                            <option value="Food & Beverage">Food & Beverage</option>
+                                            <option value="Health & Fitness">Health & Fitness</option>
+                                            <option value="Travel">Travel</option>
+                                            <option value="Finance">Finance</option>
+                                            <option value="Education">Education</option>
+                                            <option value="Entertainment">Entertainment</option>
+                                            <option value="Retail">Retail</option>
+                                            <option value="SaaS">SaaS</option>
+                                            <option value="Other">Other</option>
+                                        </select>
                                     </div>
 
                                     <div className="sm:col-span-2 space-y-2">

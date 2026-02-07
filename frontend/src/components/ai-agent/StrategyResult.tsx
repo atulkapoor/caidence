@@ -5,6 +5,7 @@ import { useTabState } from "@/hooks/useTabState";
 import { Users, Share2, FileText, Lightbulb, ChevronRight, Save, LayoutDashboard, Pencil, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { updateStrategy } from "@/lib/api/agent";
 import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
@@ -15,6 +16,7 @@ interface StrategyResultProps {
 }
 
 export function StrategyResult({ strategy: initialStrategy, projectId }: StrategyResultProps) {
+    const router = useRouter();
     const [strategy, setStrategy] = useState(initialStrategy);
     const [activeTab, setActiveTab] = useTabState("audience");
     const [isEditing, setIsEditing] = useState(false);
@@ -88,7 +90,10 @@ export function StrategyResult({ strategy: initialStrategy, projectId }: Strateg
 
                         {!isEditing && (
                             <button
-                                onClick={() => toast.success("Project saved successfully!")}
+                                onClick={() => {
+                                    toast.success("Project saved successfully!");
+                                    setTimeout(() => router.push("/ai-agent?tab=history"), 500);
+                                }}
                                 className="px-4 py-2 bg-white text-indigo-600 hover:bg-indigo-50 rounded-xl text-sm font-bold shadow-lg transition-colors flex items-center gap-2"
                             >
                                 <Save className="w-4 h-4" />
