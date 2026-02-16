@@ -42,3 +42,47 @@ class Permission(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     user = relationship("User", back_populates="custom_permissions")
+
+
+class AuditLog(Base):
+    """
+    Tracks all RBAC changes: role assignments, permission grants/revokes, role edits.
+    """
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    actor_email = Column(String, nullable=False)
+
+    action = Column(String, nullable=False, index=True)  # e.g. "role_assigned", "permission_granted"
+
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    target_user_email = Column(String, nullable=True)
+
+    details = Column(JSON, default={})  # Arbitrary metadata (old role, new role, etc.)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class AccessLog(Base):
+    """
+    Tracks access denied events for security monitoring.
+    Helps detect brute-force permission probing and privilege escalation attempts.
+    """
+    __tablename__ = "access_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_email = Column(String, nullable=True)
+    user_role = Column(String, nullable=True)
+
+    endpoint = Column(String, nullable=False)
+    method = Column(String, nullable=False)  # GET, POST, PUT, DELETE
+    resource = Column(String, nullable=True)
+    action = Column(String, nullable=True)
+
+    result = Column(String, nullable=False, index=True)  # "allowed", "denied"
+    reason = Column(String, nullable=True)
+
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

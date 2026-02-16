@@ -8,14 +8,15 @@ import app.models # Import all models to register them with Base
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create tables on startup
-    # Create tables on startup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        
-    # Create tables on startup (optional if using alembic, but keeps dev easy)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        
+
+    # Seed roles with permissions_json
+    from app.core.database import AsyncSessionLocal
+    from app.seeds.seed_roles import seed_roles
+    async with AsyncSessionLocal() as session:
+        await seed_roles(session)
+
     yield
 
 app = FastAPI(

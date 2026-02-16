@@ -18,19 +18,20 @@ async def get_current_user(
 ) -> User:
     """
     Extract and validate user from JWT token.
-    Development falls back to a mock super_admin for convenience.
-    Set DISABLE_MOCK_USER=true to disable this behavior for testing.
+    In development only: falls back to a mock super_admin when NO token is provided.
+    Invalid/expired tokens always raise 401. Production never uses mock users.
     """
     import os
     disable_mock_user = os.getenv("DISABLE_MOCK_USER", "false").lower() == "true"
-    
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    def get_mock_user():
+    # Only allow mock user when: no token AND development mode AND not explicitly disabled
+    if not token:
         if disable_mock_user or settings.is_production:
             raise credentials_exception
         return User(
@@ -44,45 +45,21 @@ async def get_current_user(
             hashed_password="mock"
         )
 
-    if not token:
-        return get_mock_user()
+    # Token was provided - validate it strictly (no mock fallback)
+    token_data = decode_access_token(token)
+    if token_data is None:
+        raise credentials_exception
 
-    try:
-        token_data = decode_access_token(token)
-        if token_data is None:
-            return get_mock_user()
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(User).options(selectinload(User.custom_permissions)).where(User.id == token_data.user_id)
+    )
+    user = result.scalar_one_or_none()
 
-        from sqlalchemy.orm import selectinload
-        result = await db.execute(
-            select(User).options(selectinload(User.custom_permissions)).where(User.id == token_data.user_id)
-        )
-        user = result.scalar_one_or_none()
-        
-        # If user not in database, create from token data
-        if user is None:
-            if disable_mock_user:
-                user = User(
-                    id=token_data.user_id,
-                    email=getattr(token_data, 'email', f"user{token_data.user_id}@test.com"),
-                    full_name=getattr(token_data, 'full_name', f"Test User {token_data.user_id}"),
-                    role=getattr(token_data, 'role', 'viewer'),
-                    is_active=True,
-                    is_approved=True,
-                    organization_id=getattr(token_data, 'organization_id', 1),
-                    hashed_password="test_hash"
-                )
-            else:
-                return get_mock_user()
-        else:
-            # Override user attributes from token (for testing with different roles/orgs)
-            if hasattr(token_data, 'role'):
-                user.role = token_data.role
-            if hasattr(token_data, 'organization_id'):
-                user.organization_id = token_data.organization_id
-        
-        return user
-    except Exception:
-        return get_mock_user()
+    if user is None:
+        raise credentials_exception
+
+    return user
 
 async def get_current_active_user(
     current_user: User = Depends(get_current_user)
@@ -107,47 +84,24 @@ def require_role(*allowed_roles: str) -> Callable:
 
 def require_permission(action: str, resource: Optional[str] = None) -> Callable:
     async def check_permission(current_user: User = Depends(get_current_active_user)) -> User:
-        if current_user.role == "super_admin":
-            return current_user
+        from app.services.permission_engine import PermissionEngine
+        engine = PermissionEngine.from_loaded_user(current_user)
 
-        role_permissions_map = {
-            "admin": {"campaign:read", "campaign:write", "content:read", "content:write",
-                      "analytics:read", "discovery:read", "discovery:write", "crm:read", "crm:write",
-                      "design_studio:read", "design_studio:write", "marcom:read", "marcom:write"},
-            "manager": {"campaign:read", "campaign:write", "content:read", "content:write",
-                        "analytics:read", "discovery:read", "design_studio:read", "design_studio:write"},
-            "editor": {"content:read", "content:write", "discovery:read", "design_studio:read"},
-            "viewer": {"campaign:read", "content:read", "analytics:read", "discovery:read", "design_studio:read"}
-        }
+        res = resource or action.split(":")[0] if ":" in action else resource
+        act = action.split(":")[1] if ":" in action and not resource else action
 
-        effective_permissions = set(role_permissions_map.get(current_user.role, set()))
-
-        if hasattr(current_user, "custom_permissions") and current_user.custom_permissions:
-            for perm in current_user.custom_permissions:
-                perm_key_write = f"{perm.resource}:write"
-                perm_key_read = f"{perm.resource}:read"
-                if perm.action == "write":
-                    effective_permissions.add(perm_key_write)
-                    effective_permissions.add(perm_key_read)
-                elif perm.action == "read":
-                    effective_permissions.add(perm_key_read)
-                    effective_permissions.discard(perm_key_write)
-                elif perm.action == "none":
-                    effective_permissions.discard(perm_key_write)
-                    effective_permissions.discard(perm_key_read)
-
-        permission_key = f"{resource}:{action}" if resource else action
-        if permission_key not in effective_permissions:
-            if action == "read" and resource and f"{resource}:write" in effective_permissions:
-                return current_user
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission denied for {permission_key}")
-
+        if not engine.has_permission(res or "", act):
+            permission_key = f"{res}:{act}" if res else act
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied for {permission_key}"
+            )
         return current_user
     return check_permission
 
 # Convenience dependencies
-require_admin = require_role("admin", "super_admin")
-require_manager = require_role("manager", "admin", "super_admin")
+require_admin = require_role("root", "super_admin", "agency_admin")
+require_manager = require_role("root", "super_admin", "agency_admin", "agency_member")
 
 
 # ========== ORGANIZATION FILTERING HELPERS ==========
@@ -159,7 +113,8 @@ async def ensure_org_access(
     model_class,
     id_field_name: str = "id"
 ) -> bool:
-    if current_user.role == "super_admin":
+    from app.services.auth_service import is_super_admin as _is_super_admin
+    if _is_super_admin(current_user.role):
         return True
     result = await db.execute(
         select(model_class).where(getattr(model_class, id_field_name) == resource_id)
@@ -178,7 +133,8 @@ async def ensure_org_access(
     return True
 
 def get_org_filter(current_user: User):
-    return None if current_user.role == "super_admin" else current_user.organization_id
+    from app.services.auth_service import is_super_admin as _is_super_admin
+    return None if _is_super_admin(current_user.role) else current_user.organization_id
 
 
 # ========== PERMISSION CONVENIENCE DEPENDENCIES ==========
@@ -237,7 +193,8 @@ def require_creators_write(current_user: User = Depends(require_permission("writ
     return current_user
 
 def require_super_admin(current_user: User = Depends(get_current_active_user)) -> User:
-    if current_user.role != "super_admin":
+    from app.services.auth_service import is_super_admin as _is_super_admin
+    if not _is_super_admin(current_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin access required")
     return current_user
 
