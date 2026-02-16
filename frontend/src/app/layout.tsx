@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 import { PreferencesProvider } from "@/context/PreferencesContext";
+import { PermissionProvider } from "@/contexts/PermissionContext";
 
 export default function RootLayout({
   children,
@@ -22,8 +23,10 @@ export default function RootLayout({
         className={`${inter.className} antialiased`}
       >
         <PreferencesProvider>
-          {children}
-          <Toaster />
+          <PermissionProvider>
+            {children}
+            <Toaster />
+          </PermissionProvider>
         </PreferencesProvider>
       </body>
     </html>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
     LayoutDashboard,
     Bot,
@@ -22,51 +22,67 @@ import {
     Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePermissionContext } from "@/contexts/PermissionContext";
 
 interface UserInfo {
     full_name: string;
     email: string;
 }
 
-const navigationGroups = [
+interface NavItem {
+    name: string;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    color: string;
+    bg: string;
+    /** Permission required to see this item. Omit = always visible. */
+    permission?: string;
+}
+
+interface NavGroup {
+    title: string;
+    items: NavItem[];
+}
+
+const navigationGroups: NavGroup[] = [
     {
         title: "Platform",
         items: [
             { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, color: "text-blue-600", bg: "bg-blue-50" },
-            { name: "Campaigns", href: "/campaigns", icon: Map, color: "text-orange-600", bg: "bg-orange-50" },
-            { name: "Workflows", href: "/workflow", icon: Workflow, color: "text-pink-600", bg: "bg-pink-50" },
+            { name: "Campaigns", href: "/campaigns", icon: Map, color: "text-orange-600", bg: "bg-orange-50", permission: "campaign:read" },
+            { name: "Workflows", href: "/workflow", icon: Workflow, color: "text-pink-600", bg: "bg-pink-50", permission: "workflow:read" },
         ]
     },
     {
         title: "Creative Studios",
         items: [
-            { name: "Content", href: "/content-studio", icon: PenTool, color: "text-emerald-600", bg: "bg-emerald-50" },
-            { name: "Design", href: "/design-studio", icon: ImageIcon, color: "text-rose-600", bg: "bg-rose-50" },
-            { name: "Presentations", href: "/presentation-studio", icon: Presentation, color: "text-cyan-600", bg: "bg-cyan-50" },
+            { name: "Content", href: "/content-studio", icon: PenTool, color: "text-emerald-600", bg: "bg-emerald-50", permission: "content:read" },
+            { name: "Design", href: "/design-studio", icon: ImageIcon, color: "text-rose-600", bg: "bg-rose-50", permission: "design_studio:read" },
+            { name: "Presentations", href: "/presentation-studio", icon: Presentation, color: "text-cyan-600", bg: "bg-cyan-50", permission: "presentation_studio:read" },
         ]
     },
     {
         title: "Intelligence",
         items: [
-            { name: "AI Agent", href: "/ai-agent", icon: Bot, color: "text-indigo-600", bg: "bg-indigo-50" },
-            { name: "AI Chat", href: "/ai-chat", icon: MessageSquare, color: "text-teal-600", bg: "bg-teal-50" },
-            { name: "Discovery", href: "/discovery", icon: Search, color: "text-pink-600", bg: "bg-pink-50" },
+            { name: "AI Agent", href: "/ai-agent", icon: Bot, color: "text-indigo-600", bg: "bg-indigo-50", permission: "ai_agent:read" },
+            { name: "AI Chat", href: "/ai-chat", icon: MessageSquare, color: "text-teal-600", bg: "bg-teal-50", permission: "ai_chat:read" },
+            { name: "Discovery", href: "/discovery", icon: Search, color: "text-pink-600", bg: "bg-pink-50", permission: "discovery:read" },
         ]
     },
     {
         title: "Growth & CRM",
         items: [
-            { name: "CRM", href: "/crm", icon: User, color: "text-amber-600", bg: "bg-amber-50" },
-            { name: "Marcom", href: "/marcom", icon: Megaphone, color: "text-green-600", bg: "bg-green-50" },
-            { name: "Creators", href: "/creators", icon: Users, color: "text-pink-600", bg: "bg-pink-50" },
-            { name: "Agency", href: "/agency", icon: Building2, color: "text-indigo-600", bg: "bg-indigo-50" },
+            { name: "CRM", href: "/crm", icon: User, color: "text-amber-600", bg: "bg-amber-50", permission: "crm:read" },
+            { name: "Marcom", href: "/marcom", icon: Megaphone, color: "text-green-600", bg: "bg-green-50", permission: "marcom:read" },
+            { name: "Creators", href: "/creators", icon: Users, color: "text-pink-600", bg: "bg-pink-50", permission: "creators:read" },
+            { name: "Agency", href: "/agency", icon: Building2, color: "text-indigo-600", bg: "bg-indigo-50", permission: "agency:read" },
         ]
     },
     {
         title: "System",
         items: [
-            { name: "Analytics", href: "/analytics", icon: BarChart3, color: "text-violet-600", bg: "bg-violet-50" },
-            { name: "Admin", href: "/admin", icon: Shield, color: "text-slate-600", bg: "bg-slate-100" },
+            { name: "Analytics", href: "/analytics", icon: BarChart3, color: "text-violet-600", bg: "bg-violet-50", permission: "analytics:read" },
+            { name: "Admin", href: "/admin", icon: Shield, color: "text-slate-600", bg: "bg-slate-100", permission: "admin:read" },
             { name: "Settings", href: "/settings", icon: Settings, color: "text-slate-600", bg: "bg-slate-50" },
         ]
     }
@@ -76,6 +92,7 @@ export function Sidebar() {
     const pathname = usePathname();
     const [user, setUser] = useState<UserInfo | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const { hasPermission, isSuperAdmin, loading: permLoading } = usePermissionContext();
 
     useEffect(() => {
         const userJson = localStorage.getItem("user");
@@ -115,6 +132,17 @@ export function Sidebar() {
             .slice(0, 2);
     };
 
+    const canSeeItem = (item: NavItem): boolean => {
+        // No permission required — always show
+        if (!item.permission) return true;
+        // Super admin sees everything
+        if (isSuperAdmin) return true;
+        // Still loading — show all (prevent flash of missing items)
+        if (permLoading) return true;
+        // Check permission
+        return hasPermission(item.permission);
+    };
+
     return (
         <div className="flex h-full w-[260px] flex-col bg-white border-r border-slate-300">
             <Link href="/dashboard" className="flex h-16 items-center px-5 border-b border-slate-300 hover:bg-slate-50 transition-colors">
@@ -135,36 +163,40 @@ export function Sidebar() {
                 className="flex-1 overflow-y-auto py-4 custom-scrollbar"
             >
                 <nav className="space-y-6 px-3">
-                    {navigationGroups.map((group) => (
-                        <div key={group.title}>
-                            <h3 className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                {group.title}
-                            </h3>
-                            <div className="space-y-0.5">
-                                {group.items.map((item) => {
-                                    // Normalize paths by removing trailing slashes for comparison
-                                    const currentPath = pathname?.replace(/\/$/, "") || "";
-                                    const itemPath = item.href.replace(/\/$/, "");
-                                    const isActive = currentPath === itemPath || currentPath.startsWith(itemPath + "/");
+                    {navigationGroups.map((group) => {
+                        const visibleItems = group.items.filter(canSeeItem);
+                        if (visibleItems.length === 0) return null;
 
-                                    return (
-                                        <Link
-                                            key={item.name}
-                                            href={item.href}
-                                            className={cn(
-                                                "group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200",
-                                                isActive
-                                                    ? "bg-slate-100/80 text-slate-900 shadow-sm ring-1 ring-slate-200"
-                                                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                            )}>
-                                            <item.icon className={cn("h-4.5 w-4.5 transition-colors", item.color)} />
-                                            <span className="leading-none">{item.name}</span>
-                                        </Link>
-                                    );
-                                })}
+                        return (
+                            <div key={group.title}>
+                                <h3 className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                    {group.title}
+                                </h3>
+                                <div className="space-y-0.5">
+                                    {visibleItems.map((item) => {
+                                        const currentPath = pathname?.replace(/\/$/, "") || "";
+                                        const itemPath = item.href.replace(/\/$/, "");
+                                        const isActive = currentPath === itemPath || currentPath.startsWith(itemPath + "/");
+
+                                        return (
+                                            <Link
+                                                key={item.name}
+                                                href={item.href}
+                                                className={cn(
+                                                    "group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200",
+                                                    isActive
+                                                        ? "bg-slate-100/80 text-slate-900 shadow-sm ring-1 ring-slate-200"
+                                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                                )}>
+                                                <item.icon className={cn("h-4.5 w-4.5 transition-colors", item.color)} />
+                                                <span className="leading-none">{item.name}</span>
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </nav>
             </div>
 

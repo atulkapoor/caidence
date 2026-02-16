@@ -3,6 +3,7 @@
  */
 
 export type UserRole =
+    | "root"
     | "super_admin"
     | "agency_admin"
     | "agency_member"
@@ -11,8 +12,9 @@ export type UserRole =
     | "creator"
     | "viewer";
 
-// Role hierarchy levels (higher = more permissions)
+// Role hierarchy levels (higher = more permissions) — matches backend ROLE_HIERARCHY
 const ROLE_HIERARCHY: Record<UserRole, number> = {
+    root: 110,
     super_admin: 100,
     agency_admin: 80,
     agency_member: 60,
@@ -22,89 +24,143 @@ const ROLE_HIERARCHY: Record<UserRole, number> = {
     viewer: 10,
 };
 
-// Permission actions
+// Permission actions — unified with backend (resource:action using read/write)
 export type Permission =
-    | "admin:access"
-    | "admin:manage_users"
-    | "admin:manage_billing"
-    | "agency:view"
-    | "agency:manage"
-    | "brand:view"
-    | "brand:manage"
-    | "brand:create"
-    | "creator:view"
-    | "creator:manage"
-    | "creator:add"
-    | "campaign:view"
-    | "campaign:manage"
-    | "content:view"
-    | "content:create";
+    | "admin:read"
+    | "admin:write"
+    | "agency:read"
+    | "agency:write"
+    | "brand:read"
+    | "brand:write"
+    | "creators:read"
+    | "creators:write"
+    | "campaign:read"
+    | "campaign:write"
+    | "content:read"
+    | "content:write"
+    | "analytics:read"
+    | "analytics:write"
+    | "discovery:read"
+    | "discovery:write"
+    | "crm:read"
+    | "crm:write"
+    | "design_studio:read"
+    | "design_studio:write"
+    | "marcom:read"
+    | "marcom:write"
+    | "workflow:read"
+    | "workflow:write"
+    | "ai_agent:read"
+    | "ai_agent:write"
+    | "ai_chat:read"
+    | "ai_chat:write"
+    | "content_studio:read"
+    | "content_studio:write"
+    | "presentation_studio:read"
+    | "presentation_studio:write";
 
-// Role-to-permissions mapping
+// Role-to-permissions mapping — matches backend role_permissions_map
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
+    root: [
+        "admin:read", "admin:write",
+        "agency:read", "agency:write",
+        "brand:read", "brand:write",
+        "creators:read", "creators:write",
+        "campaign:read", "campaign:write",
+        "content:read", "content:write",
+        "analytics:read", "analytics:write",
+        "discovery:read", "discovery:write",
+        "crm:read", "crm:write",
+        "design_studio:read", "design_studio:write",
+        "marcom:read", "marcom:write",
+        "workflow:read", "workflow:write",
+        "ai_agent:read", "ai_agent:write",
+        "ai_chat:read", "ai_chat:write",
+        "content_studio:read", "content_studio:write",
+        "presentation_studio:read", "presentation_studio:write",
+    ],
     super_admin: [
-        "admin:access",
-        "admin:manage_users",
-        "admin:manage_billing",
-        "agency:view",
-        "agency:manage",
-        "brand:view",
-        "brand:manage",
-        "brand:create",
-        "creator:view",
-        "creator:manage",
-        "creator:add",
-        "campaign:view",
-        "campaign:manage",
-        "content:view",
-        "content:create",
+        "admin:read", "admin:write",
+        "agency:read", "agency:write",
+        "brand:read", "brand:write",
+        "creators:read", "creators:write",
+        "campaign:read", "campaign:write",
+        "content:read", "content:write",
+        "analytics:read", "analytics:write",
+        "discovery:read", "discovery:write",
+        "crm:read", "crm:write",
+        "design_studio:read", "design_studio:write",
+        "marcom:read", "marcom:write",
+        "workflow:read", "workflow:write",
+        "ai_agent:read", "ai_agent:write",
+        "ai_chat:read", "ai_chat:write",
+        "content_studio:read", "content_studio:write",
+        "presentation_studio:read", "presentation_studio:write",
     ],
     agency_admin: [
-        "agency:view",
-        "agency:manage",
-        "brand:view",
-        "brand:manage",
-        "brand:create",
-        "creator:view",
-        "creator:manage",
-        "creator:add",
-        "campaign:view",
-        "campaign:manage",
-        "content:view",
-        "content:create",
+        "agency:read", "agency:write",
+        "brand:read", "brand:write",
+        "creators:read", "creators:write",
+        "campaign:read", "campaign:write",
+        "content:read", "content:write",
+        "analytics:read",
+        "discovery:read", "discovery:write",
+        "crm:read", "crm:write",
+        "design_studio:read", "design_studio:write",
+        "marcom:read", "marcom:write",
+        "workflow:read", "workflow:write",
+        "ai_agent:read", "ai_agent:write",
+        "ai_chat:read", "ai_chat:write",
+        "content_studio:read", "content_studio:write",
+        "presentation_studio:read", "presentation_studio:write",
     ],
     agency_member: [
-        "agency:view",
-        "brand:view",
-        "creator:view",
-        "campaign:view",
-        "content:view",
-        "content:create",
+        "agency:read",
+        "brand:read",
+        "creators:read",
+        "campaign:read", "campaign:write",
+        "content:read", "content:write",
+        "analytics:read",
+        "discovery:read",
+        "design_studio:read", "design_studio:write",
+        "workflow:read",
+        "ai_chat:read",
+        "content_studio:read",
+        "presentation_studio:read",
     ],
     brand_admin: [
-        "brand:view",
-        "brand:manage",
-        "creator:view",
-        "creator:manage",
-        "creator:add",
-        "campaign:view",
-        "campaign:manage",
-        "content:view",
-        "content:create",
+        "brand:read", "brand:write",
+        "creators:read", "creators:write",
+        "campaign:read", "campaign:write",
+        "content:read", "content:write",
+        "analytics:read",
+        "discovery:read",
+        "crm:read", "crm:write",
+        "design_studio:read", "design_studio:write",
+        "ai_chat:read",
+        "content_studio:read", "content_studio:write",
     ],
     brand_member: [
-        "brand:view",
-        "creator:view",
-        "campaign:view",
-        "content:view",
-        "content:create",
+        "brand:read",
+        "creators:read",
+        "campaign:read",
+        "content:read", "content:write",
+        "analytics:read",
+        "discovery:read",
+        "design_studio:read",
+        "ai_chat:read",
     ],
     creator: [
-        "content:view",
-        "content:create",
+        "content:read", "content:write",
+        "design_studio:read",
+        "ai_chat:read",
     ],
     viewer: [
-        "content:view",
+        "campaign:read",
+        "content:read",
+        "analytics:read",
+        "discovery:read",
+        "design_studio:read",
     ],
 };
 
@@ -129,7 +185,7 @@ export function hasRole(userRole: UserRole, requiredRole: UserRole): boolean {
  * Check if user is a super admin.
  */
 export function isSuperAdmin(role: UserRole): boolean {
-    return role === "super_admin";
+    return role === "root" || role === "super_admin";
 }
 
 /**
@@ -151,6 +207,7 @@ export function isBrandLevel(role: UserRole): boolean {
  */
 export function getRoleDisplayName(role: UserRole): string {
     const names: Record<UserRole, string> = {
+        root: "Root",
         super_admin: "Super Admin",
         agency_admin: "Agency Admin",
         agency_member: "Agency Member",

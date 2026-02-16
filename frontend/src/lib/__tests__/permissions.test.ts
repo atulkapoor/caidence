@@ -12,62 +12,87 @@ import {
 } from '../permissions'
 
 describe('hasPermission', () => {
-  it('super_admin has all permissions', () => {
-    const allPermissions: Permission[] = [
-      'admin:access', 'admin:manage_users', 'admin:manage_billing',
-      'agency:view', 'agency:manage',
-      'brand:view', 'brand:manage', 'brand:create',
-      'creator:view', 'creator:manage', 'creator:add',
-      'campaign:view', 'campaign:manage',
-      'content:view', 'content:create',
+  it('root has all permissions', () => {
+    const samplePermissions: Permission[] = [
+      'admin:read', 'admin:write',
+      'agency:read', 'agency:write',
+      'brand:read', 'brand:write',
+      'creators:read', 'creators:write',
+      'campaign:read', 'campaign:write',
+      'content:read', 'content:write',
+      'analytics:read',
+      'discovery:read', 'discovery:write',
     ]
-    for (const perm of allPermissions) {
+    for (const perm of samplePermissions) {
+      expect(hasPermission('root', perm)).toBe(true)
+    }
+  })
+
+  it('super_admin has all permissions', () => {
+    const samplePermissions: Permission[] = [
+      'admin:read', 'admin:write',
+      'agency:read', 'agency:write',
+      'brand:read', 'brand:write',
+      'creators:read', 'creators:write',
+      'campaign:read', 'campaign:write',
+      'content:read', 'content:write',
+    ]
+    for (const perm of samplePermissions) {
       expect(hasPermission('super_admin', perm)).toBe(true)
     }
   })
 
-  it('viewer only has content:view', () => {
-    expect(hasPermission('viewer', 'content:view')).toBe(true)
-    expect(hasPermission('viewer', 'content:create')).toBe(false)
-    expect(hasPermission('viewer', 'admin:access')).toBe(false)
-    expect(hasPermission('viewer', 'campaign:view')).toBe(false)
+  it('viewer has read-only access to limited resources', () => {
+    expect(hasPermission('viewer', 'content:read')).toBe(true)
+    expect(hasPermission('viewer', 'campaign:read')).toBe(true)
+    expect(hasPermission('viewer', 'analytics:read')).toBe(true)
+    expect(hasPermission('viewer', 'content:write')).toBe(false)
+    expect(hasPermission('viewer', 'admin:read')).toBe(false)
+    expect(hasPermission('viewer', 'agency:read')).toBe(false)
   })
 
-  it('creator can view and create content but nothing else admin', () => {
-    expect(hasPermission('creator', 'content:view')).toBe(true)
-    expect(hasPermission('creator', 'content:create')).toBe(true)
-    expect(hasPermission('creator', 'admin:access')).toBe(false)
-    expect(hasPermission('creator', 'campaign:view')).toBe(false)
+  it('creator can read and write content but not admin', () => {
+    expect(hasPermission('creator', 'content:read')).toBe(true)
+    expect(hasPermission('creator', 'content:write')).toBe(true)
+    expect(hasPermission('creator', 'admin:read')).toBe(false)
+    expect(hasPermission('creator', 'campaign:read')).toBe(false)
   })
 
-  it('agency_admin has agency, brand, creator, campaign, content perms but not admin', () => {
-    expect(hasPermission('agency_admin', 'agency:view')).toBe(true)
-    expect(hasPermission('agency_admin', 'agency:manage')).toBe(true)
-    expect(hasPermission('agency_admin', 'brand:create')).toBe(true)
-    expect(hasPermission('agency_admin', 'campaign:manage')).toBe(true)
-    expect(hasPermission('agency_admin', 'admin:access')).toBe(false)
+  it('agency_admin has broad access but not admin', () => {
+    expect(hasPermission('agency_admin', 'agency:read')).toBe(true)
+    expect(hasPermission('agency_admin', 'agency:write')).toBe(true)
+    expect(hasPermission('agency_admin', 'brand:write')).toBe(true)
+    expect(hasPermission('agency_admin', 'campaign:write')).toBe(true)
+    expect(hasPermission('agency_admin', 'admin:read')).toBe(false)
   })
 
-  it('brand_member can view but not manage', () => {
-    expect(hasPermission('brand_member', 'brand:view')).toBe(true)
-    expect(hasPermission('brand_member', 'brand:manage')).toBe(false)
-    expect(hasPermission('brand_member', 'campaign:view')).toBe(true)
-    expect(hasPermission('brand_member', 'campaign:manage')).toBe(false)
+  it('brand_member can read but not write brands/campaigns', () => {
+    expect(hasPermission('brand_member', 'brand:read')).toBe(true)
+    expect(hasPermission('brand_member', 'brand:write')).toBe(false)
+    expect(hasPermission('brand_member', 'campaign:read')).toBe(true)
+    expect(hasPermission('brand_member', 'campaign:write')).toBe(false)
   })
 
-  it('brand_admin can manage brands, creators, campaigns', () => {
-    expect(hasPermission('brand_admin', 'brand:manage')).toBe(true)
-    expect(hasPermission('brand_admin', 'creator:manage')).toBe(true)
-    expect(hasPermission('brand_admin', 'campaign:manage')).toBe(true)
-    expect(hasPermission('brand_admin', 'agency:manage')).toBe(false)
+  it('brand_admin can write brands, creators, campaigns', () => {
+    expect(hasPermission('brand_admin', 'brand:write')).toBe(true)
+    expect(hasPermission('brand_admin', 'creators:write')).toBe(true)
+    expect(hasPermission('brand_admin', 'campaign:write')).toBe(true)
+    expect(hasPermission('brand_admin', 'agency:write')).toBe(false)
   })
 })
 
 describe('hasRole', () => {
-  it('super_admin meets any required role', () => {
+  it('root meets any required role', () => {
+    expect(hasRole('root', 'root')).toBe(true)
+    expect(hasRole('root', 'super_admin')).toBe(true)
+    expect(hasRole('root', 'viewer')).toBe(true)
+  })
+
+  it('super_admin meets any role except root', () => {
     expect(hasRole('super_admin', 'super_admin')).toBe(true)
     expect(hasRole('super_admin', 'viewer')).toBe(true)
     expect(hasRole('super_admin', 'creator')).toBe(true)
+    expect(hasRole('super_admin', 'root')).toBe(false)
   })
 
   it('viewer does not meet admin role', () => {
@@ -85,9 +110,8 @@ describe('hasRole', () => {
   })
 
   it('hierarchy is correctly ordered', () => {
-    const roles: UserRole[] = ['viewer', 'creator', 'brand_member', 'brand_admin', 'agency_member', 'agency_admin', 'super_admin']
+    const roles: UserRole[] = ['viewer', 'creator', 'brand_member', 'brand_admin', 'agency_member', 'agency_admin', 'super_admin', 'root']
     for (let i = 0; i < roles.length; i++) {
-      // Each role should meet all roles below it
       for (let j = 0; j <= i; j++) {
         expect(hasRole(roles[i], roles[j])).toBe(true)
       }
@@ -96,7 +120,8 @@ describe('hasRole', () => {
 })
 
 describe('isSuperAdmin', () => {
-  it('returns true only for super_admin', () => {
+  it('returns true for root and super_admin', () => {
+    expect(isSuperAdmin('root')).toBe(true)
     expect(isSuperAdmin('super_admin')).toBe(true)
     expect(isSuperAdmin('agency_admin')).toBe(false)
     expect(isSuperAdmin('viewer')).toBe(false)
@@ -134,6 +159,7 @@ describe('isBrandLevel', () => {
 
 describe('getRoleDisplayName', () => {
   it('returns human-readable names', () => {
+    expect(getRoleDisplayName('root')).toBe('Root')
     expect(getRoleDisplayName('super_admin')).toBe('Super Admin')
     expect(getRoleDisplayName('agency_admin')).toBe('Agency Admin')
     expect(getRoleDisplayName('brand_member')).toBe('Brand Member')
@@ -143,9 +169,9 @@ describe('getRoleDisplayName', () => {
 })
 
 describe('getAllRoles', () => {
-  it('returns all 7 roles', () => {
+  it('returns all 8 roles', () => {
     const roles = getAllRoles()
-    expect(roles).toHaveLength(7)
+    expect(roles).toHaveLength(8)
   })
 
   it('each role has value and label', () => {
@@ -158,9 +184,10 @@ describe('getAllRoles', () => {
     }
   })
 
-  it('includes super_admin and viewer', () => {
+  it('includes root, super_admin, and viewer', () => {
     const roles = getAllRoles()
     const values = roles.map(r => r.value)
+    expect(values).toContain('root')
     expect(values).toContain('super_admin')
     expect(values).toContain('viewer')
   })
