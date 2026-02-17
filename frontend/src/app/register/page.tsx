@@ -36,7 +36,7 @@ function RegisterContent() {
                 });
                 if (loginData.access_token) {
                     localStorage.setItem("token", loginData.access_token);
-                    router.push("/dashboard");
+                    router.push("/onboarding");
                 }
             } catch {
                 toast.info("Please sign in with your new account.");
