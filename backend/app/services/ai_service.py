@@ -57,7 +57,7 @@ class AIService:
     
     _cached_model: Optional[str] = None
     
-    genai.configure(api_key="Enter The API Key Here")
+    genai.configure(api_key="AIzaSyA5OcRUkXxs06FjZJgz5rF7-Mx4fk4Zq9M")
     
     nano_model = genai.GenerativeModel("nano-banana-pro-preview")
     gemini_model = genai.GenerativeModel("gemini-pro-latest")
