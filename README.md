@@ -29,6 +29,24 @@ A comprehensive AI-powered marketing intelligence platform that combines autonom
 
 ---
 
+## 📖 Documentation
+
+Full documentation is available in the [`docs/`](docs/) directory:
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | System design, database schema, RBAC engine, auth flow |
+| [API Reference](docs/api-reference.md) | All 26 API router groups with endpoint signatures |
+| [Setup Guide](docs/setup-guide.md) | Local development setup (Docker, env vars, seeds) |
+| [Deployment](docs/deployment.md) | Production deployment, HTTPS, backups |
+| [User Guide](docs/user-guide.md) | End-user guide for all 17 modules |
+| [Admin Guide](docs/admin-guide.md) | Admin panel, RBAC management, audit logs |
+| [Contributing](docs/contributing.md) | Coding standards, PR process, testing patterns |
+
+See also: [TRACKER.md](TRACKER.md) — comprehensive project issue tracker with 123 tasks across 12 phases.
+
+---
+
 ## 📁 Project Structure
 
 ```

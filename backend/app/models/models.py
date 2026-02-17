@@ -59,6 +59,9 @@ class User(Base):
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=True)
     role = Column(String, default="viewer")  # Keeping for back-compat/quick check, sync with role_id
     
+    # Profile type (agency / brand / creator) — set during onboarding
+    profile_type = Column(String, nullable=True)
+
     # Status
     is_active = Column(Boolean, default=True)
     is_approved = Column(Boolean, default=False)  # Requires super admin approval for new signups
@@ -80,6 +83,10 @@ class User(Base):
     campaigns = relationship("Campaign", back_populates="owner")
     activities = relationship("ActivityLog", back_populates="user")
     projects = relationship("Project", back_populates="owner")
+
+    # Social & Onboarding
+    social_connections = relationship("SocialConnection", back_populates="user", cascade="all, delete-orphan")
+    onboarding_progress = relationship("OnboardingProgress", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 class Campaign(Base):
     __tablename__ = "campaigns"

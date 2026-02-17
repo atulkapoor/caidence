@@ -27,6 +27,7 @@ from app.models.creator import Creator
 # )
 from app.models.team import Team
 from app.models.rbac import Role, Permission
+from app.models.social import SocialConnection, OnboardingProgress
 
 __all__ = [
     "User",
@@ -47,4 +48,6 @@ __all__ = [
     "Team",
     "Role",
     "Permission",
+    "SocialConnection",
+    "OnboardingProgress",
 ]

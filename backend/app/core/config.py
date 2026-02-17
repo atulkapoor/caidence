@@ -54,6 +54,24 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
 
+    # Frontend URL (for OAuth redirect after callback)
+    FRONTEND_URL: str = "http://localhost:3000"
+    OAUTH_REDIRECT_BASE: str = "http://localhost:8000/api/v1/social/callback"
+
+    # Social OAuth Credentials
+    INSTAGRAM_CLIENT_ID: str = ""
+    INSTAGRAM_CLIENT_SECRET: str = ""
+    FACEBOOK_APP_ID: str = ""
+    FACEBOOK_APP_SECRET: str = ""
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    LINKEDIN_CLIENT_ID: str = ""
+    LINKEDIN_CLIENT_SECRET: str = ""
+    SNAPCHAT_CLIENT_ID: str = ""
+    SNAPCHAT_CLIENT_SECRET: str = ""
+    WHATSAPP_APP_ID: str = ""
+    WHATSAPP_APP_SECRET: str = ""
+
     @model_validator(mode='after')
     def validate_security_settings(self):
         """Validate security settings based on environment."""
