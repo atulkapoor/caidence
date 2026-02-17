@@ -17,6 +17,8 @@ const AnalyticsTab = dynamic(() => import("@/components/campaigns/AnalyticsTab")
     ssr: false
 });
 import { SocialCalendar } from "@/components/social/SocialCalendar";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 function CampaignContent() {
     // Current valid tabs: "Campaign List", "Create Campaign", "Analytics", "Calendar"
@@ -366,8 +368,10 @@ function CampaignContent() {
 
 export default function CampaignPage() {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading campaigns...</div>}>
-            <CampaignContent />
-        </Suspense>
+        <PermissionGate require="campaign:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading campaigns...</div>}>
+                <CampaignContent />
+            </Suspense>
+        </PermissionGate>
     );
 }

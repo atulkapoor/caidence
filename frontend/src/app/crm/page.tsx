@@ -6,6 +6,8 @@ import { fetchRelationships, generateXRayReport, RelationshipProfile } from "@/l
 import { User, FileText, Download, TrendingUp, DollarSign, Calendar, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 export default function CRMPage() {
     const [relationships, setRelationships] = useState<RelationshipProfile[]>([]);
@@ -75,6 +77,7 @@ export default function CRMPage() {
 
     return (
         <DashboardLayout>
+            <PermissionGate require="crm:read" fallback={<AccessDenied />}>
             <div className="max-w-7xl mx-auto space-y-8 p-4">
                 {/* Header */}
                 <header className="flex justify-between items-center mb-8">
@@ -187,6 +190,7 @@ export default function CRMPage() {
                     </table>
                 </div>
             </div>
+            </PermissionGate>
         </DashboardLayout>
     );
 }

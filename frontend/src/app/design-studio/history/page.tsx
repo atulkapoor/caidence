@@ -1,6 +1,8 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { Palette, Search, Filter, ArrowLeft, Download, Maximize2, Calendar, Trash2 } from "lucide-react";
 import { fetchDesignAssets, DesignAsset, deleteDesign } from "@/lib/api";
 import { useEffect, useState, Suspense } from "react";
@@ -173,7 +175,9 @@ export default function DesignHistoryPage() {
     return (
         <Suspense fallback={<DashboardLayout><div>Loading...</div></DashboardLayout>}>
             <DashboardLayout>
-                <DesignHistory />
+                <PermissionGate require="design_studio:read" fallback={<AccessDenied />}>
+                    <DesignHistory />
+                </PermissionGate>
             </DashboardLayout>
         </Suspense>
     );

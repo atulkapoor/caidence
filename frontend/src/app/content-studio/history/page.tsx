@@ -7,6 +7,8 @@ import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 function ContentHistory() {
     const router = useRouter();
@@ -185,7 +187,9 @@ export default function ContentHistoryPage() {
     return (
         <Suspense fallback={<DashboardLayout><div>Loading...</div></DashboardLayout>}>
             <DashboardLayout>
-                <ContentHistory />
+                <PermissionGate require="content:read" fallback={<AccessDenied />}>
+                    <ContentHistory />
+                </PermissionGate>
             </DashboardLayout>
         </Suspense>
     );

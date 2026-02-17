@@ -7,6 +7,8 @@ import { useModalScroll } from "@/hooks/useModalScroll";
 import Link from "next/link";
 import { fetchWorkflows, createWorkflow, Workflow } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 function WorkflowList() {
     const router = useRouter();
@@ -207,7 +209,9 @@ export default function WorkflowPage() {
             </DashboardLayout>
         }>
             <DashboardLayout>
-                <WorkflowList />
+                <PermissionGate require="workflow:read" fallback={<AccessDenied />}>
+                    <WorkflowList />
+                </PermissionGate>
             </DashboardLayout>
         </Suspense>
     );

@@ -9,6 +9,8 @@ import { useTabState } from "@/hooks/useTabState";
 import { toast } from "sonner";
 import { usePreferences } from "@/context/PreferencesContext";
 import { getAuthHeaders } from "@/lib/api";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 const AGENT_PLACEHOLDERS: Record<string, { project: string; objective: string }> = {
     "Technology": { project: "e.g. SaaS Product Launch", objective: "Describe product capabilities, user pain points, and launch goals..." },
@@ -381,8 +383,10 @@ function AIAgentContent() {
 
 export default function AIAgentPage() {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading AI Agent...</div>}>
-            <AIAgentContent />
-        </Suspense>
+        <PermissionGate require="ai_agent:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading AI Agent...</div>}>
+                <AIAgentContent />
+            </Suspense>
+        </PermissionGate>
     );
 }

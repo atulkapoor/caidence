@@ -7,6 +7,8 @@ import { Building2, Users, Briefcase, DollarSign, Plus, Settings, MoreHorizontal
 import { fetchBrands, createBrand, Brand } from "@/lib/api";
 import { isAgencyLevel, type UserRole } from "@/lib/permissions";
 import { toast } from "sonner";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 export default function AgencyPage() {
     const [brands, setBrands] = useState<Brand[]>([]);
@@ -54,6 +56,7 @@ export default function AgencyPage() {
 
     return (
         <DashboardLayout>
+            <PermissionGate require="agency:read" fallback={<AccessDenied />}>
             <div className="max-w-7xl mx-auto space-y-8 p-4">
                 {/* Header */}
                 <header className="flex justify-between items-center">
@@ -176,6 +179,7 @@ export default function AgencyPage() {
                     }}
                 />
             )}
+            </PermissionGate>
         </DashboardLayout>
     );
 }

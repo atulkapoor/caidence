@@ -7,6 +7,10 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Users, Building, CreditCard, Shield, UserPlus, Search, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccessControlTab } from "@/components/admin/AccessControlTab";
+import { RoleManagementTab } from "@/components/admin/RoleManagementTab";
+import { AuditLogTab } from "@/components/admin/AuditLogTab";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { toast } from "sonner";
 import { fetchAdminUsers, fetchOrganizationUsers, approveUser, inviteUser, AdminUser, fetchPlatformOverview, fetchAdminOrganizations, PlatformOverview, AdminOrg } from "@/lib/api";
 
@@ -32,7 +36,7 @@ function AdminContent() {
 
                     {/* Navigation Tabs */}
                     <div className="flex border-b border-slate-200">
-                        {["overview", "users", "access", "organizations", "billing"].map((tab) => (
+                        {["overview", "users", "access", "roles", "audit", "organizations", "billing"].map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -43,7 +47,7 @@ function AdminContent() {
                                         : "border-transparent text-slate-500 hover:text-slate-700"
                                 )}
                             >
-                                {tab === "access" ? "Access Control" : tab}
+                                {tab === "access" ? "Access Control" : tab === "audit" ? "Audit Log" : tab}
                             </button>
                         ))}
                     </div>
@@ -53,6 +57,8 @@ function AdminContent() {
                         {activeTab === "overview" && <AdminOverview />}
                         {activeTab === "users" && <UserManagement />}
                         {activeTab === "access" && <AccessControlTab />}
+                        {activeTab === "roles" && <RoleManagementTab />}
+                        {activeTab === "audit" && <AuditLogTab />}
                         {activeTab === "organizations" && <OrganizationManagement />}
                         {activeTab === "billing" && <BillingOverview />}
                     </div>
@@ -64,9 +70,11 @@ function AdminContent() {
 
 export default function AdminPage() {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading admin panel...</div>}>
-            <AdminContent />
-        </Suspense>
+        <PermissionGate require="admin:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading admin panel...</div>}>
+                <AdminContent />
+            </Suspense>
+        </PermissionGate>
     );
 }
 

@@ -6,6 +6,8 @@ import {
     Briefcase, FileText, DollarSign, Upload, Clock,
     CheckCircle, XCircle, TrendingUp, Download, User
 } from "lucide-react";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 interface Assignment {
     id: number;
@@ -63,6 +65,7 @@ export default function CreatorPortalPage() {
 
     return (
         <DashboardLayout>
+            <PermissionGate require="creators:read" fallback={<AccessDenied />}>
             <div className="max-w-7xl mx-auto space-y-8 p-4">
                 {/* Header */}
                 <header className="flex justify-between items-center">
@@ -190,6 +193,7 @@ export default function CreatorPortalPage() {
                     </a>
                 </div>
             </div>
+            </PermissionGate>
         </DashboardLayout>
     );
 }

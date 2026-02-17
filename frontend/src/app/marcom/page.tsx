@@ -6,6 +6,8 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { TOOLS } from "@/lib/marcom-tools";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 export default function MarcomPage() {
     const router = useRouter();
@@ -18,6 +20,7 @@ export default function MarcomPage() {
 
     return (
         <DashboardLayout>
+            <PermissionGate require="marcom:read" fallback={<AccessDenied />}>
             <div className="min-h-screen bg-slate-100 p-8">
                 <div className="max-w-7xl mx-auto space-y-8">
                     {/* Header */}
@@ -58,6 +61,7 @@ export default function MarcomPage() {
                     </div>
                 </div>
             </div>
+            </PermissionGate>
         </DashboardLayout>
     );
 }

@@ -8,6 +8,8 @@ import { useTabState } from "@/hooks/useTabState";
 import Link from "next/link";
 import { CollateralGenerator } from "@/components/content/CollateralGenerator";
 import { toast } from "sonner";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 function PresentationStudioContent() {
     const [activeTab, setActiveTab] = useTabState("presentations");
@@ -187,8 +189,10 @@ function PresentationStudioContent() {
 
 export default function PresentationStudioPage() {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
-            <PresentationStudioContent />
-        </Suspense>
+        <PermissionGate require="presentation_studio:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
+                <PresentationStudioContent />
+            </Suspense>
+        </PermissionGate>
     );
 }

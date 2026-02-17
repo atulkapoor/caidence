@@ -7,6 +7,8 @@ import { useTabState } from "@/hooks/useTabState";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchWorkflowById, fetchWorkflowHistory, runWorkflow, Workflow, WorkflowRun } from "@/lib/api";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 interface PageProps {
     params: { id: string };
@@ -447,8 +449,10 @@ function WorkflowDetailContent({ params }: PageProps) {
 
 export default function WorkflowDetailPage({ params }: PageProps) {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading workflow...</div>}>
-            <WorkflowDetailContent params={params} />
-        </Suspense>
+        <PermissionGate require="workflow:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading workflow...</div>}>
+                <WorkflowDetailContent params={params} />
+            </Suspense>
+        </PermissionGate>
     );
 }

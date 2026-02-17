@@ -1,6 +1,8 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { generateDesign, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
@@ -625,9 +627,11 @@ function DesignStudioContent() {
 
 export default function DesignStudioPage() {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
-            <DesignStudioContent />
-        </Suspense>
+        <PermissionGate require="design_studio:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
+                <DesignStudioContent />
+            </Suspense>
+        </PermissionGate>
     );
 }
 
