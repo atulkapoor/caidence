@@ -11,6 +11,8 @@ import { useModalScroll } from "@/hooks/useModalScroll";
 
 // Implementation of Typewriter effect component
 import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 function ContentStudioContent() {
     // Form State
@@ -626,8 +628,10 @@ ${prompt}
 
 export default function ContentStudioPage() {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
-            <ContentStudioContent />
-        </Suspense>
+        <PermissionGate require="content:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
+                <ContentStudioContent />
+            </Suspense>
+        </PermissionGate>
     );
 }

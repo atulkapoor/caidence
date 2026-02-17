@@ -7,6 +7,8 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Users, Plus, Search, Filter, MoreHorizontal, Link2, FileText, Instagram, Youtube } from "lucide-react";
 import { fetchCreators, addCreator, deleteCreator, generateAffiliateCode, Creator } from "@/lib/api";
 import { toast } from "sonner";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 function CreatorsContent() {
     const [creators, setCreators] = useState<Creator[]>([]);
@@ -303,8 +305,10 @@ function CreatorsContent() {
 
 export default function CreatorsPage() {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading creators...</div>}>
-            <CreatorsContent />
-        </Suspense>
+        <PermissionGate require="creators:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading creators...</div>}>
+                <CreatorsContent />
+            </Suspense>
+        </PermissionGate>
     );
 }

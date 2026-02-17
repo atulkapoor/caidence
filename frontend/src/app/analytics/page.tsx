@@ -7,6 +7,8 @@ import { BarChart3, TrendingUp, Users, MousePointer, ArrowUpRight, Radio, Search
 import { toast } from "sonner";
 import { getDashboardAnalytics, AnalyticsDashboardResponse } from "@/lib/api";
 import dynamic from "next/dynamic";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 // Dynamic imports to prevent SSR issues with Recharts
 const AnalyticsCharts = dynamic(() => import("@/components/analytics/AnalyticsCharts"), {
@@ -148,8 +150,10 @@ function AnalyticsContent() {
 
 export default function AnalyticsPage() {
     return (
-        <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading analytics...</div>}>
-            <AnalyticsContent />
-        </Suspense>
+        <PermissionGate require="analytics:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading analytics...</div>}>
+                <AnalyticsContent />
+            </Suspense>
+        </PermissionGate>
     );
 }

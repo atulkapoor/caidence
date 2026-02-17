@@ -6,6 +6,8 @@ import { fetchPresentations, Presentation } from "@/lib/api";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import dynamic from 'next/dynamic';
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 // Dynamically import PDF component to avoid SSR issues
 const PresentationPDFDownload = dynamic(() => import("@/components/content/PresentationPDF"), {
@@ -176,8 +178,10 @@ function PresentationHistoryContent() {
 
 export default function PresentationHistoryPage() {
     return (
-        <Suspense fallback={<div>Loading...</div>}>
-            <PresentationHistoryContent />
-        </Suspense>
+        <PermissionGate require="presentation_studio:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+            <Suspense fallback={<div>Loading...</div>}>
+                <PresentationHistoryContent />
+            </Suspense>
+        </PermissionGate>
     );
 }

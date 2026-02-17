@@ -5,6 +5,8 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Send, Sparkles, Paperclip, User, Bot, Crown, ArrowRight } from "lucide-react";
 import { usePreferences } from "@/context/PreferencesContext";
 import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 const QUICK_PROMPTS: Record<string, string[]> = {
     "Technology": ["Draft a SaaS onboarding email", "Analyze churn metrics", "Feature announcement post", "Competitor battlecard"],
@@ -127,6 +129,7 @@ export default function AIChatPage() {
 
     return (
         <DashboardLayout>
+            <PermissionGate require="ai_chat:read" fallback={<AccessDenied />}>
             <div className="flex h-[calc(100vh-140px)] gap-6">
                 {/* Main Chat Area */}
                 <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -304,6 +307,7 @@ export default function AIChatPage() {
                     </div>
                 </div>
             </div>
+            </PermissionGate>
         </DashboardLayout>
     );
 }

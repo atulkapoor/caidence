@@ -1,6 +1,8 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { ArrowLeft, Download, Palette, Calendar, Share2, Wand2, Maximize2 } from "lucide-react";
 import { fetchDesignAssetById, DesignAsset } from "@/lib/api";
 import { useEffect, useState } from "react";
@@ -53,9 +55,11 @@ export default function DesignDetailPage({ params }: PageProps) {
     if (!resolvedParams || loading) {
         return (
             <DashboardLayout>
-                <div className="min-h-screen bg-slate-50/50 p-8 flex items-center justify-center">
-                    <div className="animate-spin w-8 h-8 border-2 border-rose-600 border-t-transparent rounded-full"></div>
-                </div>
+                <PermissionGate require="design_studio:read" fallback={<AccessDenied />}>
+                    <div className="min-h-screen bg-slate-50/50 p-8 flex items-center justify-center">
+                        <div className="animate-spin w-8 h-8 border-2 border-rose-600 border-t-transparent rounded-full"></div>
+                    </div>
+                </PermissionGate>
             </DashboardLayout>
         );
     }
@@ -63,16 +67,19 @@ export default function DesignDetailPage({ params }: PageProps) {
     if (!asset) {
         return (
             <DashboardLayout>
-                <div className="min-h-screen bg-slate-50/50 p-8 flex flex-col items-center justify-center">
-                    <h2 className="text-xl font-bold text-slate-900 mb-2">Asset Not Found</h2>
-                    <Link href="/design-studio/history" className="text-rose-600 font-bold hover:underline">Return to Library</Link>
-                </div>
+                <PermissionGate require="design_studio:read" fallback={<AccessDenied />}>
+                    <div className="min-h-screen bg-slate-50/50 p-8 flex flex-col items-center justify-center">
+                        <h2 className="text-xl font-bold text-slate-900 mb-2">Asset Not Found</h2>
+                        <Link href="/design-studio/history" className="text-rose-600 font-bold hover:underline">Return to Library</Link>
+                    </div>
+                </PermissionGate>
             </DashboardLayout>
         );
     }
 
     return (
         <DashboardLayout>
+            <PermissionGate require="design_studio:read" fallback={<AccessDenied />}>
             <div className="min-h-screen bg-slate-50/50 p-6 sm:p-8">
                 <div className="max-w-6xl mx-auto">
 
@@ -183,6 +190,7 @@ export default function DesignDetailPage({ params }: PageProps) {
 
                 </div>
             </div>
+            </PermissionGate>
         </DashboardLayout>
     );
 }

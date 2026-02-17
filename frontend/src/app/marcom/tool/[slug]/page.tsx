@@ -6,6 +6,8 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { TOOLS, MarcomTool } from "@/lib/marcom-tools";
 import { ArrowLeft, Sparkles, Copy, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 const API_Base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -116,6 +118,7 @@ export default function ToolRunnerPage() {
 
     return (
         <DashboardLayout>
+            <PermissionGate require="marcom:read" fallback={<AccessDenied />}>
             <div className="max-w-6xl mx-auto p-6">
                 <button
                     onClick={() => router.push("/marcom")}
@@ -217,6 +220,7 @@ export default function ToolRunnerPage() {
                     </div>
                 </div>
             </div>
+            </PermissionGate>
         </DashboardLayout>
     );
 }
