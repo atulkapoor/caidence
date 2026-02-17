@@ -18,11 +18,7 @@ export interface OnboardingProgress {
 
 export async function getOnboardingProgress(): Promise<OnboardingProgress> {
     const res = await authenticatedFetch(`${API_BASE_URL}/onboarding/progress`);
-    if (!res.ok) {
-        const err = new Error("Failed to fetch onboarding progress") as Error & { status: number };
-        err.status = res.status;
-        throw err;
-    }
+    if (!res.ok) throw new Error("Failed to fetch onboarding progress");
     return res.json();
 }
 

@@ -36,15 +36,6 @@ function RegisterContent() {
                 });
                 if (loginData.access_token) {
                     localStorage.setItem("token", loginData.access_token);
-
-                    // Store user details for RBAC
-                    try {
-                        const user = await fetchCurrentUser();
-                        localStorage.setItem("user", JSON.stringify(user));
-                    } catch {
-                        // Non-critical — onboarding still works without cached user
-                    }
-
                     router.push("/onboarding");
                 }
             } catch {

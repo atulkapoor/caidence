@@ -10,7 +10,6 @@ import {
     type OnboardingProgress,
     type OnboardingStep,
 } from "@/lib/api/onboarding";
-import { fetchCurrentUser } from "@/lib/api";
 import { OnboardingProgressBar } from "./OnboardingProgressBar";
 import { ProfileTypeStep } from "./steps/ProfileTypeStep";
 import { CompanyInfoStep } from "./steps/CompanyInfoStep";
@@ -65,25 +64,6 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
     const isLastStep = currentStepIndex === steps.length - 1;
     const isCompleted = progress.completed_steps.includes(currentStepIndex);
 
-    const handleCompleteAndRedirect = useCallback(async () => {
-        await completeOnboarding();
-        toast.success("Welcome to C(AI)DENCE!");
-
-        // Check if user is approved — redirect accordingly
-        try {
-            const user = await fetchCurrentUser();
-            localStorage.setItem("user", JSON.stringify(user));
-            if (user.is_approved) {
-                router.push("/dashboard");
-            } else {
-                router.push("/pending-approval");
-            }
-        } catch {
-            // If we can't fetch user, send to pending-approval to be safe
-            router.push("/pending-approval");
-        }
-    }, [router]);
-
     const handleNext = useCallback(
         async (data: Record<string, unknown>, profileType?: string) => {
             setSaving(true);
@@ -97,8 +77,11 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
                 setStepData({});
 
                 if (isLastStep) {
+                    // Try to complete onboarding
                     try {
-                        await handleCompleteAndRedirect();
+                        await completeOnboarding();
+                        toast.success("Welcome to C(AI)DENCE!");
+                        router.push("/dashboard");
                     } catch (e) {
                         const msg = e instanceof Error ? e.message : "Cannot complete onboarding yet";
                         toast.error(msg);
@@ -112,7 +95,7 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
                 setSaving(false);
             }
         },
-        [currentStepIndex, isLastStep, handleCompleteAndRedirect],
+        [currentStepIndex, isLastStep, router],
     );
 
     const handleBack = () => {
@@ -225,7 +208,9 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
                                 onClick={async () => {
                                     setSaving(true);
                                     try {
-                                        await handleCompleteAndRedirect();
+                                        await completeOnboarding();
+                                        toast.success("Welcome to C(AI)DENCE!");
+                                        router.push("/dashboard");
                                     } catch (e) {
                                         const msg = e instanceof Error ? e.message : "Please complete all required steps";
                                         toast.error(msg);
