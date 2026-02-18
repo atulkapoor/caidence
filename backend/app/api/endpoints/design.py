@@ -75,7 +75,7 @@ async def get_design_assets(
     response_data = []
     for asset in assets:
         asset_schema = schemas.DesignAsset.model_validate(asset)
-        asset_schema.image_url = f"http://127.0.0.1:8000/api/v1/design/{asset.id}/image"
+        asset_schema.image_url = f"/api/v1/design/{asset.id}/image"
         response_data.append(asset_schema)
     return response_data
 
@@ -103,7 +103,7 @@ async def get_design_asset(
         raise HTTPException(status_code=404, detail="Design asset not found")
     
     asset_schema = schemas.DesignAsset.model_validate(asset)
-    asset_schema.image_url = f"http://127.0.0.1:8000/api/v1/design/{asset.id}/image"
+    asset_schema.image_url = f"/api/v1/design/{asset.id}/image"
     return asset_schema
 
 @router.post("/generate", response_model=schemas.DesignAsset)
@@ -131,7 +131,7 @@ async def generate_design(
         await db.refresh(db_asset)
         
         asset_schema = schemas.DesignAsset.model_validate(db_asset)
-        asset_schema.image_url = f"http://127.0.0.1:8000/api/v1/design/{db_asset.id}/image"
+        asset_schema.image_url = f"/api/v1/design/{db_asset.id}/image"
         return asset_schema
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -168,7 +168,7 @@ async def update_design_asset(
     await db.commit()
     await db.refresh(asset)
     asset_schema = schemas.DesignAsset.model_validate(asset)
-    asset_schema.image_url = f"http://127.0.0.1:8000/api/v1/design/{asset.id}/image"
+    asset_schema.image_url = f"/api/v1/design/{asset.id}/image"
     return asset_schema
 
 @router.delete("/{asset_id}")
