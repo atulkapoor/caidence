@@ -114,7 +114,7 @@ async def generate_design(
 ):
     try:
         image_url = await AIService.generate_image(
-            request.style, request.prompt, request.aspect_ratio
+            request.style, request.prompt, request.aspect_ratio, request.reference_image
         )
         db_asset = models.DesignAsset(
             title=request.title,

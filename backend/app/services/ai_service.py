@@ -13,11 +13,18 @@ Configuration via environment variables:
 - OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY: API keys for cloud providers
 """
 
+import asyncio
+import base64
 import os
 import json
 import random
 import logging
+from urllib import response
+from click import style
+import google.generativeai as genai
 from typing import Optional, List, Dict
+from app.core.config import settings
+
 
 import httpx
 
@@ -49,6 +56,11 @@ class AIService:
     """
     
     _cached_model: Optional[str] = None
+    
+    genai.configure(api_key="AIzaSyA5OcRUkXxs06FjZJgz5rF7-Mx4fk4Zq9M")
+    
+    nano_model = genai.GenerativeModel("nano-banana-pro-preview")
+    gemini_model = genai.GenerativeModel("gemini-pro-latest")
 
     @staticmethod
     def _get_model_name() -> str:
@@ -161,62 +173,165 @@ class AIService:
             logger.error(f"Ollama error: {e}")
             return f"Error from AI: {e}"
 
+    # @staticmethod
+    # async def generate_content(platform: str, content_type: str, prompt: str) -> str:
+    #     """Generates marketing content."""
+    #     system = "You are a professional marketing assistant."
+    #     full_prompt = (
+    #         f"Create a {platform} {content_type} based on this topic: '{prompt}'. "
+    #         f"Make it engaging, professional, and viral. "
+    #         f"Include relevant hashtags. Return ONLY the content."
+    #     )
+    #     return await AIService._call_llm(full_prompt, system_prompt=system)
+    
     @staticmethod
-    async def generate_content(platform: str, content_type: str, prompt: str) -> str:
-        """Generates marketing content."""
-        system = "You are a professional marketing assistant."
-        full_prompt = (
-            f"Create a {platform} {content_type} based on this topic: '{prompt}'. "
-            f"Make it engaging, professional, and viral. "
-            f"Include relevant hashtags. Return ONLY the content."
-        )
-        return await AIService._call_llm(full_prompt, system_prompt=system)
+    async def generate_content(platform, content_type, prompt):
+        print("🔥 Gemini called")
+
+        full_prompt = f"""
+            You are a world-class viral social media copywriter.
+
+        Create ONLY one {platform} {content_type}.
+
+        Topic: {prompt}
+
+        Rules:
+        - Ready to post immediately
+        - No multiple options
+        - No explanation
+        - No Spelling mistakes
+        - No tips
+        - No extra headings
+        - Strong emotional hook
+        - High engagement
+        - Clear CTA
+        - Relevant hashtags
+        - Modern tone
+        """
+
+        # 🔥 Force Gemini for now
+        response = AIService.gemini_model.generate_content(full_prompt)
+
+        return response.text
+
+    # @staticmethod
+    # async def generate_image(style: str, prompt: str, aspect_ratio: str = "1:1") -> str:
+    #     """Generates an image via Stable Diffusion (AI Worker)."""
+    #     ai_worker_url = os.getenv("AI_WORKER_URL", "http://ai_worker:8001")
+        
+    #     # Enhanced prompt based on style
+    #     style_modifiers = {
+    #         "Photorealistic": "photorealistic, 8k, detailed, unreal engine 5",
+    #         "3D Render": "3d render, blender, octave render, clay",
+    #         "Minimalist": "minimalist, flat design, vector art",
+    #         "Cyberpunk": "cyberpunk, neon, futuristic, high tech"
+    #     }
+        
+    #     final_prompt = f"{prompt}, {style_modifiers.get(style, '')}"
+        
+    #     # Map aspect ratios to dimensions (assuming SDXL or similar 1024x1024 base)
+    #     ratio_map = {
+    #         "1:1": {"width": 1024, "height": 1024},
+    #         "16:9": {"width": 1024, "height": 576},
+    #         "9:16": {"width": 576, "height": 1024},
+    #         "4:3": {"width": 1024, "height": 768},
+    #         "3:4": {"width": 768, "height": 1024}
+    #     }
+    #     dims = ratio_map.get(aspect_ratio, {"width": 1024, "height": 1024})
+        
+    #     try:
+    #         async with httpx.AsyncClient(timeout=120.0) as client: # Long timeout for generation
+    #             res = await client.post(
+    #                 f"{ai_worker_url}/generate",
+    #                 json={
+    #                     "prompt": final_prompt, 
+    #                     "steps": 25,  # Increased steps for better quality
+    #                     "width": dims["width"], 
+    #                     "height": dims["height"]
+    #                 } 
+    #             )
+    #             res.raise_for_status()
+    #             data = res.json()
+    #             base64_img = data.get("image_base64")
+    #             return f"data:image/png;base64,{base64_img}"
+    #     except Exception as e:
+    #         logger.error(f"Image generation failed: {e}")
+    #         # Fallback to placeholder if worker is down
+    #         return f"https://via.placeholder.com/{dims['width']}x{dims['height']}?text=Generation+Failed"
 
     @staticmethod
-    async def generate_image(style: str, prompt: str, aspect_ratio: str = "1:1") -> str:
-        """Generates an image via Stable Diffusion (AI Worker)."""
-        ai_worker_url = os.getenv("AI_WORKER_URL", "http://ai_worker:8001")
-        
-        # Enhanced prompt based on style
-        style_modifiers = {
-            "Photorealistic": "photorealistic, 8k, detailed, unreal engine 5",
-            "3D Render": "3d render, blender, octave render, clay",
-            "Minimalist": "minimalist, flat design, vector art",
-            "Cyberpunk": "cyberpunk, neon, futuristic, high tech"
+    async def generate_image(
+    style: str,
+    prompt: str,
+    aspect_ratio: str = "1:1",
+    reference_image: str | None = None,
+) -> str:
+
+        style_map = {
+        "Photorealistic": "ultra realistic, 8k, product photography, studio lighting",
+        "3D Render": "3d render, blender, cinematic lighting",
+        "Minimalist": "flat design, clean, vector",
+        "Cyberpunk": "cyberpunk, neon, futuristic",
         }
-        
-        final_prompt = f"{prompt}, {style_modifiers.get(style, '')}"
-        
-        # Map aspect ratios to dimensions (assuming SDXL or similar 1024x1024 base)
-        ratio_map = {
-            "1:1": {"width": 1024, "height": 1024},
-            "16:9": {"width": 1024, "height": 576},
-            "9:16": {"width": 576, "height": 1024},
-            "4:3": {"width": 1024, "height": 768},
-            "3:4": {"width": 768, "height": 1024}
-        }
-        dims = ratio_map.get(aspect_ratio, {"width": 1024, "height": 1024})
-        
+    
+        final_prompt = f"""
+        Create a {style} high-quality marketing image.
+
+        Topic: {prompt}
+
+        Requirements:
+        - Eye-catching
+        - High contrast
+        - Modern and premium
+        - Aspect ratio {aspect_ratio}
+        - {style_map.get(style, '')}
+        """
+
+        fallback = "https://via.placeholder.com/1024x1024?text=AI+Failed"
+
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client: # Long timeout for generation
-                res = await client.post(
-                    f"{ai_worker_url}/generate",
-                    json={
-                        "prompt": final_prompt, 
-                        "steps": 25,  # Increased steps for better quality
-                        "width": dims["width"], 
-                        "height": dims["height"]
-                    } 
-                )
-                res.raise_for_status()
-                data = res.json()
-                base64_img = data.get("image_base64")
-                return f"data:image/png;base64,{base64_img}"
-        except Exception as e:
-            logger.error(f"Image generation failed: {e}")
-            # Fallback to placeholder if worker is down
-            return f"https://via.placeholder.com/{dims['width']}x{dims['height']}?text=Generation+Failed"
+            content = []
 
+            # 🔥 If reference image exists → add to request
+            if reference_image:
+                # remove prefix if present
+                if "base64," in reference_image:
+                    reference_image = reference_image.split("base64,")[1]
+
+                image_bytes = base64.b64decode(reference_image)
+
+                content.append({
+                    "inline_data": {
+                        "mime_type": "image/png",
+                        "data": image_bytes
+                    }
+                })
+
+            # Add prompt
+            content.append({"text": final_prompt})
+
+            response = await asyncio.to_thread(
+                AIService.nano_model.generate_content,
+                content
+            )
+
+            # 🔥 Correct extraction for Gemini
+            for candidate in response.candidates:
+                for part in candidate.content.parts:
+                    if hasattr(part, "inline_data") and part.inline_data:
+                        img_base64 = base64.b64encode(
+                            part.inline_data.data
+                        ).decode("utf-8")
+
+                        return f"data:image/png;base64,{img_base64}"
+
+            return fallback
+
+        except Exception as e:
+            logger.error(f"Nano banana error: {e}")
+            return fallback
+
+    
     @staticmethod
     async def generate_presentation_slides(source_type: str, title: str) -> str:
         """Generates Slide JSON."""
