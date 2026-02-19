@@ -52,7 +52,10 @@ async def get_current_user(
 
     from sqlalchemy.orm import selectinload
     result = await db.execute(
-        select(User).options(selectinload(User.custom_permissions)).where(User.id == token_data.user_id)
+        select(User).options(
+            selectinload(User.custom_permissions),
+            selectinload(User.role_model),
+        ).where(User.id == token_data.user_id)
     )
     user = result.scalar_one_or_none()
 
