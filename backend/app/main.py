@@ -7,9 +7,9 @@ import app.models # Import all models to register them with Base
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables on startup
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Schema is managed by Alembic migrations (run via start.sh before uvicorn).
+    # Do NOT use Base.metadata.create_all here — it conflicts with Alembic
+    # by creating tables that migrations expect to create, causing "already exists" errors.
 
     # Seed roles with permissions_json
     from app.core.database import AsyncSessionLocal
