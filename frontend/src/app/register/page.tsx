@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { register, login } from "@/lib/api";
+import { register, login, fetchCurrentUser } from "@/lib/api";
 
 function RegisterContent() {
     const router = useRouter();
@@ -36,6 +36,15 @@ function RegisterContent() {
                 });
                 if (loginData.access_token) {
                     localStorage.setItem("token", loginData.access_token);
+
+                    // Store user details for RBAC
+                    try {
+                        const user = await fetchCurrentUser();
+                        localStorage.setItem("user", JSON.stringify(user));
+                    } catch {
+                        // Non-critical — onboarding still works without cached user
+                    }
+
                     router.push("/onboarding");
                 }
             } catch {

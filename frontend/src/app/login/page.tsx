@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { login, fetchCurrentUser } from "@/lib/api";
+import { getOnboardingProgress } from "@/lib/api/onboarding";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -23,12 +24,30 @@ export default function LoginPage() {
             localStorage.setItem("token", data.access_token);
             toast.success("Welcome back!");
 
-            // Fetch and store user details for RBAC & Fallback logic
+            // Fetch and store user details for RBAC & routing decisions
+            let user = null;
             try {
-                const user = await fetchCurrentUser();
+                user = await fetchCurrentUser();
                 localStorage.setItem("user", JSON.stringify(user));
             } catch (userErr) {
                 console.error("Failed to fetch user details", userErr);
+            }
+
+            // Check onboarding status — redirect to onboarding if not complete
+            try {
+                const onboarding = await getOnboardingProgress();
+                if (!onboarding.is_complete) {
+                    router.push("/onboarding");
+                    return;
+                }
+            } catch {
+                // If onboarding check fails, proceed based on approval status
+            }
+
+            // If user is not approved, send to pending-approval page
+            if (user && !user.is_approved) {
+                router.push("/pending-approval");
+                return;
             }
 
             router.push("/dashboard");

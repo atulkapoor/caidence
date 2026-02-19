@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { hasPermission, Permission, UserRole } from "@/lib/permissions";
 
@@ -11,9 +11,19 @@ interface ProtectedRouteProps {
     fallbackPath?: string;
 }
 
+function getStoredUser() {
+    try {
+        const raw = typeof localStorage !== "undefined" ? localStorage.getItem("user") : null;
+        if (raw) return JSON.parse(raw);
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
 /**
  * Wrapper component to protect routes based on permissions or roles.
- * For now, uses mock user data. Will integrate with real auth later.
+ * Uses real user data from localStorage (populated at login).
  */
 export function ProtectedRoute({
     children,
@@ -22,18 +32,32 @@ export function ProtectedRoute({
     fallbackPath = "/",
 }: ProtectedRouteProps) {
     const router = useRouter();
-
-    // Mock current user - in production, this would come from auth context
-    const mockUser = {
-        id: 1,
-        email: "admin@cadence.ai",
-        role: "super_admin" as UserRole,
-        organization_id: 1,
-    };
+    const [authorized, setAuthorized] = useState(false);
 
     useEffect(() => {
+        const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+        if (!token) {
+            router.replace("/login");
+            return;
+        }
+
+        const user = getStoredUser();
+        if (!user) {
+            // No cached user — allow through, real RBAC checks happen in PermissionContext
+            setAuthorized(true);
+            return;
+        }
+
+        // Redirect unapproved users to pending-approval
+        if (!user.is_approved) {
+            router.replace("/pending-approval");
+            return;
+        }
+
+        const role = (user.role || "viewer") as UserRole;
+
         // Check permission if specified
-        if (requiredPermission && !hasPermission(mockUser.role, requiredPermission)) {
+        if (requiredPermission && !hasPermission(role, requiredPermission)) {
             router.replace(fallbackPath);
             return;
         }
@@ -50,7 +74,7 @@ export function ProtectedRoute({
                 creator: 20,
                 viewer: 10,
             };
-            const userLevel = roleHierarchy[mockUser.role] || 0;
+            const userLevel = roleHierarchy[role] || 0;
             const requiredLevel = roleHierarchy[requiredRole] || 100;
 
             if (userLevel < requiredLevel) {
@@ -58,24 +82,35 @@ export function ProtectedRoute({
                 return;
             }
         }
+
+        setAuthorized(true);
     }, [requiredPermission, requiredRole, fallbackPath, router]);
 
-    // For now, always render children (mock auth)
+    if (!authorized) return null;
     return <>{children}</>;
 }
 
 /**
- * Hook to get current user info.
- * In production, this would come from auth context/JWT.
+ * Hook to get current user info from localStorage.
  */
 export function useCurrentUser() {
-    // Mock user for development
+    const user = getStoredUser();
+    if (user) {
+        return {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name || "",
+            role: (user.role || "viewer") as UserRole,
+            organization_id: user.organization_id,
+            is_authenticated: true,
+        };
+    }
     return {
-        id: 1,
-        email: "admin@cadence.ai",
-        full_name: "Admin User",
-        role: "super_admin" as UserRole,
-        organization_id: 1,
-        is_authenticated: true,
+        id: 0,
+        email: "",
+        full_name: "",
+        role: "viewer" as UserRole,
+        organization_id: 0,
+        is_authenticated: false,
     };
 }

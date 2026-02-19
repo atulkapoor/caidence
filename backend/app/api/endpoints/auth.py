@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.api.deps import get_current_active_user, get_db, require_super_admin
+from app.api.deps import get_current_active_user, get_current_authenticated_user, get_db, require_super_admin
 from app.models.models import User
 from app.services.auth_service import verify_password, get_password_hash, create_access_token
 
@@ -109,7 +109,7 @@ async def login(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_active_user)):
+async def get_me(current_user: User = Depends(get_current_authenticated_user)):
     """
     Get current authenticated user.
     """
