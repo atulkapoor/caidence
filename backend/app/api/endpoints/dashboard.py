@@ -155,10 +155,10 @@ async def get_dashboard_stats(time_range: str = Query("6m", alias="range"), db: 
         featured = {
             "title": feat_campaign.title,
             "status": feat_campaign.status or "draft",
-            "description": feat_campaign.description or "Campaign managed by C(AI)DENCE.",
-            "progress": feat_campaign.progress if hasattr(feat_campaign, 'progress') and feat_campaign.progress else 0,
-            "budget": feat_campaign.budget or "Not set",
-            "channels": len(feat_campaign.channels.split(",")) if hasattr(feat_campaign, 'channels') and feat_campaign.channels else 0
+            "description": getattr(feat_campaign, 'description', None) or "Campaign managed by C(AI)DENCE.",
+            "progress": getattr(feat_campaign, 'progress', None) or 0,
+            "budget": getattr(feat_campaign, 'budget', None) or "Not set",
+            "channels": len(feat_campaign.channels.split(",")) if getattr(feat_campaign, 'channels', None) else 0
         }
 
     return {
