@@ -15,6 +15,7 @@ Configuration via environment variables:
 
 import asyncio
 import base64
+from http.client import HTTPException
 import os
 import json
 import random
@@ -24,6 +25,7 @@ from click import style
 import google.generativeai as genai
 from typing import Optional, List, Dict
 from app.core.config import settings
+from dotenv import load_dotenv
 
 
 import httpx
@@ -57,7 +59,9 @@ class AIService:
     
     _cached_model: Optional[str] = None
     
-    genai.configure(api_key="AIzaSyA5OcRUkXxs06FjZJgz5rF7-Mx4fk4Zq9M")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    genai.configure(api_key=GEMINI_API_KEY)
+
     
     nano_model = genai.GenerativeModel("nano-banana-pro-preview")
     gemini_model = genai.GenerativeModel("gemini-pro-latest")
@@ -187,6 +191,7 @@ class AIService:
     @staticmethod
     async def generate_content(platform, content_type, prompt):
         print("🔥 Gemini called")
+        print("Gemini key:", settings.GEMINI_API_KEY)
 
         full_prompt = f"""
             You are a world-class viral social media copywriter.
@@ -287,14 +292,11 @@ class AIService:
         - {style_map.get(style, '')}
         """
 
-        fallback = "https://via.placeholder.com/1024x1024?text=AI+Failed"
-
         try:
             content = []
 
-            # 🔥 If reference image exists → add to request
+            # ✅ Add reference image
             if reference_image:
-                # remove prefix if present
                 if "base64," in reference_image:
                     reference_image = reference_image.split("base64,")[1]
 
@@ -307,7 +309,6 @@ class AIService:
                     }
                 })
 
-            # Add prompt
             content.append({"text": final_prompt})
 
             response = await asyncio.to_thread(
@@ -315,7 +316,7 @@ class AIService:
                 content
             )
 
-            # 🔥 Correct extraction for Gemini
+            #  Extract image
             for candidate in response.candidates:
                 for part in candidate.content.parts:
                     if hasattr(part, "inline_data") and part.inline_data:
@@ -325,12 +326,18 @@ class AIService:
 
                         return f"data:image/png;base64,{img_base64}"
 
-            return fallback
+           
+            raise HTTPException(
+                status_code=500,
+                detail="Image generation failed. No image returned from AI."
+            )
 
         except Exception as e:
             logger.error(f"Nano banana error: {e}")
-            return fallback
-
+            raise HTTPException(
+            status_code=500,
+            detail="Image generation failed. Please try again."
+            )
     
     @staticmethod
     async def generate_presentation_slides(source_type: str, title: str) -> str:
