@@ -21,9 +21,12 @@ export default function OnboardingPage() {
 
         getOnboardingProgress()
             .then((p) => {
+                console.log("[Onboarding] API response:", JSON.stringify(p));
                 if (p.is_complete) {
+                    console.log("[Onboarding] Already complete, redirecting to dashboard");
                     router.replace("/dashboard");
                 } else {
+                    console.log("[Onboarding] Not complete, showing wizard");
                     setProgress(p);
                 }
             })
