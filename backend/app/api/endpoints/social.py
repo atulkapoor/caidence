@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.config import settings
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_authenticated_user
 from app.models.models import User
 from app.services.social_auth_service import SocialAuthService, VALID_PLATFORMS
 
@@ -30,7 +30,7 @@ class SocialConnectionResponse(BaseModel):
 @router.post("/connect/{platform}")
 async def initiate_connection(
     platform: str,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_authenticated_user),
 ):
     """Generate OAuth authorization URL for a social platform."""
     if platform not in VALID_PLATFORMS:
@@ -60,7 +60,7 @@ async def oauth_callback(
 
 @router.get("/connections", response_model=list[SocialConnectionResponse])
 async def list_connections(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List all active social connections for the current user."""
@@ -71,7 +71,7 @@ async def list_connections(
 @router.delete("/disconnect/{platform}")
 async def disconnect_platform(
     platform: str,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Revoke and remove a social connection."""

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_authenticated_user
 from app.models.models import User
 from app.services.onboarding_service import OnboardingService
 
@@ -20,7 +20,7 @@ class UpdateStepRequest(BaseModel):
 
 @router.get("/progress")
 async def get_progress(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get the current onboarding progress for the authenticated user."""
@@ -39,7 +39,7 @@ async def get_progress(
 @router.put("/progress")
 async def update_progress(
     payload: UpdateStepRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a specific onboarding step's data and advance progress."""
@@ -58,7 +58,7 @@ async def update_progress(
 
 @router.post("/complete")
 async def complete_onboarding(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Mark onboarding as complete. Validates all required steps are done."""

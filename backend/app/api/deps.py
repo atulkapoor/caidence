@@ -73,6 +73,16 @@ async def get_current_active_user(
         raise HTTPException(status_code=403, detail="Account pending approval")
     return current_user
 
+
+async def get_current_authenticated_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Like get_current_active_user but skips is_approved check.
+    Used for onboarding endpoints that must work before admin approval."""
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
 # --- RBAC Permission Checks ---
 
 def require_role(*allowed_roles: str) -> Callable:
