@@ -40,7 +40,8 @@ export default function LoginPage() {
                     router.push("/onboarding");
                     return;
                 }
-            } catch {
+            } catch (onboardingErr) {
+                console.error("Onboarding check failed:", onboardingErr);
                 // If onboarding check fails, proceed based on approval status
             }
 
