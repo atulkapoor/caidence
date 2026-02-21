@@ -27,6 +27,17 @@ export async function generateContent(data: any): Promise<ContentGeneration> {
     return res.json();
 }
 
+export async function saveContent(data: any): Promise<ContentGeneration> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/content/save`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error("Failed to save content");
+    return res.json();
+}
+
 export async function fetchContentGenerations(): Promise<ContentGeneration[]> {
     const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/content`, { headers });
