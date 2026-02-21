@@ -192,6 +192,7 @@ class AIService:
     @staticmethod
     async def generate_content(title, platform, content_type, prompt):
         print("🔥 Gemini called")
+        print("Gemini key:", settings.GEMINI_API_KEY)
 
         full_prompt = f"""
     You are a world-class viral social media copywriter and the One Who dont make Spelling Mistakes In any Sentence or Word.
