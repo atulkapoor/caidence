@@ -3,7 +3,7 @@ from app.api.endpoints import (
     dashboard, projects, chat, content, design, workflow, presentation, 
     campaigns, agent, communications, analytics, discovery, crm,
     auth, organizations, brands, creators, admin, marcom, jobs, profile,
-    teams, rbac
+    teams, rbac, social
 )
 
 api_router = APIRouter()
@@ -42,3 +42,4 @@ api_router.include_router(teams.router, prefix="/teams", tags=["teams"])
 api_router.include_router(rbac.router, prefix="/rbac", tags=["rbac"])
 
 
+api_router.include_router(social.router, prefix="/social", tags=["social"])

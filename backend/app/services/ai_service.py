@@ -15,6 +15,7 @@ Configuration via environment variables:
 
 import asyncio
 import base64
+from http.client import HTTPException
 import os
 import json
 import random
@@ -24,6 +25,8 @@ from click import style
 import google.generativeai as genai
 from typing import Optional, List, Dict
 from app.core.config import settings
+from dotenv import load_dotenv
+import asyncio
 
 
 import httpx
@@ -57,7 +60,9 @@ class AIService:
     
     _cached_model: Optional[str] = None
     
-    genai.configure(api_key="AIzaSyA5OcRUkXxs06FjZJgz5rF7-Mx4fk4Zq9M")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    genai.configure(api_key=GEMINI_API_KEY)
+
     
     nano_model = genai.GenerativeModel("nano-banana-pro-preview")
     gemini_model = genai.GenerativeModel("gemini-pro-latest")
@@ -185,31 +190,32 @@ class AIService:
     #     return await AIService._call_llm(full_prompt, system_prompt=system)
     
     @staticmethod
-    async def generate_content(platform, content_type, prompt):
+    async def generate_content(title, platform, content_type, prompt):
         print("🔥 Gemini called")
 
         full_prompt = f"""
-            You are a world-class viral social media copywriter.
+    You are a world-class viral social media copywriter and the One Who dont make Spelling Mistakes In any Sentence or Word.
 
-        Create ONLY one {platform} {content_type}.
+    Create ONLY one ready-to-post {platform} {content_type}.
 
-        Topic: {prompt}
+    Campaign Title:
+    {title}
 
-        Rules:
-        - Ready to post immediately
-        - No multiple options
-        - No explanation
-        - No Spelling mistakes
-        - No tips
-        - No extra headings
-        - Strong emotional hook
-        - High engagement
-        - Clear CTA
-        - Relevant hashtags
-        - Modern tone
-        """
+    Topic:
+    {prompt}
+    
+    And we Dont want spelling Mistakes  
 
-        # 🔥 Force Gemini for now
+    Requirements:
+    -Dont want spelling Mistakes (Important)
+    - Strong emotional hook
+    - High engagement
+    - Clear CTA
+    - Relevant hashtags
+    - Modern tone
+    """
+
+        
         response = AIService.gemini_model.generate_content(full_prompt)
 
         return response.text
@@ -261,40 +267,59 @@ class AIService:
 
     @staticmethod
     async def generate_image(
-    style: str,
-    prompt: str,
-    aspect_ratio: str = "1:1",
-    reference_image: str | None = None,
-) -> str:
+        title: str,
+        style: str,
+        prompt: str,
+        aspect_ratio: str = "1:1",
+        brand_colors: str | None = None,
+        reference_image: str | None = None,
+    ) -> str:
 
         style_map = {
-        "Photorealistic": "ultra realistic, 8k, product photography, studio lighting",
-        "3D Render": "3d render, blender, cinematic lighting",
-        "Minimalist": "flat design, clean, vector",
-        "Cyberpunk": "cyberpunk, neon, futuristic",
+            "Photorealistic": "ultra realistic, 8k, product photography, studio lighting",
+            "3D Render": "3d render, blender, cinematic lighting",
+            "Minimalist": "flat design, clean, vector",
+            "Cyberpunk": "cyberpunk, neon, futuristic",
         }
-    
+
+        # 🎯 Structured marketing prompt
         final_prompt = f"""
-        Create a {style} high-quality marketing image.
+        Create a professional {style} marketing design.
 
-        Topic: {prompt}
+        Headline / Title:
+        {title}
 
-        Requirements:
-        - Eye-catching
-        - High contrast
-        - Modern and premium
-        - Aspect ratio {aspect_ratio}
-        - {style_map.get(style, '')}
+        Description:
+        {prompt}
+
+        Design Requirements:
+        - Eye-catching and scroll-stopping
+        - High contrast and modern
+        - Premium and luxury feel
+        - Clear visual hierarchy
+        - Strong focal point
+        - Clean layout
+        - Social media ready
+        - Aspect ratio: {aspect_ratio}
+
+        Brand Guidelines:
+        - Use these brand colors: {brand_colors if brand_colors else "modern vibrant palette"}
+
+        Visual Style:
+        {style_map.get(style, "")}
+
+        Composition:
+        - Balanced layout
+        - Proper spacing
+        - Focus on product or message
+        - Suitable for ads and marketing
         """
-
-        fallback = "https://via.placeholder.com/1024x1024?text=AI+Failed"
 
         try:
             content = []
 
-            # 🔥 If reference image exists → add to request
+            # ✅ Reference image support
             if reference_image:
-                # remove prefix if present
                 if "base64," in reference_image:
                     reference_image = reference_image.split("base64,")[1]
 
@@ -307,7 +332,6 @@ class AIService:
                     }
                 })
 
-            # Add prompt
             content.append({"text": final_prompt})
 
             response = await asyncio.to_thread(
@@ -315,7 +339,7 @@ class AIService:
                 content
             )
 
-            # 🔥 Correct extraction for Gemini
+            # ✅ Extract image
             for candidate in response.candidates:
                 for part in candidate.content.parts:
                     if hasattr(part, "inline_data") and part.inline_data:
@@ -325,13 +349,18 @@ class AIService:
 
                         return f"data:image/png;base64,{img_base64}"
 
-            return fallback
+            raise HTTPException(
+                status_code=500,
+                detail="Image generation failed. No image returned from AI."
+            )
 
         except Exception as e:
             logger.error(f"Nano banana error: {e}")
-            return fallback
-
-    
+            raise HTTPException(
+                status_code=500,
+                detail="Image generation failed. Please try again."
+            )
+            
     @staticmethod
     async def generate_presentation_slides(source_type: str, title: str) -> str:
         """Generates Slide JSON."""

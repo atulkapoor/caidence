@@ -60,7 +60,7 @@ async def get_content_generation(
         raise HTTPException(status_code=404, detail="Content generation not found")
     return content
 
-@router.post("/generate", response_model=schemas.ContentGeneration)
+@router.post("/generate")
 async def generate_content(
     request: schemas.ContentGenerationCreate,
     db: AsyncSession = Depends(get_db),
@@ -68,20 +68,105 @@ async def generate_content(
 ):
     try:
         generated_text = await AIService.generate_content(
-            request.platform, request.content_type, request.prompt
+            request.title,
+            request.platform,
+            request.content_type,
+            request.prompt
         )
-        db_content = models.ContentGeneration(
-            title=f"{request.platform} Post - {request.title}",
-            platform=request.platform,
-            content_type=request.content_type,
-            prompt=request.prompt,
-            result=generated_text,
-            user_id=current_user.id
-        )
-        db.add(db_content)
+        return {
+            "title": f"{request.title}",
+            "platform": request.platform,
+            "content_type": request.content_type,
+            "prompt": request.prompt,
+            "result": generated_text
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/save", response_model=schemas.ContentGeneration)
+async def save_content(
+    request: schemas.ContentGenerationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_content_write)
+):
+    try:
+        # ✅ EDIT MODE → update existing
+        if request.id:
+            result = await db.execute(
+                select(models.ContentGeneration).where(
+                    models.ContentGeneration.id == request.id
+                )
+            )
+            db_content = result.scalar_one_or_none()
+
+            if not db_content:
+                raise HTTPException(status_code=404, detail="Content not found")
+
+            # Update fields
+            db_content.title = f"{request.title}"
+            db_content.platform = request.platform
+            db_content.content_type = request.content_type
+            db_content.prompt = request.prompt
+            db_content.result = request.result
+
+        # ✅ CREATE MODE → new content
+        else:
+            db_content = models.ContentGeneration(
+                title=f"{request.title}",
+                platform=request.platform,
+                content_type=request.content_type,
+                prompt=request.prompt,
+                result=request.result,
+                user_id=current_user.id
+            )
+            db.add(db_content)
+
         await db.commit()
         await db.refresh(db_content)
+
         return db_content
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/{content_id}", response_model=schemas.ContentGeneration)
+async def update_content(
+    content_id: int,
+    request: schemas.ContentGenerationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_content_write)
+):
+    try:
+        # 🔍 Fetch content
+        result = await db.execute(
+            select(models.ContentGeneration).where(
+                models.ContentGeneration.id == content_id
+            )
+        )
+        db_content = result.scalar_one_or_none()
+
+        if not db_content:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        # 🎯 Regenerate text using AI
+        new_text = await AIService.generate_content(
+            request.platform,
+            request.content_type,
+            request.prompt
+        )
+
+        # ✏ Update fields
+        db_content.title = f" {request.title}"
+        db_content.platform = request.platform
+        db_content.content_type = request.content_type
+        db_content.prompt = request.prompt
+        db_content.result = new_text
+
+        await db.commit()
+        await db.refresh(db_content)
+
+        return db_content
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

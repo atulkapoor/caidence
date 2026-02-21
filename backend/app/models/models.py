@@ -2,6 +2,40 @@ from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, T
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+from datetime import datetime
+from enum import Enum
+from sqlalchemy import Enum as SQLEnum
+
+class SocialPlatform(str, Enum):
+    linkedin = "linkedin"
+    instagram = "instagram"
+    facebook = "facebook"
+    twitter = "twitter"
+
+class SocialAccount(Base):
+    __tablename__ = "social_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    # platform = Column(String, index=True)  # linkedin, instagram
+    platform = Column(SQLEnum(SocialPlatform, name="social_platform"),nullable=False,index=True
+)
+
+    
+    client_id = Column(String, nullable=False)  
+    client_secret = Column(Text, nullable=False)
+
+    access_token = Column(Text)
+    expires_at = Column(DateTime, nullable=True)
+
+    account_id = Column(String)  # LinkedIn "sub"
+    account_name = Column(String, nullable=True)
+    account_email = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # user = relationship("User")
 
 class User(Base):
     __tablename__ = "users"
