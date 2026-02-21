@@ -24,7 +24,7 @@ function ContentStudioContent() {
     const [writingExpert, setWritingExpert] = useState("General Marketing");
     const [length, setLength] = useState("Medium");
     const [webSearch, setWebSearch] = useState(false);
-
+    const [selectedModel, setSelectedModel] = useState("Gemini")
     const [isGenerating, setIsGenerating] = useState(false);
 
     const [isEditMode, setIsEditMode] = useState(false);
@@ -274,6 +274,11 @@ ${prompt}
         return matchesSearch && matchesFilter;
     });
 
+    const models = [
+        { id: "NanoBanana", label: "Nano Banana" },
+        { id: "Gemini", label: "Gemini" },
+    ];
+
     return (
         <DashboardLayout>
             <div className="h-[calc(100vh-48px)] flex flex-col bg-slate-100 relative">
@@ -407,7 +412,18 @@ ${prompt}
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2">Model: Qwen 2.5 (High Speed)</span>
+                        <select
+                            value={selectedModel}
+                            onChange={(e) => setSelectedModel(e.target.value)}
+                            className="text-xs font-bold uppercase tracking-wider bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-violet-500 outline-none"
+                        >
+                            {models.map((model) => (
+                                <option key={model.id} value={model.id}>
+                                    {model.label}
+                                </option>
+                            ))}
+                        </select>
+
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                     </div>
                 </div>
