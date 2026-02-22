@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
-import { generateDesign, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
+import { generateDesign, generateContent, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
@@ -20,11 +20,13 @@ function DesignStudioContent() {
     const [prompt, setPrompt] = useState("");
     const [selectedStyle, setSelectedStyle] = useState("Photorealistic");
     const [aspectRatio, setAspectRatio] = useState("16:9");
+    const [selectedModel, setSelectedModel] = useState("NanoBanana");
     const [brandColors, setBrandColors] = useState(""); // Text input
     const [referenceImage, setReferenceImage] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [recentDesigns, setRecentDesigns] = useState<DesignAsset[]>([]);
+    const [generatedContent, setGeneratedContent] = useState("");
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
@@ -79,22 +81,38 @@ function DesignStudioContent() {
     const handleGenerate = async () => {
         if (!prompt) return;
         setIsGenerating(true);
-        setActiveTab("library"); // Switch immediately for better UX
 
         try {
-            const newDesign = await generateDesign({
-                title: title || "Untitled Design",
-                style: selectedStyle,
-                aspect_ratio: aspectRatio,
-                prompt: prompt,
-                brand_colors: brandColors,
-                reference_image: referenceImage
-            });
-            setRecentDesigns((prev) => [newDesign, ...prev]);
-            toast.success("Design generated successfully!");
+            const isContentMode = selectedModel.toLowerCase().includes("gemini");
+            if (isContentMode) {
+                const content = await generateContent({
+                    title: title || "Untitled Content",
+                    platform: "General",
+                    content_type: "Post",
+                    prompt: prompt,
+                    model: selectedModel,
+                });
+                setGeneratedContent(content.result || "");
+                setActiveTab("generate");
+                toast.success("Content generated successfully!");
+            } else {
+                const newDesign = await generateDesign({
+                    title: title || "Untitled Design",
+                    style: selectedStyle,
+                    aspect_ratio: aspectRatio,
+                    prompt: prompt,
+                    model: selectedModel,
+                    brand_colors: brandColors,
+                    reference_image: referenceImage
+                });
+                setGeneratedContent("");
+                setRecentDesigns((prev) => [newDesign, ...prev]);
+                setActiveTab("library"); // Switch immediately for better UX
+                toast.success("Design generated successfully!");
+            }
         } catch (error) {
             console.error("Failed to generate design", error);
-            toast.error("Failed to generate design. Please try again.");
+            toast.error("Generation failed. Please try again.");
         } finally {
             setIsGenerating(false);
         }
@@ -102,6 +120,10 @@ function DesignStudioContent() {
 
     const styles = ["Photorealistic", "3D Render", "Minimalist", "Cyberpunk", "Watercolor", "Sketch", "Abstract", "Corporate"];
     const ratios = ["16:9", "1:1", "9:16", "4:3"];
+    const models = [
+        { id: "NanoBanana", label: "Nano Banana (Image)" },
+        { id: "Gemini", label: "Gemini (Content)" },
+    ];
 
 
     const handleDownload = async (url: string, title: string) => {
@@ -235,6 +257,21 @@ function DesignStudioContent() {
                             <button onClick={() => setActiveTab("generate")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "generate" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Generate Designs</button>
                             <button onClick={() => setActiveTab("library")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "library" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Design Library</button>
                         </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={selectedModel}
+                            onChange={(e) => setSelectedModel(e.target.value)}
+                            className="text-xs font-bold uppercase tracking-wider bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-rose-500 outline-none"
+                        >
+                            {models.map((model) => (
+                                <option key={model.id} value={model.id}>
+                                    {model.label}
+                                </option>
+                            ))}
+                        </select>
+
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                     </div>
                 </div>
 
@@ -430,6 +467,21 @@ function DesignStudioContent() {
                                     )}
                                 </button>
                             </div>
+
+                            {generatedContent && (
+                                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Generated Content</h3>
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(generatedContent)}
+                                            className="px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg bg-white hover:bg-slate-50"
+                                        >
+                                            Copy
+                                        </button>
+                                    </div>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{generatedContent}</p>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -634,4 +686,3 @@ export default function DesignStudioPage() {
         </PermissionGate>
     );
 }
-

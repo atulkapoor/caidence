@@ -113,13 +113,14 @@ async def generate_design(
 ):
     try:
         image_url = await AIService.generate_image(
-        title=request.title,
-        style=request.style,
-        prompt=request.prompt,
-        aspect_ratio=request.aspect_ratio,
-        brand_colors=request.brand_colors,
-        reference_image=request.reference_image,
-)
+            title=request.title,
+            style=request.style,
+            prompt=request.prompt,
+            aspect_ratio=request.aspect_ratio,
+            brand_colors=request.brand_colors,
+            reference_image=request.reference_image,
+            model=request.model,
+        )
 
         # Return only generated image
         return {
@@ -215,10 +216,13 @@ async def update_design_asset(
 
     # ⭐ Regenerate image
     new_image = await AIService.generate_image(
-        request.style,
-        request.prompt,
-        request.aspect_ratio,
-        request.reference_image
+        title=request.title,
+        style=request.style,
+        prompt=request.prompt,
+        aspect_ratio=request.aspect_ratio,
+        brand_colors=request.brand_colors,
+        reference_image=request.reference_image,
+        model=request.model,
     )
 
     # ⭐ Update fields

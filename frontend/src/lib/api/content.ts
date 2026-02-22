@@ -10,13 +10,23 @@ export interface ContentGeneration {
     prompt?: string;
 }
 
+export interface GenerateContentRequest {
+    title?: string;
+    platform?: string;
+    content_type?: string;
+    prompt?: string;
+    model?: string;
+    topic?: string;
+    [key: string]: unknown;
+}
+
 // Mock Data
 let mockGenerations: ContentGeneration[] = [
     { id: 1, title: "LinkedIn Thought Leadership", platform: "LinkedIn", content_type: "Post", result: "AI puts the 'Art' in Artificial Intelligence...", created_at: new Date().toISOString(), prompt: "Write about AI" },
     { id: 2, title: "Twitter Thread: SEO Tips", platform: "Twitter", content_type: "Thread", result: "1/5 SEO is dead? No. Here's why...", created_at: new Date(Date.now() - 86400000).toISOString(), prompt: "SEO Tips" }
 ];
 
-export async function generateContent(data: any): Promise<ContentGeneration> {
+export async function generateContent(data: GenerateContentRequest): Promise<ContentGeneration> {
     const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/content/generate`, {
         method: "POST",

@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
 import { toast } from "sonner";
-import { generateContent, fetchContentGenerations, ContentGeneration, saveContent, deleteContent } from "@/lib/api";
+import { generateContent, generateDesign, fetchContentGenerations, ContentGeneration, saveContent, deleteContent } from "@/lib/api";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
@@ -33,7 +33,7 @@ function ContentStudioContent() {
     const [isEditId, setIsEditId] = useState<number | null>(null);
 
     const [recentCreations, setRecentCreations] = useState<ContentGeneration[]>([]);
-    const [currentResponses, setCurrentResponses] = useState<{ platform: string, result: string, title: string }[]>([]);
+    const [currentResponses, setCurrentResponses] = useState<{ platform: string, result: string, title: string, outputType: "text" | "image" }[]>([]);
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
@@ -150,6 +150,7 @@ function ContentStudioContent() {
         setCurrentResponses([]);
 
         try {
+            const isImageMode = selectedModel.toLowerCase().includes("nano");
             for (const platform of selectedPlatforms) {
                 // Construct customized prompt for each platform
                 const selectedCampaign = availableCampaigns.find(c => c.id === campaignId);
@@ -164,22 +165,41 @@ Content Brief:
 ${prompt}
                 `.trim();
 
-                const result = await generateContent({
-                    title: `${title} (${platform})`,
-                    platform: platform,
-                    content_type: contentType,
-                    prompt: richPrompt
-                });
+                if (isImageMode) {
+                    const result = await generateDesign({
+                        title: `${title} (${platform})`,
+                        style: "Minimalist",
+                        aspect_ratio: "1:1",
+                        prompt: richPrompt,
+                        model: selectedModel,
+                    });
 
-                setCurrentResponses(prev => [...prev, {
-                    platform: platform,
-                    result: result.result || "",
-                    title: result.title
-                }]);
+                    setCurrentResponses(prev => [...prev, {
+                        platform: platform,
+                        result: result.image_url || "",
+                        title: result.title,
+                        outputType: "image",
+                    }]);
+                } else {
+                    const result = await generateContent({
+                        title: `${title} (${platform})`,
+                        platform: platform,
+                        content_type: contentType,
+                        prompt: richPrompt,
+                        model: selectedModel,
+                    });
+
+                    setCurrentResponses(prev => [...prev, {
+                        platform: platform,
+                        result: result.result || "",
+                        title: result.title,
+                        outputType: "text",
+                    }]);
+                }
             }
 
             await loadHistory();
-            toast.success("Content generated successfully!");
+            toast.success(isImageMode ? "Image generated successfully!" : "Content generated successfully!");
         } catch (error: any) {
             console.error("Generation failed", error);
             toast.error(`Generation failed: ${error.message || "Unknown error"}`);
@@ -191,6 +211,11 @@ ${prompt}
     const handleSave = async () => {
         if (!title || currentResponses.length === 0) {
             toast.error("Nothing to save");
+            return;
+        }
+
+        if (currentResponses.some((r) => r.outputType === "image")) {
+            toast.error("Image output can't be saved in Content Library. Save it from Design Studio.");
             return;
         }
 
@@ -251,6 +276,7 @@ ${prompt}
                 platform: item.platform,
                 result: item.result || "",
                 title: item.title,
+                outputType: "text",
             },
         ]);
     };
@@ -277,8 +303,8 @@ ${prompt}
     });
 
     const models = [
-        { id: "NanoBanana", label: "Nano Banana" },
-        { id: "Gemini", label: "Gemini" },
+        { id: "NanoBanana", label: "Nano Banana (Image)" },
+        { id: "Gemini", label: "Gemini (Content)" },
     ];
 
     return (
@@ -594,7 +620,20 @@ ${prompt}
                                                     </div>
                                                 </div>
                                                 <div className="p-8 prose prose-slate max-w-none">
-                                                    {isGenerating ? <div className="space-y-4 animate-pulse"><div className="h-4 bg-slate-100 rounded w-3/4"></div><div className="h-4 bg-slate-100 rounded"></div></div> : <TypewriterEffect text={response.result} className="text-slate-700" />}
+                                                    {isGenerating ? (
+                                                        <div className="space-y-4 animate-pulse">
+                                                            <div className="h-4 bg-slate-100 rounded w-3/4"></div>
+                                                            <div className="h-4 bg-slate-100 rounded"></div>
+                                                        </div>
+                                                    ) : response.outputType === "image" ? (
+                                                        <img
+                                                            src={response.result}
+                                                            alt={response.title}
+                                                            className="w-full rounded-xl border border-slate-200"
+                                                        />
+                                                    ) : (
+                                                        <TypewriterEffect text={response.result} className="text-slate-700" />
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}

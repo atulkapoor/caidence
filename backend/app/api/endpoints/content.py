@@ -71,7 +71,8 @@ async def generate_content(
             request.title,
             request.platform,
             request.content_type,
-            request.prompt
+            request.prompt,
+            request.model,
         )
         return {
             "title": f"{request.title}",
@@ -150,9 +151,11 @@ async def update_content(
 
         # 🎯 Regenerate text using AI
         new_text = await AIService.generate_content(
+            request.title,
             request.platform,
             request.content_type,
-            request.prompt
+            request.prompt,
+            request.model,
         )
 
         # ✏ Update fields
