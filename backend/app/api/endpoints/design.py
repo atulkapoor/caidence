@@ -106,36 +106,86 @@ async def get_design_asset(
     asset_schema.image_url = f"/api/v1/design/{asset.id}/image"
     return asset_schema
 
-@router.post("/generate", response_model=schemas.DesignAsset)
+@router.post("/generate")
 async def generate_design(
+    request: schemas.DesignAssetCreate,
+    current_user: User = Depends(require_design_write)
+):
+    try:
+        image_url = await AIService.generate_image(
+        title=request.title,
+        style=request.style,
+        prompt=request.prompt,
+        aspect_ratio=request.aspect_ratio,
+        brand_colors=request.brand_colors,
+        reference_image=request.reference_image,
+)
+
+        # Return only generated image
+        return {
+            "title": request.title,
+            "style": request.style,
+            "aspect_ratio": request.aspect_ratio,
+            "prompt": request.prompt,
+            "image_url": image_url,
+            "brand_colors": request.brand_colors,
+            "reference_image": request.reference_image,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/save", response_model=schemas.DesignAsset)
+async def save_design(
     request: schemas.DesignAssetCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_design_write)
 ):
     try:
-        image_url = await AIService.generate_image(
-            request.style, request.prompt, request.aspect_ratio, request.reference_image
-        )
-        db_asset = models.DesignAsset(
-            title=request.title,
-            style=request.style,
-            aspect_ratio=request.aspect_ratio,
-            prompt=request.prompt,
-            image_url=image_url,
-            brand_colors=request.brand_colors,
-            reference_image=request.reference_image,
-            user_id=current_user.id
-        )
-        db.add(db_asset)
+        # ✅ EDIT MODE → update existing
+        if request.id:
+            result = await db.execute(
+                select(models.DesignAsset).where(
+                    models.DesignAsset.id == request.id
+                )
+            )
+            db_asset = result.scalar_one_or_none()
+
+            if not db_asset:
+                raise HTTPException(status_code=404, detail="Design not found")
+
+            # ⭐ Update fields
+            db_asset.title = request.title
+            db_asset.style = request.style
+            db_asset.aspect_ratio = request.aspect_ratio
+            db_asset.prompt = request.prompt
+            db_asset.brand_colors = request.brand_colors
+            db_asset.reference_image = request.reference_image
+            db_asset.image_url = request.image_url
+
+        # ✅ CREATE MODE
+        else:
+            db_asset = models.DesignAsset(
+                title=request.title,
+                style=request.style,
+                aspect_ratio=request.aspect_ratio,
+                prompt=request.prompt,
+                image_url=request.image_url,
+                brand_colors=request.brand_colors,
+                reference_image=request.reference_image,
+                user_id=current_user.id
+            )
+
+            db.add(db_asset)
+
         await db.commit()
         await db.refresh(db_asset)
-        
-        asset_schema = schemas.DesignAsset.model_validate(db_asset)
-        asset_schema.image_url = f"/api/v1/design/{db_asset.id}/image"
-        return asset_schema
+
+        return db_asset
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 @router.put("/{asset_id}", response_model=schemas.DesignAsset)
 async def update_design_asset(
     asset_id: int,
@@ -143,6 +193,7 @@ async def update_design_asset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_design_write)
 ):
+    # Fetch design
     if current_user.role == "super_admin":
         result = await db.execute(
             select(models.DesignAsset).where(models.DesignAsset.id == asset_id)
@@ -156,19 +207,35 @@ async def update_design_asset(
                 (User.organization_id == current_user.organization_id)
             )
         )
+
     asset = result.scalar_one_or_none()
+
     if not asset:
         raise HTTPException(status_code=404, detail="Design asset not found")
+
+    # ⭐ Regenerate image
+    new_image = await AIService.generate_image(
+        request.style,
+        request.prompt,
+        request.aspect_ratio,
+        request.reference_image
+    )
+
+    # ⭐ Update fields
     asset.title = request.title
     asset.style = request.style
     asset.aspect_ratio = request.aspect_ratio
     asset.prompt = request.prompt
     asset.brand_colors = request.brand_colors
     asset.reference_image = request.reference_image
+    asset.image_url = new_image  # ⭐ IMPORTANT
+
     await db.commit()
     await db.refresh(asset)
+
     asset_schema = schemas.DesignAsset.model_validate(asset)
     asset_schema.image_url = f"/api/v1/design/{asset.id}/image"
+
     return asset_schema
 
 @router.delete("/{asset_id}")

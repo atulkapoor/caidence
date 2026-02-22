@@ -153,7 +153,13 @@ class ContentGenerationBase(BaseModel):
     prompt: str
 
 class ContentGenerationCreate(ContentGenerationBase):
-    pass
+    id: Optional[int] = None
+    title: str
+    platform: str
+    content_type: str
+    prompt: str
+    result: Optional[str] = None
+    # pass
 
 class ContentGeneration(ContentGenerationBase):
     id: int
@@ -174,7 +180,14 @@ class DesignAssetBase(BaseModel):
     reference_image: Optional[str] = None
 
 class DesignAssetCreate(DesignAssetBase):
-    pass
+    id: Optional[int] = None
+    title: str
+    style: str
+    aspect_ratio: str
+    prompt: str
+    image_url: Optional[str] = None
+    brand_colors: Optional[str] = None
+    reference_image: Optional[str] = None
 
 class DesignAsset(DesignAssetBase):
     id: int
