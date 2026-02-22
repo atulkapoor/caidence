@@ -12,7 +12,17 @@ export interface DesignAsset {
     reference_image?: string;
 }
 
-export async function generateDesign(data: { title: string; style: string; aspect_ratio: string; prompt: string; brand_colors?: string; reference_image?: string }): Promise<DesignAsset> {
+export interface GenerateDesignRequest {
+    title: string;
+    style: string;
+    aspect_ratio: string;
+    prompt: string;
+    model?: string;
+    brand_colors?: string;
+    reference_image?: string;
+}
+
+export async function generateDesign(data: GenerateDesignRequest): Promise<DesignAsset> {
     const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/design/generate`, {
         method: "POST",

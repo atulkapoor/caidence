@@ -21,7 +21,12 @@ async def generate_content_task(ctx, platform: str, content_type: str, prompt: s
     logger.info(f"[Task] Generating content: {title}")
     
     try:
-        result = await AIService.generate_content(platform, content_type, prompt)
+        result = await AIService.generate_content(
+            title=title,
+            platform=platform,
+            content_type=content_type,
+            prompt=prompt,
+        )
         return {
             "success": True,
             "title": title,
@@ -40,7 +45,11 @@ async def generate_design_task(ctx, style: str, prompt: str, title: str) -> Dict
     logger.info(f"[Task] Generating design: {title}")
     
     try:
-        image_url = await AIService.generate_image(style, prompt)
+        image_url = await AIService.generate_image(
+            title=title,
+            style=style,
+            prompt=prompt,
+        )
         return {
             "success": True,
             "title": title,
@@ -118,9 +127,10 @@ async def execute_workflow_task(ctx, workflow_id: int, steps_json: str) -> Dict:
             # Execute step based on type
             if step_type == "ai_generate":
                 result = await AIService.generate_content(
-                    step.get("platform", "general"),
-                    step.get("content_type", "post"),
-                    step.get("prompt", "")
+                    title=step.get("title", "Workflow Content"),
+                    platform=step.get("platform", "general"),
+                    content_type=step.get("content_type", "post"),
+                    prompt=step.get("prompt", ""),
                 )
                 results.append({"step": i+1, "type": step_type, "result": result[:100]})
             else:

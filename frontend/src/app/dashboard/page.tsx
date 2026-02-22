@@ -39,7 +39,7 @@ function DashboardContent() {
     useEffect(() => {
         getOnboardingProgress()
             .then((p) => { if (!p.is_complete) setShowOnboardingBanner(true); })
-            .catch((err) => { console.error("Dashboard onboarding check failed:", err); });
+            .catch(() => {});
     }, []);
 
     if (loading) {

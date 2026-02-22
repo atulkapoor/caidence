@@ -24,7 +24,6 @@ from urllib import response
 from click import style
 import google.generativeai as genai
 from typing import Optional, List, Dict
-from app.core.config import settings
 from dotenv import load_dotenv
 import asyncio
 
@@ -66,6 +65,39 @@ class AIService:
     
     nano_model = genai.GenerativeModel("nano-banana-pro-preview")
     gemini_model = genai.GenerativeModel("gemini-pro-latest")
+
+    @staticmethod
+    def _normalize_model_name(model: Optional[str]) -> str:
+        if not model:
+            return "unknown"
+        normalized = model.strip().lower()
+        compact = "".join(ch for ch in normalized if ch.isalnum())
+
+        if "nanobanana" in compact or compact == "nano":
+            return "nanobanana"
+        if "gemini" in compact:
+            return "gemini"
+        return "unknown"
+
+    @staticmethod
+    def _get_google_model(model: Optional[str], task: str = "content"):
+        model_key = AIService._normalize_model_name(model)
+
+        # Enforce task-to-model mapping:
+        # - content => Gemini
+        # - image   => NanoBanana
+        if task == "image":
+            if model_key != "nanobanana":
+                logger.info(
+                    f"Model '{model}' requested for image generation. Using NanoBanana."
+                )
+            return AIService.nano_model, "NanoBanana"
+
+        if model_key == "nanobanana":
+            logger.info(
+                "NanoBanana selected for content generation. Using Gemini for text output."
+            )
+        return AIService.gemini_model, "Gemini"
 
     @staticmethod
     def _get_model_name() -> str:
@@ -190,9 +222,28 @@ class AIService:
     #     return await AIService._call_llm(full_prompt, system_prompt=system)
     
     @staticmethod
-    async def generate_content(title, platform, content_type, prompt):
-        print("🔥 Gemini called")
-        print("Gemini key:", settings.GEMINI_API_KEY)
+    async def generate_content(
+        title: str,
+        platform: Optional[str] = None,
+        content_type: Optional[str] = None,
+        prompt: Optional[str] = None,
+        model: Optional[str] = None,
+    ):
+        # Backward compatibility for older call pattern:
+        # generate_content(platform, content_type, prompt)
+        if prompt is None and platform and content_type:
+            prompt = content_type
+            content_type = platform
+            platform = title
+            title = "Generated Content"
+
+        platform = platform or "General"
+        content_type = content_type or "Post"
+        prompt = prompt or ""
+        selected_model, selected_model_name = AIService._get_google_model(
+            model,
+            task="content",
+        )
 
         full_prompt = f"""
     You are a world-class viral social media copywriter and the One Who dont make Spelling Mistakes In any Sentence or Word.
@@ -217,9 +268,9 @@ class AIService:
     """
 
         
-        response = AIService.gemini_model.generate_content(full_prompt)
+        response = await asyncio.to_thread(selected_model.generate_content, full_prompt)
 
-        return response.text
+        return response.text or f"[{selected_model_name}] No response generated."
 
     # @staticmethod
     # async def generate_image(style: str, prompt: str, aspect_ratio: str = "1:1") -> str:
@@ -269,12 +320,22 @@ class AIService:
     @staticmethod
     async def generate_image(
         title: str,
-        style: str,
-        prompt: str,
+        style: Optional[str] = None,
+        prompt: Optional[str] = None,
         aspect_ratio: str = "1:1",
         brand_colors: str | None = None,
         reference_image: str | None = None,
+        model: Optional[str] = None,
     ) -> str:
+        # Backward compatibility for older call pattern:
+        # generate_image(style, prompt)
+        if prompt is None and style is not None:
+            prompt = style
+            style = title
+            title = "Generated Design"
+
+        style = style or "Minimalist"
+        prompt = prompt or ""
 
         style_map = {
             "Photorealistic": "ultra realistic, 8k, product photography, studio lighting",
@@ -335,10 +396,11 @@ class AIService:
 
             content.append({"text": final_prompt})
 
-            response = await asyncio.to_thread(
-                AIService.nano_model.generate_content,
-                content
+            selected_model, selected_model_name = AIService._get_google_model(
+                model,
+                task="image",
             )
+            response = await asyncio.to_thread(selected_model.generate_content, content)
 
             # ✅ Extract image
             for candidate in response.candidates:
@@ -352,7 +414,7 @@ class AIService:
 
             raise HTTPException(
                 status_code=500,
-                detail="Image generation failed. No image returned from AI."
+                detail=f"Image generation failed. No image returned from {selected_model_name}."
             )
 
         except Exception as e:

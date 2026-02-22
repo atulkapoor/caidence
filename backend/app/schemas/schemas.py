@@ -158,6 +158,7 @@ class ContentGenerationCreate(ContentGenerationBase):
     platform: str
     content_type: str
     prompt: str
+    model: Optional[str] = "Gemini"
     result: Optional[str] = None
     # pass
 
@@ -185,6 +186,7 @@ class DesignAssetCreate(DesignAssetBase):
     style: str
     aspect_ratio: str
     prompt: str
+    model: Optional[str] = "NanoBanana"
     image_url: Optional[str] = None
     brand_colors: Optional[str] = None
     reference_image: Optional[str] = None
