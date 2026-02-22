@@ -12,6 +12,10 @@ from fastapi.responses import RedirectResponse
 """Social account connection API endpoints — OAuth2 flows for 6 platforms."""
 from pydantic import BaseModel
 
+"""Social account connection API endpoints — OAuth2 flows for 6 platforms."""
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
+
 from app.core.config import settings
 from app.api.deps import get_current_authenticated_user
 from app.models.models import User
