@@ -4,12 +4,14 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { generateDesign, generateContent, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
+import { saveDesign } from "@/lib/api/design";
+import { getConnectionStatus, publishToLinkedIn } from "@/lib/api/social";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
 // import Link from "next/link"; // Unused
 import { toast } from "sonner";
-import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight } from "lucide-react";
+import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send } from "lucide-react";
 
 function DesignStudioContent() {
     // @ts-ignore
@@ -27,6 +29,10 @@ function DesignStudioContent() {
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [recentDesigns, setRecentDesigns] = useState<DesignAsset[]>([]);
     const [generatedContent, setGeneratedContent] = useState("");
+    const [postingDesign, setPostingDesign] = useState<number | null>(null);
+    const [postingGeneratedText, setPostingGeneratedText] = useState(false);
+    const [generatedTextPosted, setGeneratedTextPosted] = useState(false);
+    const [postedDesignIds, setPostedDesignIds] = useState<Set<number>>(new Set());
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
@@ -93,10 +99,11 @@ function DesignStudioContent() {
                     model: selectedModel,
                 });
                 setGeneratedContent(content.result || "");
+                setGeneratedTextPosted(false);
                 setActiveTab("generate");
                 toast.success("Content generated successfully!");
             } else {
-                const newDesign = await generateDesign({
+                const generated = await generateDesign({
                     title: title || "Untitled Design",
                     style: selectedStyle,
                     aspect_ratio: aspectRatio,
@@ -104,6 +111,16 @@ function DesignStudioContent() {
                     model: selectedModel,
                     brand_colors: brandColors,
                     reference_image: referenceImage
+                });
+                const newDesign = await saveDesign({
+                    title: generated.title || title || "Untitled Design",
+                    style: generated.style || selectedStyle,
+                    aspect_ratio: generated.aspect_ratio || aspectRatio,
+                    prompt: generated.prompt || prompt,
+                    image_url: generated.image_url,
+                    model: selectedModel,
+                    brand_colors: generated.brand_colors || brandColors,
+                    reference_image: generated.reference_image || referenceImage,
                 });
                 setGeneratedContent("");
                 setRecentDesigns((prev) => [newDesign, ...prev]);
@@ -150,6 +167,29 @@ function DesignStudioContent() {
             link.click();
             document.body.removeChild(link);
         }
+    };
+
+    const postToLinkedIn = async ({
+        text,
+        imageDataUrl,
+        designAssetId,
+    }: {
+        text: string;
+        imageDataUrl?: string;
+        designAssetId?: number;
+    }) => {
+        const status = await getConnectionStatus("linkedin");
+        if (!status.connected) {
+            toast.error("Connect LinkedIn in Onboarding/Settings before posting");
+            return;
+        }
+
+        await publishToLinkedIn({
+            text,
+            image_data_url: imageDataUrl,
+            design_asset_id: designAssetId,
+        });
+        toast.success("Posted to LinkedIn");
     };
 
     return (
@@ -232,6 +272,41 @@ function DesignStudioContent() {
                                     >
                                         <Download className="w-4 h-4" />
                                         Download PNG
+                                    </button>
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                setPostingDesign(previewDesign.id || 0);
+                                                await postToLinkedIn({
+                                                    text: previewDesign.title || "New design",
+                                                    imageDataUrl: previewDesign.image_url.startsWith("data:") ? previewDesign.image_url : undefined,
+                                                    designAssetId: previewDesign.id || undefined,
+                                                });
+                                                if (previewDesign.id) {
+                                                    setPostedDesignIds((prev) => {
+                                                        const next = new Set(prev);
+                                                        next.add(previewDesign.id!);
+                                                        return next;
+                                                    });
+                                                }
+                                            } catch (error: any) {
+                                                toast.error(error?.message || "Failed to post to LinkedIn");
+                                            } finally {
+                                                setPostingDesign(null);
+                                            }
+                                        }}
+                                        disabled={postingDesign === (previewDesign.id || 0) || postedDesignIds.has(previewDesign.id || 0)}
+                                        className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${postedDesignIds.has(previewDesign.id || 0)
+                                            ? "bg-emerald-100 text-emerald-700 cursor-default"
+                                            : "bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+                                            }`}
+                                    >
+                                        <Send className="w-4 h-4" />
+                                        {postedDesignIds.has(previewDesign.id || 0)
+                                            ? "Posted"
+                                            : postingDesign === (previewDesign.id || 0)
+                                                ? "Posting..."
+                                                : "Post to LinkedIn"}
                                     </button>
                                 </div>
                             </div>
@@ -472,12 +547,34 @@ function DesignStudioContent() {
                                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                                     <div className="flex items-center justify-between mb-3">
                                         <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Generated Content</h3>
-                                        <button
-                                            onClick={() => navigator.clipboard.writeText(generatedContent)}
-                                            className="px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg bg-white hover:bg-slate-50"
-                                        >
-                                            Copy
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => navigator.clipboard.writeText(generatedContent)}
+                                                className="px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg bg-white hover:bg-slate-50"
+                                            >
+                                                Copy
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        setPostingGeneratedText(true);
+                                                        await postToLinkedIn({ text: generatedContent });
+                                                        setGeneratedTextPosted(true);
+                                                    } catch (error: any) {
+                                                        toast.error(error?.message || "Failed to post to LinkedIn");
+                                                    } finally {
+                                                        setPostingGeneratedText(false);
+                                                    }
+                                                }}
+                                                disabled={postingGeneratedText || generatedTextPosted}
+                                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg ${generatedTextPosted
+                                                    ? "bg-emerald-100 text-emerald-700 cursor-default"
+                                                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                    }`}
+                                            >
+                                                {generatedTextPosted ? "Posted" : postingGeneratedText ? "Posting..." : "Post to LinkedIn"}
+                                            </button>
+                                        </div>
                                     </div>
                                     <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{generatedContent}</p>
                                 </div>
@@ -633,6 +730,38 @@ function DesignStudioContent() {
                                                         className="text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider"
                                                     >
                                                         View <ArrowRight className="w-3 h-3" />
+                                                    </button>
+
+                                                    <button
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation();
+                                                            try {
+                                                                setPostingDesign(asset.id || 0);
+                                                                await postToLinkedIn({
+                                                                    text: asset.title || "New design",
+                                                                    imageDataUrl: asset.image_url.startsWith("data:") ? asset.image_url : undefined,
+                                                                    designAssetId: asset.id || undefined,
+                                                                });
+                                                                if (asset.id) {
+                                                                    setPostedDesignIds((prev) => {
+                                                                        const next = new Set(prev);
+                                                                        next.add(asset.id);
+                                                                        return next;
+                                                                    });
+                                                                }
+                                                            } catch (error: any) {
+                                                                toast.error(error?.message || "Failed to post to LinkedIn");
+                                                            } finally {
+                                                                setPostingDesign(null);
+                                                            }
+                                                        }}
+                                                        disabled={postingDesign === (asset.id || 0) || postedDesignIds.has(asset.id || 0)}
+                                                        className={`transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${postedDesignIds.has(asset.id || 0)
+                                                            ? "text-emerald-700"
+                                                            : "text-emerald-600 hover:text-emerald-700"
+                                                            }`}
+                                                    >
+                                                        <Send className="w-3 h-3" /> {postedDesignIds.has(asset.id || 0) ? "Posted" : postingDesign === (asset.id || 0) ? "Posting" : "Post"}
                                                     </button>
 
                                                     <button

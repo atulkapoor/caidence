@@ -25,7 +25,8 @@ const PROFILE_TYPES = [
     },
 ];
 
-export function ProfileTypeStep({ onProfileTypeSelect, loading }: StepProps) {
+export function ProfileTypeStep({ onProfileTypeSelect, loading, stepData }: StepProps) {
+    const selectedType = String(stepData.profile_type ?? "");
     return (
         <div className="space-y-4">
             <p className="text-slate-500 font-medium mb-6">
@@ -38,8 +39,11 @@ export function ProfileTypeStep({ onProfileTypeSelect, loading }: StepProps) {
                         onClick={() => onProfileTypeSelect?.(type)}
                         disabled={loading}
                         className={cn(
-                            "w-full text-left rounded-2xl border-2 border-slate-200 p-6 flex items-center gap-5",
-                            "hover:border-slate-900 hover:shadow-md transition-all duration-200",
+                            "w-full text-left rounded-2xl border-2 p-6 flex items-center gap-5",
+                            selectedType === type
+                                ? "border-slate-900 bg-slate-50"
+                                : "border-slate-200 hover:border-slate-900 hover:shadow-md",
+                            "transition-all duration-200",
                             "focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2",
                             "disabled:opacity-50 disabled:cursor-not-allowed",
                         )}

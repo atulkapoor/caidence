@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -27,11 +27,18 @@ const inputClass = cn(
     "transition-all",
 );
 
-export function CreateBrandStep({ onNext, loading }: StepProps) {
+export function CreateBrandStep({ onNext, loading, stepData }: StepProps) {
     const [brandName, setBrandName] = useState("");
     const [brandUrl, setBrandUrl] = useState("");
     const [targetAudience, setTargetAudience] = useState("");
     const [brandCategory, setBrandCategory] = useState("");
+
+    useEffect(() => {
+        setBrandName(String(stepData.brand_name ?? ""));
+        setBrandUrl(String(stepData.brand_url ?? ""));
+        setTargetAudience(String(stepData.target_audience ?? ""));
+        setBrandCategory(String(stepData.brand_category ?? ""));
+    }, [stepData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -36,9 +36,20 @@ const initialRates: Rates = RATE_FIELDS.reduce((acc, { key }) => {
     return acc;
 }, {} as Rates);
 
-export function RateCardStep({ onNext, loading }: StepProps) {
+export function RateCardStep({ onNext, loading, stepData }: StepProps) {
     const [currency, setCurrency] = useState("USD");
     const [rates, setRates] = useState<Rates>(initialRates);
+
+    useEffect(() => {
+        setCurrency(String(stepData.currency ?? "USD"));
+        const rawRates = (stepData.rates as Record<string, unknown> | undefined) || {};
+        const nextRates = RATE_FIELDS.reduce((acc, { key }) => {
+            const value = rawRates[key];
+            acc[key] = value != null ? String(value) : "";
+            return acc;
+        }, {} as Rates);
+        setRates(nextRates);
+    }, [stepData]);
 
     const handleRateChange = (key: string, value: string) => {
         setRates((prev) => ({ ...prev, [key]: value }));

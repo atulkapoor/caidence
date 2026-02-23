@@ -29,10 +29,9 @@ async def get_design_image(
     else:
         result = await db.execute(
             select(models.DesignAsset)
-            .join(User, models.DesignAsset.user_id == User.id)
             .where(
-                (models.DesignAsset.id == asset_id) &
-                (User.organization_id == current_user.organization_id)
+                (models.DesignAsset.id == asset_id)
+                & (models.DesignAsset.user_id == current_user.id)
             )
         )
     asset = result.scalar_one_or_none()
@@ -64,8 +63,7 @@ async def get_design_assets(
     else:
         result = await db.execute(
             select(models.DesignAsset)
-            .join(User, models.DesignAsset.user_id == User.id)
-            .where(User.organization_id == current_user.organization_id)
+            .where(models.DesignAsset.user_id == current_user.id)
             .order_by(models.DesignAsset.created_at.desc())
             .offset(skip)
             .limit(limit)
@@ -92,10 +90,9 @@ async def get_design_asset(
     else:
         result = await db.execute(
             select(models.DesignAsset)
-            .join(User, models.DesignAsset.user_id == User.id)
             .where(
-                (models.DesignAsset.id == asset_id) &
-                (User.organization_id == current_user.organization_id)
+                (models.DesignAsset.id == asset_id)
+                & (models.DesignAsset.user_id == current_user.id)
             )
         )
     asset = result.scalar_one_or_none()
@@ -145,11 +142,19 @@ async def save_design(
     try:
         # ✅ EDIT MODE → update existing
         if request.id:
-            result = await db.execute(
-                select(models.DesignAsset).where(
-                    models.DesignAsset.id == request.id
+            if current_user.role == "super_admin":
+                result = await db.execute(
+                    select(models.DesignAsset).where(
+                        models.DesignAsset.id == request.id
+                    )
                 )
-            )
+            else:
+                result = await db.execute(
+                    select(models.DesignAsset).where(
+                        (models.DesignAsset.id == request.id)
+                        & (models.DesignAsset.user_id == current_user.id)
+                    )
+                )
             db_asset = result.scalar_one_or_none()
 
             if not db_asset:
@@ -202,10 +207,9 @@ async def update_design_asset(
     else:
         result = await db.execute(
             select(models.DesignAsset)
-            .join(User, models.DesignAsset.user_id == User.id)
             .where(
-                (models.DesignAsset.id == asset_id) &
-                (User.organization_id == current_user.organization_id)
+                (models.DesignAsset.id == asset_id)
+                & (models.DesignAsset.user_id == current_user.id)
             )
         )
 
@@ -255,10 +259,9 @@ async def delete_design_asset(
     else:
         result = await db.execute(
             select(models.DesignAsset)
-            .join(User, models.DesignAsset.user_id == User.id)
             .where(
-                (models.DesignAsset.id == asset_id) &
-                (User.organization_id == current_user.organization_id)
+                (models.DesignAsset.id == asset_id)
+                & (models.DesignAsset.user_id == current_user.id)
             )
         )
     asset = result.scalar_one_or_none()

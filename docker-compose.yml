@@ -31,7 +31,7 @@ services:
       - AI_WORKER_URL=http://ai_worker:8001
       - LLM_MODEL=qwen2.5:0.5b
       - FRONTEND_URL=http://localhost:3000
-      - OAUTH_REDIRECT_BASE=http://localhost:8000/api/v1/social/callback
+      - OAUTH_REDIRECT_BASE=http://localhost:8080/api/v1/social/callback
     volumes:
       - ./backend:/app
     restart: always

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -33,13 +33,22 @@ const inputClass = cn(
     "transition-all",
 );
 
-export function CompanyInfoStep({ onNext, loading }: StepProps) {
+export function CompanyInfoStep({ onNext, loading, stepData }: StepProps) {
     const [companyName, setCompanyName] = useState("");
     const [legalEntityName, setLegalEntityName] = useState("");
     const [industry, setIndustry] = useState("");
     const [companySize, setCompanySize] = useState("");
     const [websiteUrl, setWebsiteUrl] = useState("");
     const [phone, setPhone] = useState("");
+
+    useEffect(() => {
+        setCompanyName(String(stepData.company_name ?? ""));
+        setLegalEntityName(String(stepData.legal_entity_name ?? ""));
+        setIndustry(String(stepData.industry ?? ""));
+        setCompanySize(String(stepData.company_size ?? ""));
+        setWebsiteUrl(String(stepData.website_url ?? ""));
+        setPhone(String(stepData.phone ?? ""));
+    }, [stepData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

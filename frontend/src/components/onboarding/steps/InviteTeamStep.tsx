@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, X, Loader2, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -17,11 +17,26 @@ const inputClass = cn(
     "transition-all",
 );
 
-export function InviteTeamStep({ onNext, loading }: StepProps) {
+export function InviteTeamStep({ onNext, loading, stepData }: StepProps) {
     const [emailInput, setEmailInput] = useState("");
     const [roleInput, setRoleInput] = useState<"admin" | "member">("member");
     const [invites, setInvites] = useState<TeamInvite[]>([]);
     const [error, setError] = useState("");
+
+    useEffect(() => {
+        const rawInvites = Array.isArray(stepData.invites) ? stepData.invites : [];
+        const normalized = rawInvites
+            .map((inv) => {
+                if (typeof inv !== "object" || inv === null) return null;
+                const item = inv as Record<string, unknown>;
+                const email = String(item.email ?? "").trim().toLowerCase();
+                const role = item.role === "admin" ? "admin" : "member";
+                if (!email) return null;
+                return { email, role } as TeamInvite;
+            })
+            .filter(Boolean) as TeamInvite[];
+        setInvites(normalized);
+    }, [stepData]);
 
     const handleAdd = () => {
         const email = emailInput.trim().toLowerCase();

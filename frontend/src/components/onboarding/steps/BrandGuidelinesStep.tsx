@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -14,12 +14,22 @@ const inputClass = cn(
 
 const textareaClass = cn(inputClass, "resize-none");
 
-export function BrandGuidelinesStep({ onNext, loading }: StepProps) {
+export function BrandGuidelinesStep({ onNext, loading, stepData }: StepProps) {
     const [dos, setDos] = useState("");
     const [donts, setDonts] = useState("");
     const [approvedHashtags, setApprovedHashtags] = useState("");
     const [restrictedWords, setRestrictedWords] = useState("");
     const [toneGuidelines, setToneGuidelines] = useState("");
+
+    useEffect(() => {
+        setDos(String(stepData.dos ?? ""));
+        setDonts(String(stepData.donts ?? ""));
+        const hashtags = Array.isArray(stepData.approved_hashtags) ? stepData.approved_hashtags : [];
+        const words = Array.isArray(stepData.restricted_words) ? stepData.restricted_words : [];
+        setApprovedHashtags(hashtags.map((v) => String(v)).join(", "));
+        setRestrictedWords(words.map((v) => String(v)).join(", "));
+        setToneGuidelines(String(stepData.tone_guidelines ?? ""));
+    }, [stepData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

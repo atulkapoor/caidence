@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Upload, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -12,11 +12,18 @@ const inputClass = cn(
     "transition-all",
 );
 
-export function BrandingStep({ onNext, loading }: StepProps) {
+export function BrandingStep({ onNext, loading, stepData }: StepProps) {
     const [primaryColor, setPrimaryColor] = useState("#0f172a");
     const [secondaryColor, setSecondaryColor] = useState("#64748b");
     const [headingFont, setHeadingFont] = useState("");
     const [bodyFont, setBodyFont] = useState("");
+
+    useEffect(() => {
+        setPrimaryColor(String(stepData.primary_color ?? "#0f172a"));
+        setSecondaryColor(String(stepData.secondary_color ?? "#64748b"));
+        setHeadingFont(String(stepData.heading_font ?? ""));
+        setBodyFont(String(stepData.body_font ?? ""));
+    }, [stepData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

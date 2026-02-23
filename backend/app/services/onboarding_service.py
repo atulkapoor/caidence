@@ -95,6 +95,24 @@ class OnboardingService:
         current_data[f"step_{step_index}"] = step_data
         progress.step_data = json.dumps(current_data)
 
+        # Creator-specific guard: social connection is required at connect_socials step.
+        steps = OnboardingService.get_steps(progress.profile_type)
+        step = next((s for s in steps if s["index"] == step_index), None)
+        if (
+            progress.profile_type == "creator"
+            and step
+            and step["name"] == "connect_socials"
+        ):
+            result = await db.execute(
+                select(SocialConnection).where(
+                    SocialConnection.user_id == user_id,
+                    SocialConnection.is_active == True,  # noqa: E712
+                )
+            )
+            connections = result.scalars().all()
+            if not connections:
+                raise ValueError("Creators must connect at least one social account")
+
         # Mark step as completed
         completed = json.loads(progress.completed_steps or "[]")
         if step_index not in completed:
@@ -103,7 +121,6 @@ class OnboardingService:
         progress.completed_steps = json.dumps(completed)
 
         # Advance current_step to the next uncompleted step
-        steps = OnboardingService.get_steps(progress.profile_type)
         next_step = step_index + 1
         if next_step < len(steps):
             progress.current_step = next_step
@@ -119,6 +136,7 @@ class OnboardingService:
             "is_complete": progress.is_complete,
             "steps": OnboardingService.get_steps(progress.profile_type),
             "completed_steps": json.loads(progress.completed_steps),
+            "step_data": json.loads(progress.step_data or "{}"),
         }
 
     @staticmethod

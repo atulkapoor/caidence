@@ -33,6 +33,7 @@ async def get_progress(
         "is_complete": progress.is_complete,
         "steps": steps,
         "completed_steps": json.loads(progress.completed_steps or "[]"),
+        "step_data": json.loads(progress.step_data or "{}"),
     }
 
 

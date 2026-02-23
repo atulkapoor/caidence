@@ -5,7 +5,7 @@ Supports: Instagram, YouTube (Google), Facebook, LinkedIn, WhatsApp, Snapchat
 """
 import json
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 from urllib.parse import urlencode
 
@@ -101,10 +101,15 @@ class SocialAuthService:
         _oauth_states[state] = {
             "user_id": user_id,
             "platform": platform,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         client_id = getattr(settings, config["client_id_attr"])
+        if not client_id:
+            raise ValueError(
+                f"Missing OAuth client id for {platform}. "
+                f"Set {config['client_id_attr']} in backend .env and restart backend."
+            )
         redirect_uri = f"{settings.OAUTH_REDIRECT_BASE}/{platform}"
 
         params = {
@@ -140,6 +145,16 @@ class SocialAuthService:
         config = PLATFORM_CONFIG[platform]
         client_id = getattr(settings, config["client_id_attr"])
         client_secret = getattr(settings, config["client_secret_attr"])
+        if not client_id:
+            raise ValueError(
+                f"Missing OAuth client id for {platform}. "
+                f"Set {config['client_id_attr']} in backend .env and restart backend."
+            )
+        if not client_secret:
+            raise ValueError(
+                f"Missing OAuth client secret for {platform}. "
+                f"Set {config['client_secret_attr']} in backend .env and restart backend."
+            )
         redirect_uri = f"{settings.OAUTH_REDIRECT_BASE}/{platform}"
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -185,6 +200,13 @@ class SocialAuthService:
                 username = snippet.get("title", "")
                 platform_user_id = items[0].get("id", "")
 
+        # LinkedIn userinfo commonly returns `sub` (OpenID subject) instead of `id`.
+        if platform == "linkedin":
+            first = profile_data.get("localizedFirstName") or profile_data.get("given_name") or ""
+            last = profile_data.get("localizedLastName") or profile_data.get("family_name") or ""
+            platform_user_id = str(profile_data.get("id") or profile_data.get("sub") or "")
+            username = f"{first} {last}".strip() or profile_data.get("name") or username
+
         # Upsert SocialConnection
         user_id = state_data["user_id"]
         result = await db.execute(
@@ -201,7 +223,7 @@ class SocialAuthService:
 
         connection.access_token = access_token
         connection.refresh_token = refresh_token
-        connection.token_expires_at = datetime.utcnow() + timedelta(seconds=int(expires_in))
+        connection.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
         connection.scopes = config["scopes"]
         connection.platform_user_id = platform_user_id
         connection.platform_username = username or None
@@ -212,6 +234,18 @@ class SocialAuthService:
         await db.commit()
         await db.refresh(connection)
         return connection
+
+    @staticmethod
+    async def get_connection(platform: str, user_id: int, db: AsyncSession) -> Optional[SocialConnection]:
+        """Get a single active social connection by platform for a user."""
+        result = await db.execute(
+            select(SocialConnection).where(
+                SocialConnection.user_id == user_id,
+                SocialConnection.platform == platform,
+                SocialConnection.is_active == True,  # noqa: E712
+            )
+        )
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def get_connections(user_id: int, db: AsyncSession) -> list[SocialConnection]:
@@ -275,11 +309,89 @@ class SocialAuthService:
             if token_data.get("refresh_token"):
                 connection.refresh_token = token_data["refresh_token"]
             expires_in = token_data.get("expires_in", 3600)
-            connection.token_expires_at = datetime.utcnow() + timedelta(seconds=int(expires_in))
+            connection.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
 
             await db.commit()
             await db.refresh(connection)
             return connection
+
+    @staticmethod
+    async def publish_linkedin_post(
+        user_id: int,
+        text: str,
+        db: AsyncSession,
+        visibility: str = "PUBLIC",
+        image_bytes: Optional[bytes] = None,
+    ) -> dict:
+        """Publish a text/image post to LinkedIn for the authenticated connected user."""
+        connection = await SocialAuthService.get_connection("linkedin", user_id, db)
+        if not connection or not connection.access_token:
+            raise ValueError("LinkedIn is not connected for this user")
+
+        # Attempt refresh only when token is expired and refresh token is available.
+        if connection.token_expires_at and _is_expired(connection.token_expires_at):
+            refreshed = await SocialAuthService.refresh_token("linkedin", user_id, db)
+            if refreshed and refreshed.access_token:
+                connection = refreshed
+
+        if not connection.platform_user_id:
+            raise ValueError("LinkedIn account identifier missing. Reconnect LinkedIn.")
+
+        author_urn = f"urn:li:person:{connection.platform_user_id}"
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                media_urn = None
+                if image_bytes:
+                    media_urn = await _upload_linkedin_image(client, connection.access_token, author_urn, image_bytes)
+
+                payload = {
+                    "author": author_urn,
+                    "lifecycleState": "PUBLISHED",
+                    "specificContent": {
+                        "com.linkedin.ugc.ShareContent": {
+                            "shareCommentary": {"text": text},
+                            "shareMediaCategory": "IMAGE" if media_urn else "NONE",
+                        }
+                    },
+                    "visibility": {
+                        "com.linkedin.ugc.MemberNetworkVisibility": visibility,
+                    },
+                }
+
+                if media_urn:
+                    payload["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
+                        {
+                            "status": "READY",
+                            "media": media_urn,
+                        }
+                    ]
+
+                resp = await client.post(
+                    "https://api.linkedin.com/v2/ugcPosts",
+                    headers={
+                        "Authorization": f"Bearer {connection.access_token}",
+                        "Content-Type": "application/json",
+                        "X-Restli-Protocol-Version": "2.0.0",
+                    },
+                    json=payload,
+                )
+                if resp.status_code not in (200, 201):
+                    raise ValueError(f"LinkedIn publish failed: {resp.text}")
+
+                post_id = resp.headers.get("x-restli-id")
+                data = _safe_json(resp.text)
+                return {
+                    "platform": "linkedin",
+                    "status": "published",
+                    "post_id": post_id or data.get("id"),
+                    "author": author_urn,
+                    "has_image": bool(media_urn),
+                }
+        except httpx.HTTPError as exc:
+            raise ValueError(f"LinkedIn network error: {exc}") from exc
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"LinkedIn publish internal error: {exc}") from exc
 
 
 def _extract_nested(data: dict, key_path: str) -> Optional[str]:
@@ -292,3 +404,83 @@ def _extract_nested(data: dict, key_path: str) -> Optional[str]:
         else:
             return None
     return str(current) if current is not None else None
+
+
+async def _upload_linkedin_image(
+    client: httpx.AsyncClient,
+    access_token: str,
+    author_urn: str,
+    image_bytes: bytes,
+) -> str:
+    """Register and upload image bytes to LinkedIn, then return media asset URN."""
+    register_payload = {
+        "registerUploadRequest": {
+            "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
+            "owner": author_urn,
+            "serviceRelationships": [
+                {
+                    "relationshipType": "OWNER",
+                    "identifier": "urn:li:userGeneratedContent",
+                }
+            ],
+        }
+    }
+
+    register_resp = await client.post(
+        "https://api.linkedin.com/v2/assets?action=registerUpload",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "X-Restli-Protocol-Version": "2.0.0",
+        },
+        json=register_payload,
+    )
+    if register_resp.status_code not in (200, 201):
+        raise ValueError(f"LinkedIn image register failed: {register_resp.text}")
+
+    register_data = _safe_json(register_resp.text)
+    upload_info = (
+        register_data.get("value", {})
+        .get("uploadMechanism", {})
+        .get("com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {})
+    )
+    upload_url = upload_info.get("uploadUrl")
+    asset_urn = register_data.get("value", {}).get("asset")
+
+    if not upload_url or not asset_urn:
+        raise ValueError("LinkedIn image upload URL or asset URN missing")
+
+    upload_resp = await client.put(
+        upload_url,
+        content=image_bytes,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/octet-stream",
+        },
+    )
+    if upload_resp.status_code not in (200, 201):
+        raise ValueError(f"LinkedIn image upload failed: {upload_resp.text}")
+
+    return asset_urn
+
+
+def _safe_json(text: str | None) -> dict:
+    """Parse a JSON object safely; return empty dict for empty body."""
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"Expected JSON response from LinkedIn, got: {text[:200]}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("Unexpected LinkedIn response format")
+    return parsed
+
+
+def _is_expired(expires_at: datetime) -> bool:
+    """Compare expiry safely across naive/aware datetime values."""
+    now_utc = datetime.now(timezone.utc)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at <= now_utc

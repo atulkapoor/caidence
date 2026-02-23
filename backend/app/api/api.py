@@ -44,7 +44,3 @@ api_router.include_router(rbac.router, prefix="/rbac", tags=["rbac"])
 # Phase 18: Social Connections & Onboarding
 api_router.include_router(social.router, prefix="/social", tags=["social"])
 api_router.include_router(onboarding.router, prefix="/onboarding", tags=["onboarding"])
-
-
-
-api_router.include_router(social.router, prefix="/social", tags=["social"])

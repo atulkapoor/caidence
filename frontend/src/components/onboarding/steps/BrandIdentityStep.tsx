@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -14,13 +14,22 @@ const inputClass = cn(
     "transition-all",
 );
 
-export function BrandIdentityStep({ onNext, loading }: StepProps) {
+export function BrandIdentityStep({ onNext, loading, stepData }: StepProps) {
     const [brandName, setBrandName] = useState("");
     const [tagline, setTagline] = useState("");
     const [brandDescription, setBrandDescription] = useState("");
     const [brandVoice, setBrandVoice] = useState("");
     const [primaryColor, setPrimaryColor] = useState("#0f172a");
     const [logoUrl, setLogoUrl] = useState("");
+
+    useEffect(() => {
+        setBrandName(String(stepData.brand_name ?? ""));
+        setTagline(String(stepData.tagline ?? ""));
+        setBrandDescription(String(stepData.brand_description ?? ""));
+        setBrandVoice(String(stepData.brand_voice ?? ""));
+        setPrimaryColor(String(stepData.primary_color ?? "#0f172a"));
+        setLogoUrl(String(stepData.logo_url ?? ""));
+    }, [stepData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
