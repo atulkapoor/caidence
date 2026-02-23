@@ -91,10 +91,12 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    if not user.is_approved:
+    # Allow login before admin approval so users can complete onboarding.
+    # Access to protected product routes is still enforced elsewhere.
+    if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account pending approval. Please wait for admin to approve."
+            detail="Account is inactive"
         )
     
     access_token = create_access_token(
@@ -161,4 +163,3 @@ async def recover_password(
     
     # Always return success to prevent email enumeration
     return {"message": "If this email is registered, a recovery link has been sent."}
-

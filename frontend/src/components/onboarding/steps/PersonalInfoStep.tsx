@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -25,11 +25,18 @@ const inputClass = cn(
     "transition-all",
 );
 
-export function PersonalInfoStep({ onNext, loading }: StepProps) {
+export function PersonalInfoStep({ onNext, loading, stepData }: StepProps) {
     const [displayName, setDisplayName] = useState("");
     const [bio, setBio] = useState("");
     const [location, setLocation] = useState("");
     const [niche, setNiche] = useState("");
+
+    useEffect(() => {
+        setDisplayName(String(stepData.display_name ?? ""));
+        setBio(String(stepData.bio ?? ""));
+        setLocation(String(stepData.location ?? ""));
+        setNiche(String(stepData.niche ?? ""));
+    }, [stepData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

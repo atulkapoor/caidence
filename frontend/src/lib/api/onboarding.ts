@@ -14,6 +14,7 @@ export interface OnboardingProgress {
     is_complete: boolean;
     steps: OnboardingStep[];
     completed_steps: number[];
+    step_data: Record<string, unknown>;
 }
 
 export async function getOnboardingProgress(): Promise<OnboardingProgress> {
@@ -39,7 +40,10 @@ export async function updateOnboardingStep(
             profile_type: profileType,
         }),
     });
-    if (!res.ok) throw new Error("Failed to update onboarding step");
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to update onboarding step");
+    }
     return res.json();
 }
 

@@ -27,6 +27,8 @@ import { RateCardStep } from "./steps/RateCardStep";
 
 interface OnboardingWizardProps {
     initialProgress: OnboardingProgress;
+    mode?: "default" | "settings";
+    onCompleted?: () => void | Promise<void>;
 }
 
 // Map step names to components
@@ -52,11 +54,10 @@ export interface StepProps {
     loading: boolean;
 }
 
-export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
+export function OnboardingWizard({ initialProgress, mode = "default", onCompleted }: OnboardingWizardProps) {
     const router = useRouter();
     const [progress, setProgress] = useState(initialProgress);
     const [currentStepIndex, setCurrentStepIndex] = useState(initialProgress.current_step);
-    const [stepData, setStepData] = useState<Record<string, unknown>>({});
     const [saving, setSaving] = useState(false);
 
     const steps = progress.steps;
@@ -67,6 +68,12 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
 
     const handleCompleteAndRedirect = useCallback(async () => {
         await completeOnboarding();
+        if (mode === "settings") {
+            toast.success("Onboarding completed");
+            if (onCompleted) await onCompleted();
+            return;
+        }
+
         toast.success("Welcome to C(AI)DENCE!");
 
         // Check if user is approved — redirect accordingly
@@ -82,7 +89,7 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
             // If we can't fetch user, send to pending-approval to be safe
             router.push("/pending-approval");
         }
-    }, [router]);
+    }, [router, mode, onCompleted]);
 
     const handleNext = useCallback(
         async (data: Record<string, unknown>, profileType?: string) => {
@@ -94,7 +101,6 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
                     profileType,
                 );
                 setProgress(updated);
-                setStepData({});
 
                 if (isLastStep) {
                     try {
@@ -118,7 +124,6 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
     const handleBack = () => {
         if (!isFirstStep) {
             setCurrentStepIndex((prev) => prev - 1);
-            setStepData({});
         }
     };
 
@@ -128,7 +133,6 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
             try {
                 const updated = await updateOnboardingStep(currentStepIndex, {});
                 setProgress(updated);
-                setStepData({});
                 setCurrentStepIndex((prev) => prev + 1);
             } catch {
                 toast.error("Failed to skip step");
@@ -143,6 +147,9 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
     };
 
     const StepComponent = currentStep ? STEP_COMPONENTS[currentStep.name] : null;
+    const currentStepData = currentStep
+        ? ((progress.step_data?.[`step_${currentStep.index}`] as Record<string, unknown> | undefined) ?? {})
+        : {};
 
     return (
         <div className="max-w-3xl mx-auto px-6 py-12">
@@ -176,7 +183,7 @@ export function OnboardingWizard({ initialProgress }: OnboardingWizardProps) {
                                 ? handleProfileTypeSelect
                                 : undefined
                         }
-                        stepData={stepData}
+                        stepData={currentStepData}
                         loading={saving}
                     />
                 ) : (

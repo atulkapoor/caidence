@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -19,7 +19,7 @@ const numberInputClass = cn(
     "transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
 );
 
-export function TargetAudienceStep({ onNext, loading }: StepProps) {
+export function TargetAudienceStep({ onNext, loading, stepData }: StepProps) {
     const [ageMin, setAgeMin] = useState("");
     const [ageMax, setAgeMax] = useState("");
     const [genderMale, setGenderMale] = useState("");
@@ -27,6 +27,19 @@ export function TargetAudienceStep({ onNext, loading }: StepProps) {
     const [genderOther, setGenderOther] = useState("");
     const [primaryLocations, setPrimaryLocations] = useState("");
     const [keyInterests, setKeyInterests] = useState("");
+
+    useEffect(() => {
+        setAgeMin(stepData.age_range_min != null ? String(stepData.age_range_min) : "");
+        setAgeMax(stepData.age_range_max != null ? String(stepData.age_range_max) : "");
+        const split = (stepData.gender_split as Record<string, unknown> | undefined) || {};
+        setGenderMale(split.male != null ? String(split.male) : "");
+        setGenderFemale(split.female != null ? String(split.female) : "");
+        setGenderOther(split.other != null ? String(split.other) : "");
+        const locations = Array.isArray(stepData.primary_locations) ? stepData.primary_locations : [];
+        const interests = Array.isArray(stepData.key_interests) ? stepData.key_interests : [];
+        setPrimaryLocations(locations.map((v) => String(v)).join(", "));
+        setKeyInterests(interests.map((v) => String(v)).join(", "));
+    }, [stepData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

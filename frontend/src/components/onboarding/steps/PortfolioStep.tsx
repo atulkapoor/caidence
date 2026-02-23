@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "../OnboardingWizard";
@@ -17,10 +17,27 @@ const inputClass = cn(
     "transition-all",
 );
 
-export function PortfolioStep({ onNext, loading }: StepProps) {
+export function PortfolioStep({ onNext, loading, stepData }: StepProps) {
     const [mediaKitUrl, setMediaKitUrl] = useState("");
     const [portfolioUrl, setPortfolioUrl] = useState("");
     const [items, setItems] = useState<PortfolioItem[]>([{ title: "", url: "" }]);
+
+    useEffect(() => {
+        setMediaKitUrl(String(stepData.media_kit_url ?? ""));
+        setPortfolioUrl(String(stepData.portfolio_url ?? ""));
+        const rawItems = Array.isArray(stepData.portfolio_items) ? stepData.portfolio_items : [];
+        const normalized = rawItems
+            .map((item) => {
+                if (typeof item !== "object" || item === null) return null;
+                const row = item as Record<string, unknown>;
+                return {
+                    title: String(row.title ?? ""),
+                    url: String(row.url ?? ""),
+                };
+            })
+            .filter(Boolean) as PortfolioItem[];
+        setItems(normalized.length > 0 ? normalized : [{ title: "", url: "" }]);
+    }, [stepData]);
 
     const handleItemChange = (index: number, field: keyof PortfolioItem, value: string) => {
         setItems((prev) =>

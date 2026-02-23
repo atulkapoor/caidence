@@ -4,6 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
 import { toast } from "sonner";
 import { generateContent, generateDesign, fetchContentGenerations, ContentGeneration, saveContent, deleteContent } from "@/lib/api";
+import { getConnectionStatus, publishToLinkedIn } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
@@ -34,6 +35,10 @@ function ContentStudioContent() {
 
     const [recentCreations, setRecentCreations] = useState<ContentGeneration[]>([]);
     const [currentResponses, setCurrentResponses] = useState<{ platform: string, result: string, title: string, outputType: "text" | "image" }[]>([]);
+    const [postingPreview, setPostingPreview] = useState(false);
+    const [postingIndex, setPostingIndex] = useState<number | null>(null);
+    const [previewPosted, setPreviewPosted] = useState(false);
+    const [postedIndices, setPostedIndices] = useState<Set<number>>(new Set());
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
@@ -67,6 +72,10 @@ function ContentStudioContent() {
             loadForEdit(parseInt(editId));
         }
     }, []);
+
+    useEffect(() => {
+        setPreviewPosted(false);
+    }, [previewContent?.id]);
 
     const loadForEdit = async (id: number) => {
         try {
@@ -307,6 +316,27 @@ ${prompt}
         { id: "Gemini", label: "Gemini (Content)" },
     ];
 
+    const postToLinkedIn = async (text: string, sourcePlatform?: string) => {
+        if (!text?.trim()) {
+            toast.error("Nothing to post");
+            return;
+        }
+
+        if (sourcePlatform && sourcePlatform.toLowerCase() !== "linkedin") {
+            toast.error("LinkedIn publishing is enabled only for LinkedIn content right now");
+            return;
+        }
+
+        const status = await getConnectionStatus("linkedin");
+        if (!status.connected) {
+            toast.error("Connect LinkedIn in Onboarding/Settings before posting");
+            return;
+        }
+
+        await publishToLinkedIn({ text });
+        toast.success("Posted to LinkedIn");
+    };
+
     return (
         <DashboardLayout>
             <div className="h-[calc(100vh-48px)] flex flex-col bg-slate-100 relative">
@@ -380,13 +410,25 @@ ${prompt}
                                         Edit / Remix
                                     </button>
                                     <button
-                                        onClick={() => {
-                                            toast.success("Posted Functionally Pending!");
+                                        onClick={async () => {
+                                            try {
+                                                setPostingPreview(true);
+                                                await postToLinkedIn(previewContent.result || "", previewContent.platform);
+                                                setPreviewPosted(true);
+                                            } catch (error: any) {
+                                                toast.error(error?.message || "Failed to post to LinkedIn");
+                                            } finally {
+                                                setPostingPreview(false);
+                                            }
                                         }}
-                                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md shadow-emerald-200 transition-all flex items-center justify-center gap-2"
+                                        disabled={postingPreview || previewPosted}
+                                        className={`w-full py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 ${previewPosted
+                                            ? "bg-emerald-100 text-emerald-700 shadow-emerald-100 cursor-default"
+                                            : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200"
+                                            }`}
                                     >
                                         <Send className="w-4 h-4" />
-                                        Post
+                                        {previewPosted ? "Posted" : postingPreview ? "Posting..." : "Post"}
                                     </button>
                                     <button
                                         onClick={() => {
@@ -616,6 +658,32 @@ ${prompt}
                                                         <button onClick={async () => await handleSave()} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md shadow-indigo-200 transition-all">
                                                             <Save className="w-3 h-3" />
                                                             {isEditMode ? "Update" : "Save"}
+                                                        </button>
+
+                                                        <button
+                                                            onClick={async () => {
+                                                                try {
+                                                                    setPostingIndex(idx);
+                                                                    await postToLinkedIn(response.result, response.platform);
+                                                                    setPostedIndices((prev) => {
+                                                                        const next = new Set(prev);
+                                                                        next.add(idx);
+                                                                        return next;
+                                                                    });
+                                                                } catch (error: any) {
+                                                                    toast.error(error?.message || "Failed to post to LinkedIn");
+                                                                } finally {
+                                                                    setPostingIndex(null);
+                                                                }
+                                                            }}
+                                                            disabled={postingIndex === idx || postedIndices.has(idx)}
+                                                            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-md transition-all ${postedIndices.has(idx)
+                                                                ? "bg-emerald-100 text-emerald-700 shadow-emerald-100 cursor-default"
+                                                                : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 disabled:opacity-60"
+                                                                }`}
+                                                        >
+                                                            <Send className="w-3 h-3" />
+                                                            {postedIndices.has(idx) ? "Posted" : postingIndex === idx ? "Posting" : "Post"}
                                                         </button>
                                                     </div>
                                                 </div>

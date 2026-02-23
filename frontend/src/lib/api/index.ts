@@ -24,3 +24,4 @@ export * from "./admin";
 export * from "./brands";
 export * from "./organizations";
 export * from "./creators";
+export * from "./social";

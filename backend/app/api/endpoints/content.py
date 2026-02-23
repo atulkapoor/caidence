@@ -28,8 +28,7 @@ async def get_content_generations(
     else:
         result = await db.execute(
             select(models.ContentGeneration)
-            .join(User)
-            .where(User.organization_id == current_user.organization_id)
+            .where(models.ContentGeneration.user_id == current_user.id)
             .order_by(models.ContentGeneration.created_at.desc())
             .offset(skip)
             .limit(limit)
@@ -49,10 +48,9 @@ async def get_content_generation(
     else:
         result = await db.execute(
             select(models.ContentGeneration)
-            .join(User, models.ContentGeneration.user_id == User.id)
             .where(
-                (models.ContentGeneration.id == content_id) &
-                (User.organization_id == current_user.organization_id)
+                (models.ContentGeneration.id == content_id)
+                & (models.ContentGeneration.user_id == current_user.id)
             )
         )
     content = result.scalar_one_or_none()
@@ -93,11 +91,19 @@ async def save_content(
     try:
         # ✅ EDIT MODE → update existing
         if request.id:
-            result = await db.execute(
-                select(models.ContentGeneration).where(
-                    models.ContentGeneration.id == request.id
+            if current_user.role == "super_admin":
+                result = await db.execute(
+                    select(models.ContentGeneration).where(
+                        models.ContentGeneration.id == request.id
+                    )
                 )
-            )
+            else:
+                result = await db.execute(
+                    select(models.ContentGeneration).where(
+                        (models.ContentGeneration.id == request.id)
+                        & (models.ContentGeneration.user_id == current_user.id)
+                    )
+                )
             db_content = result.scalar_one_or_none()
 
             if not db_content:
@@ -139,11 +145,19 @@ async def update_content(
 ):
     try:
         # 🔍 Fetch content
-        result = await db.execute(
-            select(models.ContentGeneration).where(
-                models.ContentGeneration.id == content_id
+        if current_user.role == "super_admin":
+            result = await db.execute(
+                select(models.ContentGeneration).where(
+                    models.ContentGeneration.id == content_id
+                )
             )
-        )
+        else:
+            result = await db.execute(
+                select(models.ContentGeneration).where(
+                    (models.ContentGeneration.id == content_id)
+                    & (models.ContentGeneration.user_id == current_user.id)
+                )
+            )
         db_content = result.scalar_one_or_none()
 
         if not db_content:
@@ -186,10 +200,9 @@ async def delete_content_generation(
     else:
         result = await db.execute(
             select(models.ContentGeneration)
-            .join(User, models.ContentGeneration.user_id == User.id)
             .where(
-                (models.ContentGeneration.id == content_id) &
-                (User.organization_id == current_user.organization_id)
+                (models.ContentGeneration.id == content_id)
+                & (models.ContentGeneration.user_id == current_user.id)
             )
         )
     content = result.scalar_one_or_none()

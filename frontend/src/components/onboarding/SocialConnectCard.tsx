@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Check, Loader2, ExternalLink } from "lucide-react";
+import { Check, Loader2, ExternalLink, RotateCcw } from "lucide-react";
 import { getConnectionUrl, disconnectPlatform, type SocialConnection } from "@/lib/api/social";
 import { cn } from "@/lib/utils";
 
@@ -19,9 +19,10 @@ interface SocialConnectCardProps {
     platform: string;
     connection: SocialConnection | null;
     onStatusChange: () => void;
+    showReconnect?: boolean;
 }
 
-export function SocialConnectCard({ platform, connection, onStatusChange }: SocialConnectCardProps) {
+export function SocialConnectCard({ platform, connection, onStatusChange, showReconnect = true }: SocialConnectCardProps) {
     const [loading, setLoading] = useState(false);
     const meta = PLATFORM_META[platform] || { label: platform, color: "text-slate-600", bgColor: "bg-slate-50" };
     const isConnected = connection?.is_active ?? false;
@@ -50,6 +51,17 @@ export function SocialConnectCard({ platform, connection, onStatusChange }: Soci
         }
     };
 
+    const handleReconnect = async () => {
+        setLoading(true);
+        try {
+            const { authorization_url } = await getConnectionUrl(platform);
+            window.location.href = authorization_url;
+        } catch {
+            toast.error(`Failed to reconnect ${meta.label}`);
+            setLoading(false);
+        }
+    };
+
     return (
         <div className={cn(
             "rounded-2xl border p-5 flex items-center justify-between transition-all",
@@ -70,25 +82,37 @@ export function SocialConnectCard({ platform, connection, onStatusChange }: Soci
                     </p>
                 </div>
             </div>
-            <button
-                onClick={isConnected ? handleDisconnect : handleConnect}
-                disabled={loading}
-                className={cn(
-                    "px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50",
-                    isConnected
-                        ? "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                        : "bg-slate-900 text-white hover:bg-slate-800"
-                )}
-            >
-                {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                ) : isConnected ? (
-                    <Check size={14} className="text-emerald-500" />
-                ) : (
-                    <ExternalLink size={14} />
-                )}
-                {isConnected ? "Connected" : "Connect"}
-            </button>
+            {!isConnected ? (
+                <button
+                    onClick={handleConnect}
+                    disabled={loading}
+                    className="px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-slate-900 text-white hover:bg-slate-800"
+                >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink size={14} />}
+                    Connect
+                </button>
+            ) : (
+                <div className="flex items-center gap-2">
+                    {showReconnect && (
+                        <button
+                            onClick={handleReconnect}
+                            disabled={loading}
+                            className="px-3 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                        >
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw size={14} />}
+                            Reconnect
+                        </button>
+                    )}
+                    <button
+                        onClick={handleDisconnect}
+                        disabled={loading}
+                        className="px-3 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check size={14} className="text-emerald-500" />}
+                        Connected
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

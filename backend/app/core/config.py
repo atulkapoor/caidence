@@ -56,7 +56,9 @@ class Settings(BaseSettings):
 
     # Frontend URL (for OAuth redirect after callback)
     FRONTEND_URL: str = "http://localhost:3000"
-    OAUTH_REDIRECT_BASE: str = "http://localhost:8000/api/v1/social/callback"
+    # Public backend base URL (used to derive OAuth callback if OAUTH_REDIRECT_BASE is not set)
+    BACKEND_PUBLIC_URL: str = "http://localhost:8080"
+    OAUTH_REDIRECT_BASE: Optional[str] = None
 
     # Social OAuth Credentials
     INSTAGRAM_CLIENT_ID: str = ""
@@ -75,6 +77,15 @@ class Settings(BaseSettings):
     @model_validator(mode='after')
     def validate_security_settings(self):
         """Validate security settings based on environment."""
+        if not self.OAUTH_REDIRECT_BASE:
+            base = self.BACKEND_PUBLIC_URL.rstrip("/")
+            self.OAUTH_REDIRECT_BASE = f"{base}{self.API_V1_STR}/social/callback"
+
+        # Normalize URL formatting (no trailing slash)
+        self.OAUTH_REDIRECT_BASE = self.OAUTH_REDIRECT_BASE.rstrip("/")
+        self.FRONTEND_URL = self.FRONTEND_URL.rstrip("/")
+        self.BACKEND_PUBLIC_URL = self.BACKEND_PUBLIC_URL.rstrip("/")
+
         if self.is_production:
             # In production, fail fast if using default secrets
             if self.SECRET_KEY == _DEFAULT_SECRET_KEY:
@@ -116,6 +127,4 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
-
-
 
