@@ -18,6 +18,19 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    build: ./backend
+    env_file:
+      - .env
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-cadence_ai}
+    command: alembic upgrade head
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
   backend:
     build: ./backend
     ports:
@@ -32,10 +45,13 @@ services:
       - LLM_MODEL=${LLM_MODEL:-qwen2.5:0.5b}
       - FRONTEND_URL=${FRONTEND_URL:-https://dev.caidence.kclub.me}
       - OAUTH_REDIRECT_BASE=${OAUTH_REDIRECT_BASE:-https://dev.caidence.kclub.me/api/v1/social/callback}
+      - AUTO_GENERATE_MIGRATIONS=false
     restart: always
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   frontend:
     build: ./frontend
