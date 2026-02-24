@@ -34,6 +34,7 @@ export interface LinkedInPublishPayload {
     visibility?: "PUBLIC" | "CONNECTIONS";
     image_data_url?: string;
     design_asset_id?: number;
+    content_id?: number;
 }
 
 export interface PublishPostResponse {
@@ -73,7 +74,7 @@ export async function getConnectionStatus(platform: string): Promise<SocialConne
     return res.json();
 }
 
-export async function publishToLinkedIn(payload: LinkedInPublishPayload): Promise<{ post_id: string; status: string }> {
+export async function publishToLinkedIn(payload: LinkedInPublishPayload): Promise<PublishPostResponse> {
     const text = (payload.text || "").trim();
     if (!text) {
         throw new Error("LinkedIn post text is required");
@@ -87,7 +88,20 @@ export async function publishToLinkedIn(payload: LinkedInPublishPayload): Promis
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Failed to publish to LinkedIn");
     }
-    return res.json();
+    const data = await res.json();
+    const normalizedPlatform = String(data.platform || "linkedin").toLowerCase();
+    const status = String(data.status || "published");
+    const published = typeof data.published === "boolean"
+        ? data.published
+        : ["published", "posted", "success", "ok"].includes(status.toLowerCase());
+
+    return {
+        platform: normalizedPlatform,
+        status,
+        post_id: data.post_id ? String(data.post_id) : undefined,
+        target_name: String(data.target_name || "LinkedIn"),
+        published,
+    };
 }
 
 export async function publishSocialPost(

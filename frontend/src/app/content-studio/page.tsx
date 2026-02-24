@@ -4,7 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
 import { toast } from "sonner";
 import { generateContent, generateDesign, fetchContentGenerations, ContentGeneration, saveContent, deleteContent } from "@/lib/api";
-import { getConnectionStatus, publishSocialPost, type PublishPostResponse } from "@/lib/api/social";
+import { getConnectionStatus, publishSocialPost, publishToLinkedIn, type PublishPostResponse } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
@@ -598,7 +598,13 @@ ${prompt}
 
         const toastId = toast.loading(`Posting to ${platform}...`);
         try {
-            const result = await publishSocialPost(platformKey, text, imageUrl, contentId ?? undefined);
+            const result = platformKey === "linkedin" && imageUrl?.startsWith("data:")
+                ? await publishToLinkedIn({
+                    text,
+                    image_data_url: imageUrl,
+                    content_id: contentId ?? undefined,
+                })
+                : await publishSocialPost(platformKey, text, imageUrl, contentId ?? undefined);
             if (!result.published) {
                 throw new Error(`Unexpected ${platform} publish response`);
             }
