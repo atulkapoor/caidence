@@ -53,13 +53,14 @@ export function ConnectSocialsStep({ onNext, loading }: StepProps) {
                 Connect your social media accounts to unlock analytics, content scheduling, and campaign tracking.
             </p>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {PLATFORMS.map((platform) => (
                     <SocialConnectCard
                         key={platform}
                         platform={platform}
                         connection={getConnection(platform)}
                         onStatusChange={fetchConnections}
+                        buttonSize="compact"
                     />
                 ))}
             </div>
