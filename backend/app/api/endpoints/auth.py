@@ -10,6 +10,7 @@ from sqlalchemy.future import select
 
 from app.api.deps import get_current_active_user, get_current_authenticated_user, get_db, require_super_admin
 from app.models.models import User
+from app.models.rbac import Role
 from app.services.auth_service import verify_password, get_password_hash, create_access_token
 
 router = APIRouter()
@@ -56,20 +57,28 @@ async def register(user_data: UserRegister, db: AsyncSession = Depends(get_db)):
     existing_user = result.scalar_one_or_none()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+
+    # Enforce brand_admin for self-registered users and sync role_id.
+    role_name = "brand_admin"
+    role_result = await db.execute(select(Role).where(Role.name == role_name))
+    role_obj = role_result.scalar_one_or_none()
+    if not role_obj:
+        raise HTTPException(status_code=500, detail="Role 'brand_admin' not found. Seed roles first.")
+
     # Create new user (not approved by default)
     new_user = User(
         email=user_data.email,
         hashed_password=get_password_hash(user_data.password),
         full_name=user_data.full_name,
-        role=user_data.role,
+        role=role_name,
+        role_id=role_obj.id,
         is_active=True,
         is_approved=False,  # Requires admin approval
     )
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    
+
     return new_user
 
 
@@ -83,14 +92,14 @@ async def login(
     """
     result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalar_one_or_none()
-    
+
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Allow login before admin approval so users can complete onboarding.
     # Access to protected product routes is still enforced elsewhere.
     if not user.is_active:
@@ -98,7 +107,7 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is inactive"
         )
-    
+
     access_token = create_access_token(
         data={
             "user_id": user.id,
@@ -130,13 +139,13 @@ async def set_password(
     """
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     user.hashed_password = get_password_hash(password)
     await db.commit()
-    
+
     return {"message": "Password set successfully"}
 
 @router.post("/recover-password")
@@ -148,18 +157,18 @@ async def recover_password(
     Initiate password recovery.
     """
     from app.services.email_service import send_password_reset_email
-    
+
     # Check user exists
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    
+
     if user:
         # Generate token (mocked unique token for now)
         import uuid
         token = str(uuid.uuid4())
         # TODO: Save token to DB with expiry
-        
+
         await send_password_reset_email(email, token)
-    
+
     # Always return success to prevent email enumeration
     return {"message": "If this email is registered, a recovery link has been sent."}

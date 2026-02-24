@@ -24,7 +24,7 @@ function RegisterContent() {
         try {
             await register({
                 ...formData,
-                role: "viewer"
+                role: "brand_admin"
             });
 
             toast.success("Account created successfully!");
@@ -37,15 +37,20 @@ function RegisterContent() {
                 if (loginData.access_token) {
                     localStorage.setItem("token", loginData.access_token);
 
+                    let user = null;
                     // Store user details for RBAC
                     try {
-                        const user = await fetchCurrentUser();
+                        user = await fetchCurrentUser();
                         localStorage.setItem("user", JSON.stringify(user));
                     } catch {
-                        // Non-critical — onboarding still works without cached user
+                        // Non-critical fallback
                     }
 
-                    router.push("/onboarding");
+                    if (!user || !user.is_approved) {
+                        router.push("/pending-approval");
+                    } else {
+                        router.push("/onboarding");
+                    }
                 }
             } catch {
                 toast.info("Please sign in with your new account.");
@@ -133,3 +138,4 @@ export default function RegisterPage() {
         </Suspense>
     );
 }
+

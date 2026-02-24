@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clock, LogOut, RefreshCw } from "lucide-react";
 import { fetchCurrentUser } from "@/lib/api";
+import { getOnboardingProgress } from "@/lib/api/onboarding";
 
 export default function PendingApprovalPage() {
     const router = useRouter();
@@ -35,6 +36,15 @@ export default function PendingApprovalPage() {
             const user = await fetchCurrentUser();
             localStorage.setItem("user", JSON.stringify(user));
             if (user.is_approved) {
+                try {
+                    const onboarding = await getOnboardingProgress();
+                    if (!onboarding.is_complete) {
+                        router.push("/onboarding");
+                        return;
+                    }
+                } catch {
+                    // If onboarding lookup fails, continue to dashboard.
+                }
                 router.push("/dashboard");
             } else {
                 setChecking(false);
@@ -68,9 +78,8 @@ export default function PendingApprovalPage() {
                 )}
 
                 <p className="text-slate-500 font-medium mb-8 leading-relaxed">
-                    Your account has been created and your onboarding is complete.
-                    An administrator needs to approve your account before you can
-                    access the dashboard.
+                    Your account has been created. An administrator needs to approve your account first.
+                    After approval, you will continue onboarding before accessing the dashboard.
                 </p>
 
                 <div className="space-y-3">

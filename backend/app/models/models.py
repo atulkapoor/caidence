@@ -184,6 +184,12 @@ class ContentGeneration(Base):
     content_type = Column(String) # Post, Blog, etc.
     prompt = Column(Text)
     result = Column(Text)
+    image_url = Column(Text, nullable=True)
+    brand_colors = Column(String, nullable=True)
+    generate_with_image = Column(Boolean, default=False, nullable=False)
+    is_posted = Column(Boolean, default=False, nullable=False)
+    posted_at = Column(DateTime(timezone=True), nullable=True)
+    posted_target_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     user_id = Column(Integer, ForeignKey("users.id"))
 
@@ -331,4 +337,3 @@ class CreditTransaction(Base):
     
     user = relationship("User")
     credit_account = relationship("CreditAccount")
-

@@ -160,11 +160,22 @@ class ContentGenerationCreate(ContentGenerationBase):
     prompt: str
     model: Optional[str] = "Gemini"
     result: Optional[str] = None
+    image_url: Optional[str] = None
+    brand_colors: Optional[str] = None
+    generate_with_image: bool = False
+    adapt_from_base: bool = False
+    base_result: Optional[str] = None
     # pass
 
 class ContentGeneration(ContentGenerationBase):
     id: int
     result: Optional[str] = None
+    image_url: Optional[str] = None
+    brand_colors: Optional[str] = None
+    generate_with_image: bool = False
+    is_posted: bool = False
+    posted_at: Optional[datetime] = None
+    posted_target_name: Optional[str] = None
     created_at: datetime
     user_id: int
 
