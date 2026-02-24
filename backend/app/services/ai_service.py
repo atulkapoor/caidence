@@ -210,6 +210,13 @@ class AIService:
             logger.error(f"Ollama error: {e}")
             return f"Error from AI: {e}"
 
+    @staticmethod
+    def _clean_text_output(text: str) -> str:
+        # Keep formatting but remove common wrapper noise from model outputs.
+        cleaned = (text or "").strip()
+        cleaned = cleaned.replace("```markdown", "").replace("```", "").strip()
+        return cleaned
+
     # @staticmethod
     # async def generate_content(platform: str, content_type: str, prompt: str) -> str:
     #     """Generates marketing content."""
@@ -246,31 +253,75 @@ class AIService:
         )
 
         full_prompt = f"""
-    You are a world-class viral social media copywriter and the One Who dont make Spelling Mistakes In any Sentence or Word.
+You are a senior social media copywriter.
 
-    Create ONLY one ready-to-post {platform} {content_type}.
+Write exactly one polished, ready-to-post {platform} {content_type} in fluent English.
 
-    Campaign Title:
-    {title}
+Campaign Title:
+{title}
 
-    Topic:
-    {prompt}
-    
-    And we Dont want spelling Mistakes  
+Topic / Brief:
+{prompt}
 
-    Requirements:
-    -Dont want spelling Mistakes (Important)
-    - Strong emotional hook
-    - High engagement
-    - Clear CTA
-    - Relevant hashtags
-    - Modern tone
-    """
+Quality requirements:
+- Zero spelling mistakes and correct grammar.
+- Clear structure: hook, value, CTA.
+- Platform-native tone for {platform}.
+- Keep it specific and practical, not generic filler.
+- Add only relevant hashtags (3-8 max).
+- Return only final post text. No explanations, no markdown fences.
+"""
 
-        
         response = await asyncio.to_thread(selected_model.generate_content, full_prompt)
+        draft_text = AIService._clean_text_output(response.text or "")
 
-        return response.text or f"[{selected_model_name}] No response generated."
+        # Second pass proofreading to reduce spelling/grammar errors.
+        proof_prompt = f"""
+Proofread and lightly improve the social post below.
+Rules:
+- Fix spelling and grammar mistakes.
+- Preserve meaning, platform, and intent.
+- Keep hashtags relevant.
+- Return only the final corrected post text.
+
+Post:
+{draft_text}
+"""
+        proofed = await asyncio.to_thread(selected_model.generate_content, proof_prompt)
+        final_text = AIService._clean_text_output(proofed.text or draft_text)
+        return final_text or f"[{selected_model_name}] No response generated."
+
+    @staticmethod
+    async def adapt_content_for_platform(
+        base_text: str,
+        platform: str,
+        content_type: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> str:
+        platform = platform or "General"
+        content_type = content_type or "Post"
+        selected_model, selected_model_name = AIService._get_google_model(
+            model,
+            task="content",
+        )
+
+        adapt_prompt = f"""
+You are a senior social copy editor.
+
+Adapt the post below for {platform} as a {content_type}.
+Rules:
+- Keep the same core message and meaning.
+- Keep tone clear and professional.
+- Add/adjust hashtags and formatting to fit {platform}.
+- Do not change factual claims.
+- Return only the final post text.
+
+Base Post:
+{base_text}
+"""
+        response = await asyncio.to_thread(selected_model.generate_content, adapt_prompt)
+        text = AIService._clean_text_output(response.text or "")
+        return text or f"[{selected_model_name}] No response generated."
 
     # @staticmethod
     # async def generate_image(style: str, prompt: str, aspect_ratio: str = "1:1") -> str:

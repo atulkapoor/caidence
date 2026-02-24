@@ -8,6 +8,9 @@ export interface ContentGeneration {
     result: string;
     created_at: string;
     prompt?: string;
+    image_url?: string | null;
+    brand_colors?: string | null;
+    generate_with_image?: boolean;
     is_posted?: boolean;
     posted_at?: string | null;
     posted_target_name?: string | null;
@@ -20,6 +23,11 @@ export interface GenerateContentRequest {
     prompt?: string;
     model?: string;
     topic?: string;
+    image_url?: string;
+    brand_colors?: string;
+    generate_with_image?: boolean;
+    adapt_from_base?: boolean;
+    base_result?: string;
     [key: string]: unknown;
 }
 

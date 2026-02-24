@@ -7,6 +7,7 @@ import json
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -395,10 +396,14 @@ async def publish_post(
 
     if platform == "linkedin":
         try:
+            image_bytes: Optional[bytes] = None
+            if payload.image_url:
+                image_bytes = await _resolve_linkedin_image_bytes(payload.image_url)
             data = await SocialAuthService.publish_linkedin_post(
                 user_id=current_user.id,
                 text=payload.message,
                 db=db,
+                image_bytes=image_bytes,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
@@ -415,6 +420,7 @@ async def publish_post(
                 user_id=current_user.id,
                 message=payload.message,
                 db=db,
+                image_url=(payload.image_url or "").strip() or None,
             )
             publish_response = _normalize_publish_response(
                 platform="facebook",
@@ -494,6 +500,27 @@ def _decode_base64_data(value: str) -> bytes:
         raise ValueError("Expected base64-encoded image") from exc
 
 
+async def _resolve_linkedin_image_bytes(image_url: str) -> bytes:
+    value = (image_url or "").strip()
+    if not value:
+        raise ValueError("LinkedIn image payload is empty")
+
+    if value.startswith("data:"):
+        return _decode_base64_data(value)
+
+    if value.startswith(("http://", "https://")):
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(value, follow_redirects=True)
+            if resp.status_code < 200 or resp.status_code >= 300:
+                raise ValueError(f"LinkedIn image URL returned HTTP {resp.status_code}")
+            return resp.content
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"Failed to fetch LinkedIn image URL: {exc}") from exc
+
+    raise ValueError("LinkedIn image must be a data URL or public http/https URL")
+
+
 def _normalize_publish_response(
     platform: str,
     data: dict,
@@ -533,6 +560,11 @@ async def _mark_content_as_posted(
     content = result.scalar_one_or_none()
     if not content:
         raise HTTPException(status_code=404, detail="Content generation not found for post status update")
+    if content.is_posted:
+        raise HTTPException(
+            status_code=409,
+            detail="This content is already posted. Create a new draft to post again.",
+        )
 
     content.is_posted = True
     content.posted_at = datetime.now(timezone.utc)

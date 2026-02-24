@@ -4,6 +4,7 @@ Supports: Instagram, YouTube (Google), Facebook, LinkedIn, WhatsApp, Snapchat
 """
 
 import json
+import base64
 import secrets
 import ipaddress
 from datetime import datetime, timedelta, timezone
@@ -439,8 +440,9 @@ class SocialAuthService:
         user_id: int,
         message: str,
         db: AsyncSession,
+        image_url: Optional[str] = None,
     ) -> dict:
-        """Publish a post to a selected Facebook page."""
+        """Publish a text or image post to a selected Facebook page."""
         connection = await SocialAuthService.get_connection("facebook", user_id, db)
         if not connection or not connection.access_token:
             raise ValueError("Facebook is not connected for this user")
@@ -468,10 +470,41 @@ class SocialAuthService:
             raise ValueError("Selected Facebook page is missing id or access token")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"https://graph.facebook.com/v18.0/{page_id}/feed",
-                data={"message": message, "access_token": page_access_token},
-            )
+            if image_url:
+                if image_url.startswith(("http://", "https://")):
+                    resp = await client.post(
+                        f"https://graph.facebook.com/v18.0/{page_id}/photos",
+                        data={
+                            "caption": message or "",
+                            "url": image_url,
+                            "access_token": page_access_token,
+                        },
+                    )
+                elif image_url.startswith("data:"):
+                    encoded = image_url.split(",", 1)[1] if "," in image_url else image_url
+                    try:
+                        image_bytes = base64.b64decode(encoded, validate=True)
+                    except Exception as exc:  # noqa: BLE001
+                        raise ValueError(f"Invalid image data URL: {exc}") from exc
+
+                    resp = await client.post(
+                        f"https://graph.facebook.com/v18.0/{page_id}/photos",
+                        data={
+                            "caption": message or "",
+                            "access_token": page_access_token,
+                        },
+                        files={"source": ("generated.png", image_bytes, "image/png")},
+                    )
+                else:
+                    raise ValueError(
+                        "Facebook image must be a data URL or public image URL (http/https)."
+                    )
+            else:
+                resp = await client.post(
+                    f"https://graph.facebook.com/v18.0/{page_id}/feed",
+                    data={"message": message, "access_token": page_access_token},
+                )
+
             if resp.status_code not in (200, 201):
                 raise ValueError(f"Facebook publish failed: {resp.text}")
 

@@ -10,8 +10,6 @@ import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
 
-// Implementation of Typewriter effect component
-import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 
@@ -20,6 +18,9 @@ function ContentStudioContent() {
         contentId?: number | null,
         platform: string,
         result: string,
+        imageUrl?: string | null,
+        brandColors?: string | null,
+        generateWithImage?: boolean,
         title: string,
         outputType: "text" | "image"
     };
@@ -37,6 +38,8 @@ function ContentStudioContent() {
     const [length, setLength] = useState("Medium");
     const [webSearch, setWebSearch] = useState(false);
     const [selectedModel, setSelectedModel] = useState("Gemini")
+    const [generateWithImage, setGenerateWithImage] = useState(false);
+    const [brandColors, setBrandColors] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
 
     const [isEditMode, setIsEditMode] = useState(false);
@@ -260,11 +263,61 @@ function ContentStudioContent() {
 
         try {
             const isImageMode = selectedModel.toLowerCase().includes("nano");
-            for (const platform of selectedPlatforms) {
-                const platformTitle = withPlatformSuffix(title, platform);
-                // Construct customized prompt for each platform
-                const selectedCampaign = availableCampaigns.find(c => c.id === campaignId);
-                const richPrompt = `
+            const selectedCampaign = availableCampaigns.find(c => c.id === campaignId);
+            const baseRichPrompt = `
+Context: Creating ${contentType} for Social Media.
+Campaign: ${selectedCampaign?.title || "None"}
+Keywords: ${keywords || "None"}
+Writing Style: ${writingExpert}
+Web Search: ${webSearch ? "Enabled" : "Disabled"}
+
+Content Brief:
+${prompt}
+            `.trim();
+
+            if (!isImageMode && selectedPlatforms.length > 1) {
+                const baseTitle = stripPlatformSuffixes(title);
+                const baseResult = await generateContent({
+                    title: baseTitle,
+                    platform: "General",
+                    content_type: contentType,
+                    prompt: baseRichPrompt,
+                    model: selectedModel,
+                    generate_with_image: generateWithImage,
+                    brand_colors: generateWithImage ? brandColors : undefined,
+                });
+
+                const sharedImageUrl = baseResult.image_url || null;
+                for (const platform of selectedPlatforms) {
+                    const platformTitle = withPlatformSuffix(title, platform);
+                    const adapted = await generateContent({
+                        title: platformTitle,
+                        platform,
+                        content_type: contentType,
+                        prompt: baseRichPrompt,
+                        model: selectedModel,
+                        adapt_from_base: true,
+                        base_result: baseResult.result || "",
+                        image_url: sharedImageUrl || undefined,
+                        generate_with_image: false,
+                        brand_colors: generateWithImage ? brandColors : undefined,
+                    });
+
+                    setCurrentResponses(prev => [...prev, {
+                        contentId: null,
+                        platform,
+                        result: adapted.result || baseResult.result || "",
+                        imageUrl: sharedImageUrl,
+                        brandColors: adapted.brand_colors || baseResult.brand_colors || null,
+                        generateWithImage: generateWithImage,
+                        title: withPlatformSuffix(adapted.title || platformTitle, platform),
+                        outputType: "text",
+                    }]);
+                }
+            } else {
+                for (const platform of selectedPlatforms) {
+                    const platformTitle = withPlatformSuffix(title, platform);
+                    const richPrompt = `
 Context: Creating ${contentType} for ${platform}.
 Campaign: ${selectedCampaign?.title || "None"}
 Keywords: ${keywords || "None"}
@@ -273,40 +326,46 @@ Web Search: ${webSearch ? "Enabled" : "Disabled"}
 
 Content Brief:
 ${prompt}
-                `.trim();
+                    `.trim();
 
-                if (isImageMode) {
-                    const result = await generateDesign({
-                        title: platformTitle,
-                        style: "Minimalist",
-                        aspect_ratio: "1:1",
-                        prompt: richPrompt,
-                        model: selectedModel,
-                    });
+                    if (isImageMode) {
+                        const result = await generateDesign({
+                            title: platformTitle,
+                            style: "Minimalist",
+                            aspect_ratio: "1:1",
+                            prompt: richPrompt,
+                            model: selectedModel,
+                        });
 
-                    setCurrentResponses(prev => [...prev, {
-                        contentId: null,
-                        platform: platform,
-                        result: result.image_url || "",
-                        title: withPlatformSuffix(result.title || platformTitle, platform),
-                        outputType: "image",
-                    }]);
-                } else {
-                    const result = await generateContent({
-                        title: platformTitle,
-                        platform: platform,
-                        content_type: contentType,
-                        prompt: richPrompt,
-                        model: selectedModel,
-                    });
+                        setCurrentResponses(prev => [...prev, {
+                            contentId: null,
+                            platform: platform,
+                            result: result.image_url || "",
+                            title: withPlatformSuffix(result.title || platformTitle, platform),
+                            outputType: "image",
+                        }]);
+                    } else {
+                        const result = await generateContent({
+                            title: platformTitle,
+                            platform: platform,
+                            content_type: contentType,
+                            prompt: richPrompt,
+                            model: selectedModel,
+                            generate_with_image: generateWithImage,
+                            brand_colors: generateWithImage ? brandColors : undefined,
+                        });
 
-                    setCurrentResponses(prev => [...prev, {
-                        contentId: null,
-                        platform: platform,
-                        result: result.result || "",
-                        title: withPlatformSuffix(result.title || platformTitle, platform),
-                        outputType: "text",
-                    }]);
+                        setCurrentResponses(prev => [...prev, {
+                            contentId: null,
+                            platform: platform,
+                            result: result.result || "",
+                            imageUrl: result.image_url || null,
+                            brandColors: result.brand_colors || null,
+                            generateWithImage: Boolean(result.generate_with_image),
+                            title: withPlatformSuffix(result.title || platformTitle, platform),
+                            outputType: "text",
+                        }]);
+                    }
                 }
             }
 
@@ -331,6 +390,8 @@ Campaign: ${selectedCampaign?.title || "None"}
 Keywords: ${keywords || "None"}
 Writing Style: ${writingExpert}
 Web Search: ${webSearch ? "Enabled" : "Disabled"}
+Generate With Image: ${generateWithImage ? "Yes" : "No"}
+Brand Colors: ${generateWithImage ? (brandColors || "Not specified") : "N/A"}
 
 Content Brief:
 ${prompt}
@@ -349,7 +410,47 @@ ${prompt}
             content_type: contentType,
             prompt: buildRichPrompt(),
             result: response.result,
+            image_url: response.imageUrl || null,
+            brand_colors: response.brandColors || null,
+            generate_with_image: Boolean(response.generateWithImage),
         });
+    };
+
+    const isResponsePosted = (response: GeneratedResponse, idx: number) =>
+        Boolean(postedIndices[idx] || (response.contentId ? postedContentIds.has(response.contentId) : false));
+
+    const normalizeHexColor = (value?: string | null) =>
+        /^#[0-9A-Fa-f]{6}$/.test((value || "").trim()) ? (value as string) : "#7c3aed";
+
+    const markContentPostedLocally = (contentId: number | null | undefined, targetName?: string) => {
+        if (!contentId) return;
+        setPostedContentIds((prev) => {
+            const next = new Set(prev);
+            next.add(contentId);
+            return next;
+        });
+        setRecentCreations((prev) =>
+            prev.map((item) =>
+                item.id === contentId
+                    ? {
+                        ...item,
+                        is_posted: true,
+                        posted_at: new Date().toISOString(),
+                        posted_target_name: targetName || item.posted_target_name || item.platform,
+                    }
+                    : item
+            )
+        );
+        setPreviewContent((prev) =>
+            prev && prev.id === contentId
+                ? {
+                    ...prev,
+                    is_posted: true,
+                    posted_at: new Date().toISOString(),
+                    posted_target_name: targetName || prev.posted_target_name || prev.platform,
+                }
+                : prev
+        );
     };
 
     const ensureContentIdForPosting = async (
@@ -374,6 +475,9 @@ ${prompt}
                         title: saved.title,
                         platform: saved.platform,
                         result: saved.result || item.result,
+                        imageUrl: saved.image_url || item.imageUrl || null,
+                        brandColors: saved.brand_colors || item.brandColors || null,
+                        generateWithImage: Boolean(saved.generate_with_image),
                     }
                     : item
             )
@@ -382,13 +486,6 @@ ${prompt}
             setIsEditMode(true);
             setIsEditId(savedId);
         }
-        if (savedId) {
-            setPostedContentIds((prev) => {
-                const next = new Set(prev);
-                next.add(savedId);
-                return next;
-            });
-        }
         await loadHistory();
         return savedId;
     };
@@ -396,6 +493,10 @@ ${prompt}
     const handleSave = async () => {
         if (!title || currentResponses.length === 0) {
             toast.error("Nothing to save");
+            return;
+        }
+        if (currentResponses.some((response, idx) => isResponsePosted(response, idx))) {
+            toast.error("Posted content is read-only. Create new content to make changes.");
             return;
         }
 
@@ -420,6 +521,9 @@ ${prompt}
                         title: saved.title,
                         platform: saved.platform,
                         result: saved.result || updatedResponses[idx].result,
+                        imageUrl: saved.image_url || updatedResponses[idx].imageUrl || null,
+                        brandColors: saved.brand_colors || updatedResponses[idx].brandColors || null,
+                        generateWithImage: Boolean(saved.generate_with_image),
                     };
                     if (postedIndices[idx] && saved?.id) {
                         newlyPostedContentIds.push(saved.id);
@@ -477,12 +581,6 @@ ${prompt}
             toast.error(`Direct publishing currently supports LinkedIn, Facebook, and Instagram only. "${platform}" is not supported yet.`);
             return null;
         }
-
-        if (imageUrl && platformKey !== "instagram") {
-            toast.error(`${platform} publishing currently supports text-only posts here`);
-            return null;
-        }
-
         if (platformKey === "instagram" && !imageUrl) {
             toast.error("Instagram posting requires an image output (public URL)");
             return null;
@@ -504,6 +602,10 @@ ${prompt}
             if (!result.published) {
                 throw new Error(`Unexpected ${platform} publish response`);
             }
+            if (contentId) {
+                markContentPostedLocally(contentId, result.target_name || platform);
+                await loadHistory();
+            }
             toast.success(`Posted to ${result.target_name || platform}`, { id: toastId });
             return result;
         } catch (error: any) {
@@ -513,6 +615,10 @@ ${prompt}
     };
 
     const handleSaveSingle = async (response: GeneratedResponse, idx: number) => {
+        if (isResponsePosted(response, idx)) {
+            toast.error("Posted content is read-only. Create new content to make changes.");
+            return;
+        }
         const toastId = toast.loading(isEditMode ? "Updating content..." : "Saving content...");
         try {
             const saved = await handleSaveResponse(response);
@@ -525,6 +631,9 @@ ${prompt}
                             title: saved.title,
                             platform: saved.platform,
                             result: saved.result || item.result,
+                            imageUrl: saved.image_url || item.imageUrl || null,
+                            brandColors: saved.brand_colors || item.brandColors || null,
+                            generateWithImage: Boolean(saved.generate_with_image),
                         }
                         : item
                 )
@@ -565,12 +674,17 @@ ${prompt}
         setCampaignId(matchedCampaign?.id ?? null);
         setPendingCampaignTitle(matchedCampaign ? null : parsedPrompt.campaignTitle);
         setSelectedPlatforms([item.platform]);
+        setGenerateWithImage(Boolean(item.generate_with_image));
+        setBrandColors(item.brand_colors || "");
 
         setCurrentResponses([
             {
                 contentId: item.id,
                 platform: item.platform,
                 result: item.result || "",
+                imageUrl: item.image_url || null,
+                brandColors: item.brand_colors || null,
+                generateWithImage: Boolean(item.generate_with_image),
                 title: withPlatformSuffix(item.title, item.platform),
                 outputType: "text",
             },
@@ -594,6 +708,8 @@ ${prompt}
         setPrompt("");
         setCurrentResponses([]);
         setSelectedPlatforms(["LinkedIn"]);
+        setGenerateWithImage(false);
+        setBrandColors("");
         setPendingCampaignTitle(null);
         setPostedPreviewByContentId({});
         setPostedIndices({});
@@ -633,6 +749,13 @@ ${prompt}
 
                                 <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8 min-h-full">
                                     <h2 className="text-2xl font-bold text-slate-900 mb-6">{previewContent.title}</h2>
+                                    {previewContent.image_url && (
+                                        <img
+                                            src={previewContent.image_url}
+                                            alt={previewContent.title}
+                                            className="w-full rounded-xl border border-slate-200 mb-6"
+                                        />
+                                    )}
                                     <div className="prose prose-slate max-w-none whitespace-pre-wrap leading-relaxed text-slate-700">
                                         {previewContent.result}
                                     </div>
@@ -678,14 +801,19 @@ ${prompt}
                                 <div className="mt-auto flex flex-col gap-3">
                                     <button
                                         onClick={() => {
+                                            if (previewContent.is_posted) {
+                                                toast.info("Posted content is view-only.");
+                                                return;
+                                            }
                                             loadFromHistory(previewContent);
                                             setActiveTab("generator");
                                             setPreviewContent(null);
                                         }}
-                                        className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-200 transition-all flex items-center justify-center gap-2"
+                                        disabled={previewContent.is_posted}
+                                        className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                                     >
                                         <PenTool className="w-4 h-4" />
-                                        Edit / Remix
+                                        {previewContent.is_posted ? "View Only (Posted)" : "Edit / Remix"}
                                     </button>
                                     <button
                                         onClick={async () => {
@@ -694,7 +822,7 @@ ${prompt}
                                                 const publishResult = await handlePost(
                                                     previewContent.platform,
                                                     previewContent.result || "",
-                                                    undefined,
+                                                    previewContent.image_url || undefined,
                                                     previewContent.id,
                                                 );
                                                 if (publishResult?.published) {
@@ -702,11 +830,10 @@ ${prompt}
                                                         ...prev,
                                                         [previewContent.id]: publishResult.target_name || previewContent.platform,
                                                     }));
-                                                    setPostedContentIds((prev) => {
-                                                        const next = new Set(prev);
-                                                        next.add(previewContent.id);
-                                                        return next;
-                                                    });
+                                                    markContentPostedLocally(
+                                                        previewContent.id,
+                                                        publishResult.target_name || previewContent.platform,
+                                                    );
                                                 }
                                             } catch (error: any) {
                                                 toast.error(error?.message || `Failed to post to ${previewContent.platform}`);
@@ -714,13 +841,13 @@ ${prompt}
                                                 setPostingPreview(false);
                                             }
                                         }}
-                                        disabled={postingPreview}
+                                        disabled={postingPreview || previewContent.is_posted}
                                         className="w-full py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 disabled:opacity-60"
                                     >
                                         <Send className="w-4 h-4" />
                                         {postingPreview
                                             ? "Posting..."
-                                            : postedContentIds.has(previewContent.id) || postedPreviewByContentId[previewContent.id]
+                                            : previewContent.is_posted || postedContentIds.has(previewContent.id) || postedPreviewByContentId[previewContent.id]
                                                 ? `Posted to ${previewContent.platform}`
                                                 : `Post to ${previewContent.platform}`}
                                     </button>
@@ -757,7 +884,12 @@ ${prompt}
                         {/* TAB SWITCHER */}
                         <div className="flex p-1 bg-slate-100 rounded-lg ml-6">
                             <button
-                                onClick={() => setActiveTab("generator")}
+                                onClick={() => {
+                                    if (activeTab !== "generator") {
+                                        startNew();
+                                    }
+                                    setActiveTab("generator");
+                                }}
                                 className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "generator"
                                     ? "bg-white text-slate-900 shadow-sm"
                                     : "text-slate-500 hover:text-slate-700"}`}
@@ -877,6 +1009,38 @@ ${prompt}
                                                     <button key={len} onClick={() => setLength(len)} className={`py-2 rounded-lg text-xs font-bold border transition-colors ${length === len ? 'bg-violet-50 text-violet-600 border-violet-200' : 'bg-white text-slate-500 border-slate-200'}`}>{len}</button>
                                                 ))}
                                             </div>
+
+                                            {!selectedModel.toLowerCase().includes("nano") && (
+                                                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={generateWithImage}
+                                                            onChange={(e) => setGenerateWithImage(e.target.checked)}
+                                                            className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                                                        />
+                                                        Generate with image
+                                                    </label>
+                                                    {generateWithImage && (
+                                                        <div className="flex items-center gap-3">
+                                                            <input
+                                                                type="color"
+                                                                value={normalizeHexColor(brandColors)}
+                                                                onChange={(e) => setBrandColors(e.target.value)}
+                                                                className="h-10 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white p-1"
+                                                                title="Pick brand color"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={normalizeHexColor(brandColors)}
+                                                                onChange={(e) => setBrandColors(e.target.value)}
+                                                                placeholder="#7c3aed"
+                                                                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-violet-500 outline-none"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     </section>
 
@@ -916,7 +1080,8 @@ ${prompt}
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={handleSave}
-                                                    className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-50 shadow-sm flex items-center gap-2"
+                                                    disabled={currentResponses.some((response, idx) => isResponsePosted(response, idx))}
+                                                    className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-50"
                                                 >
                                                     <Sparkles className="w-3 h-3 text-amber-400" /> Save All
                                                 </button>
@@ -951,6 +1116,10 @@ ${prompt}
 
                                                         <button
                                                             onClick={async () => {
+                                                                if (isResponsePosted(response, idx)) {
+                                                                    toast.info("This content is already posted and is view-only.");
+                                                                    return;
+                                                                }
                                                                 try {
                                                                     setPostingIndex(idx);
                                                                     let contentIdForPost = response.contentId ?? null;
@@ -960,7 +1129,9 @@ ${prompt}
                                                                     const publishResult = await handlePost(
                                                                         response.platform,
                                                                         response.result,
-                                                                        response.outputType === "image" ? response.result : undefined,
+                                                                        response.outputType === "image"
+                                                                            ? response.result
+                                                                            : response.imageUrl || undefined,
                                                                         contentIdForPost,
                                                                     );
                                                                     if (publishResult?.published) {
@@ -968,13 +1139,10 @@ ${prompt}
                                                                             ...prev,
                                                                             [idx]: publishResult.target_name || response.platform,
                                                                         }));
-                                                                        if (contentIdForPost) {
-                                                                            setPostedContentIds((prev) => {
-                                                                                const next = new Set(prev);
-                                                                                next.add(contentIdForPost!);
-                                                                                return next;
-                                                                            });
-                                                                        }
+                                                                        markContentPostedLocally(
+                                                                            contentIdForPost,
+                                                                            publishResult.target_name || response.platform,
+                                                                        );
                                                                     }
                                                                 } catch (error: any) {
                                                                     toast.error(error?.message || `Failed to post to ${response.platform}`);
@@ -982,18 +1150,22 @@ ${prompt}
                                                                     setPostingIndex(null);
                                                                 }
                                                             }}
-                                                            disabled={postingIndex === idx}
+                                                            disabled={postingIndex === idx || isResponsePosted(response, idx)}
                                                             className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md shadow-emerald-200 transition-all disabled:opacity-50"
                                                         >
                                                             <Send className="w-3 h-3" />
                                                             {postingIndex === idx
                                                                 ? "Posting..."
-                                                                : postedIndices[idx] || (response.contentId ? postedContentIds.has(response.contentId) : false)
+                                                                : isResponsePosted(response, idx)
                                                                     ? `Posted to ${response.platform}`
                                                                     : "Post"}
                                                         </button>
 
-                                                        <button onClick={async () => await handleSaveSingle(response, idx)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md shadow-indigo-200 transition-all">
+                                                        <button
+                                                            onClick={async () => await handleSaveSingle(response, idx)}
+                                                            disabled={isResponsePosted(response, idx)}
+                                                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md shadow-indigo-200 transition-all disabled:opacity-50"
+                                                        >
                                                             <Save className="w-3 h-3" />
                                                             {isEditMode ? "Update" : "Save"}
                                                         </button>
@@ -1013,7 +1185,32 @@ ${prompt}
                                                             className="w-full rounded-xl border border-slate-200"
                                                         />
                                                     ) : (
-                                                        <TypewriterEffect text={response.result} className="text-slate-700" />
+                                                        <div className="space-y-2">
+                                                            {response.imageUrl && (
+                                                                <img
+                                                                    src={response.imageUrl}
+                                                                    alt={response.title}
+                                                                    className="w-full rounded-xl border border-slate-200 mb-3"
+                                                                />
+                                                            )}
+                                                            {!isResponsePosted(response, idx) && (
+                                                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                                    Edit before posting
+                                                                </p>
+                                                            )}
+                                                            <textarea
+                                                                value={response.result}
+                                                                onChange={(e) =>
+                                                                    setCurrentResponses((prev) =>
+                                                                        prev.map((item, itemIdx) =>
+                                                                            itemIdx === idx ? { ...item, result: e.target.value } : item
+                                                                        )
+                                                                    )
+                                                                }
+                                                                disabled={isResponsePosted(response, idx)}
+                                                                className="w-full min-h-[240px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 leading-relaxed resize-y outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
+                                                            />
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -1090,17 +1287,21 @@ ${prompt}
                                                 <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent"></div>
                                             </div>
                                             <div className="flex items-center gap-2 pt-4 border-t border-slate-100 mt-auto">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        loadFromHistory(item);
-                                                        setActiveTab("generator");
-                                                    }}
-                                                    className="flex-1 text-xs font-bold text-slate-600 hover:text-violet-600 transition-colors flex items-center justify-center gap-1"
-                                                >
-                                                    <PenTool className="w-3 h-3" /> Edit
-                                                </button>
-                                                <div className="w-px h-4 bg-slate-200"></div>
+                                                {!item.is_posted && (
+                                                    <>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                loadFromHistory(item);
+                                                                setActiveTab("generator");
+                                                            }}
+                                                            className="flex-1 text-xs font-bold text-slate-600 hover:text-violet-600 transition-colors flex items-center justify-center gap-1"
+                                                        >
+                                                            <PenTool className="w-3 h-3" /> Edit
+                                                        </button>
+                                                        <div className="w-px h-4 bg-slate-200"></div>
+                                                    </>
+                                                )}
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -1110,6 +1311,14 @@ ${prompt}
                                                 >
                                                     View <ArrowRight className="w-3 h-3" />
                                                 </button>
+                                                {item.is_posted && (
+                                                    <>
+                                                        <div className="w-px h-4 bg-slate-200"></div>
+                                                        <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                            Posted
+                                                        </span>
+                                                    </>
+                                                )}
                                                 <div className="w-px h-4 bg-slate-200"></div>
                                                 <button
                                                     onClick={async (e) => {
