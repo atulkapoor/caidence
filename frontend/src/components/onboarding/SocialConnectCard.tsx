@@ -20,12 +20,20 @@ interface SocialConnectCardProps {
     connection: SocialConnection | null;
     onStatusChange: () => void;
     showReconnect?: boolean;
+    buttonSize?: "compact" | "default";
 }
 
-export function SocialConnectCard({ platform, connection, onStatusChange, showReconnect = true }: SocialConnectCardProps) {
+export function SocialConnectCard({
+    platform,
+    connection,
+    onStatusChange,
+    showReconnect = true,
+    buttonSize = "default",
+}: SocialConnectCardProps) {
     const [loading, setLoading] = useState(false);
     const meta = PLATFORM_META[platform] || { label: platform, color: "text-slate-600", bgColor: "bg-slate-50" };
     const isConnected = connection?.is_active ?? false;
+    const compact = buttonSize === "compact";
 
     const handleConnect = async () => {
         setLoading(true);
@@ -62,18 +70,72 @@ export function SocialConnectCard({ platform, connection, onStatusChange, showRe
         }
     };
 
+    if (!compact) {
+        return (
+            <div className={cn(
+                "rounded-2xl border p-5 flex items-center justify-between transition-all",
+                isConnected
+                    ? "border-emerald-200 bg-emerald-50/30"
+                    : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+            )}>
+                <div className="flex items-center gap-4 min-w-0 flex-1 pr-3">
+                    <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center font-bold text-lg", meta.bgColor, meta.color)}>
+                        {meta.label.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                        <h3 className="font-bold text-slate-900">{meta.label}</h3>
+                        <p className="text-sm text-slate-500 font-medium truncate">
+                            {isConnected ? connection?.platform_username || "Connected" : "Not connected"}
+                        </p>
+                    </div>
+                </div>
+                {!isConnected ? (
+                    <button
+                        onClick={handleConnect}
+                        disabled={loading}
+                        className="px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-slate-900 text-white hover:bg-slate-800 whitespace-nowrap shrink-0"
+                    >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink size={14} />}
+                        Connect
+                    </button>
+                ) : (
+                    <div className="flex items-center gap-2 shrink-0">
+                        {showReconnect && (
+                            <button
+                                onClick={handleReconnect}
+                                disabled={loading}
+                                className="px-3 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+                            >
+                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw size={14} />}
+                                Reconnect
+                            </button>
+                        )}
+                        <button
+                            onClick={handleDisconnect}
+                            disabled={loading}
+                            className="px-3 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"
+                        >
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check size={14} className="text-emerald-500" />}
+                            Disconnect
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div className={cn(
-            "rounded-2xl border p-5 flex items-center justify-between transition-all",
+            "rounded-2xl border p-5 min-h-[150px] flex flex-col justify-between gap-4 transition-all",
             isConnected
                 ? "border-emerald-200 bg-emerald-50/30"
                 : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
         )}>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 min-w-0 w-full">
                 <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center font-bold text-lg", meta.bgColor, meta.color)}>
                     {meta.label.charAt(0)}
                 </div>
-                <div>
+                <div className="min-w-0">
                     <h3 className="font-bold text-slate-900">{meta.label}</h3>
                     <p className="text-sm text-slate-500 font-medium">
                         {isConnected
@@ -86,30 +148,30 @@ export function SocialConnectCard({ platform, connection, onStatusChange, showRe
                 <button
                     onClick={handleConnect}
                     disabled={loading}
-                    className="px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-slate-900 text-white hover:bg-slate-800"
+                    className="w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 bg-slate-900 text-white hover:bg-slate-800 whitespace-nowrap"
                 >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink size={14} />}
+                    {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink size={12} />}
                     Connect
                 </button>
             ) : (
-                <div className="flex items-center gap-2">
+                <div className="w-full flex items-center gap-2">
                     {showReconnect && (
                         <button
                             onClick={handleReconnect}
                             disabled={loading}
-                            className="px-3 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                            className="flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 whitespace-nowrap"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw size={14} />}
+                            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw size={12} />}
                             Reconnect
                         </button>
                     )}
                     <button
                         onClick={handleDisconnect}
                         disabled={loading}
-                        className="px-3 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        className="flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"
                     >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check size={14} className="text-emerald-500" />}
-                        Connected
+                        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check size={12} className="text-emerald-500" />}
+                        Disconnect
                     </button>
                 </div>
             )}
