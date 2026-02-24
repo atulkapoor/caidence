@@ -4,7 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
 import { toast } from "sonner";
 import { generateContent, generateDesign, fetchContentGenerations, ContentGeneration, saveContent, deleteContent } from "@/lib/api";
-import { getConnectionStatus, publishToLinkedIn } from "@/lib/api/social";
+import { getConnectionStatus, publishSocialPost, type PublishPostResponse } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
@@ -16,9 +16,18 @@ import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 
 function ContentStudioContent() {
+    type GeneratedResponse = {
+        contentId?: number | null,
+        platform: string,
+        result: string,
+        title: string,
+        outputType: "text" | "image"
+    };
+
     // Form State
     const [title, setTitle] = useState("");
     const [campaignId, setCampaignId] = useState<number | null>(null);
+    const [pendingCampaignTitle, setPendingCampaignTitle] = useState<string | null>(null);
     const [availableCampaigns, setAvailableCampaigns] = useState<Campaign[]>([]);
     const [contentType, setContentType] = useState("Blog Post");
     const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["LinkedIn"]);
@@ -34,11 +43,12 @@ function ContentStudioContent() {
     const [isEditId, setIsEditId] = useState<number | null>(null);
 
     const [recentCreations, setRecentCreations] = useState<ContentGeneration[]>([]);
-    const [currentResponses, setCurrentResponses] = useState<{ platform: string, result: string, title: string, outputType: "text" | "image" }[]>([]);
+    const [currentResponses, setCurrentResponses] = useState<GeneratedResponse[]>([]);
     const [postingPreview, setPostingPreview] = useState(false);
     const [postingIndex, setPostingIndex] = useState<number | null>(null);
-    const [previewPosted, setPreviewPosted] = useState(false);
-    const [postedIndices, setPostedIndices] = useState<Set<number>>(new Set());
+    const [postedPreviewByContentId, setPostedPreviewByContentId] = useState<Record<number, string>>({});
+    const [postedIndices, setPostedIndices] = useState<Record<number, string>>({});
+    const [postedContentIds, setPostedContentIds] = useState<Set<number>>(new Set());
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
@@ -58,6 +68,83 @@ function ContentStudioContent() {
 
     const contentTypes = ["Post", "Article", "Thread", "Caption", "Newsletter", "Ad Copy"];
     const experts = ["General Marketing", "SEO Specialist", "Copywriter", "Technical Writer", "Creative Storyteller", "Viral Tweeter"];
+    const knownPlatforms = ["LinkedIn", "Twitter", "Blog", "Email", "Facebook", "Instagram"];
+
+    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const stripPlatformSuffixes = (rawTitle: string) => {
+        let normalized = (rawTitle || "").trim();
+        let changed = true;
+
+        while (changed) {
+            changed = false;
+            for (const platform of knownPlatforms) {
+                const suffixRegex = new RegExp(`\\s*\\(${escapeRegExp(platform)}\\)\\s*$`, "i");
+                if (suffixRegex.test(normalized)) {
+                    normalized = normalized.replace(suffixRegex, "").trim();
+                    changed = true;
+                }
+            }
+        }
+
+        return normalized;
+    };
+
+    const withPlatformSuffix = (rawTitle: string, platform: string) => {
+        const baseTitle = stripPlatformSuffixes(rawTitle);
+        return `${baseTitle} (${platform})`;
+    };
+
+    const parseSavedPrompt = (rawPrompt: string) => {
+        const source = (rawPrompt || "").trim();
+        if (!source) {
+            return {
+                parsed: false,
+                contentType: "",
+                campaignTitle: null as string | null,
+                keywords: "",
+                writingStyle: "",
+                webSearch: false,
+                brief: "",
+            };
+        }
+
+        const contextMatch = source.match(/^Context:\s*Creating\s+(.+)$/im);
+        const campaignMatch = source.match(/^Campaign:\s*(.+)$/im);
+        const keywordsMatch = source.match(/^Keywords:\s*(.+)$/im);
+        const writingStyleMatch = source.match(/^Writing Style:\s*(.+)$/im);
+        const webSearchMatch = source.match(/^Web Search:\s*(.+)$/im);
+        const briefMatch = source.match(/Content Brief:\s*([\s\S]*)$/im);
+
+        const parsedContentType = (contextMatch?.[1] || "").replace(/\s+for\s+.+$/i, "").trim();
+        const parsedCampaignTitleRaw = (campaignMatch?.[1] || "").trim();
+        const parsedCampaignTitle = parsedCampaignTitleRaw && parsedCampaignTitleRaw.toLowerCase() !== "none"
+            ? parsedCampaignTitleRaw
+            : null;
+        const parsedKeywordsRaw = (keywordsMatch?.[1] || "").trim();
+        const parsedKeywords = parsedKeywordsRaw.toLowerCase() === "none" ? "" : parsedKeywordsRaw;
+        const parsedWritingStyle = (writingStyleMatch?.[1] || "").trim();
+        const parsedWebSearch = ((webSearchMatch?.[1] || "").trim().toLowerCase() === "enabled");
+        const parsedBrief = (briefMatch?.[1] || "").trim();
+
+        const parsed =
+            Boolean(contextMatch) ||
+            Boolean(campaignMatch) ||
+            Boolean(keywordsMatch) ||
+            Boolean(writingStyleMatch) ||
+            Boolean(webSearchMatch) ||
+            Boolean(briefMatch);
+
+        return {
+            parsed,
+            contentType: parsedContentType,
+            campaignTitle: parsedCampaignTitle,
+            keywords: parsedKeywords,
+            writingStyle: parsedWritingStyle,
+            webSearch: parsedWebSearch,
+            brief: parsedBrief,
+        };
+    };
 
 
     // Load history and campaigns on mount
@@ -74,8 +161,17 @@ function ContentStudioContent() {
     }, []);
 
     useEffect(() => {
-        setPreviewPosted(false);
-    }, [previewContent?.id]);
+        if (!pendingCampaignTitle || campaignId !== null || availableCampaigns.length === 0) {
+            return;
+        }
+        const matchedCampaign = availableCampaigns.find(
+            (campaign) => campaign.title.trim().toLowerCase() === pendingCampaignTitle.trim().toLowerCase()
+        );
+        if (matchedCampaign) {
+            setCampaignId(matchedCampaign.id);
+        }
+        setPendingCampaignTitle(null);
+    }, [availableCampaigns, pendingCampaignTitle, campaignId]);
 
     const loadForEdit = async (id: number) => {
         try {
@@ -102,6 +198,8 @@ function ContentStudioContent() {
         try {
             const data = await fetchContentGenerations();
             setRecentCreations(data);
+            const persistedPostedIds = data.filter((item) => item.is_posted).map((item) => item.id);
+            setPostedContentIds(new Set(persistedPostedIds));
         } catch (error) {
             console.error("Failed to load history", error);
         }
@@ -133,7 +231,7 @@ function ContentStudioContent() {
             const { getAuthHeaders } = await import("@/lib/api");
             // We can reuse the agent endpoint or a new one. Agent endpoint exists: /api/v1/agent/enhance_description
             const headers = await getAuthHeaders();
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/agent/enhance_description`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/agent/enhance_description`, {
                 method: "POST",
                 headers: { ...headers, "Content-Type": "application/json" },
                 body: JSON.stringify({ text: prompt })
@@ -157,10 +255,13 @@ function ContentStudioContent() {
         }
         setIsGenerating(true);
         setCurrentResponses([]);
+        setPostedPreviewByContentId({});
+        setPostedIndices({});
 
         try {
             const isImageMode = selectedModel.toLowerCase().includes("nano");
             for (const platform of selectedPlatforms) {
+                const platformTitle = withPlatformSuffix(title, platform);
                 // Construct customized prompt for each platform
                 const selectedCampaign = availableCampaigns.find(c => c.id === campaignId);
                 const richPrompt = `
@@ -176,7 +277,7 @@ ${prompt}
 
                 if (isImageMode) {
                     const result = await generateDesign({
-                        title: `${title} (${platform})`,
+                        title: platformTitle,
                         style: "Minimalist",
                         aspect_ratio: "1:1",
                         prompt: richPrompt,
@@ -184,14 +285,15 @@ ${prompt}
                     });
 
                     setCurrentResponses(prev => [...prev, {
+                        contentId: null,
                         platform: platform,
                         result: result.image_url || "",
-                        title: result.title,
+                        title: withPlatformSuffix(result.title || platformTitle, platform),
                         outputType: "image",
                     }]);
                 } else {
                     const result = await generateContent({
-                        title: `${title} (${platform})`,
+                        title: platformTitle,
                         platform: platform,
                         content_type: contentType,
                         prompt: richPrompt,
@@ -199,9 +301,10 @@ ${prompt}
                     });
 
                     setCurrentResponses(prev => [...prev, {
+                        contentId: null,
                         platform: platform,
                         result: result.result || "",
-                        title: result.title,
+                        title: withPlatformSuffix(result.title || platformTitle, platform),
                         outputType: "text",
                     }]);
                 }
@@ -217,6 +320,79 @@ ${prompt}
         }
     };
 
+    const buildRichPrompt = () => {
+        const selectedCampaign = availableCampaigns.find(
+            c => c.id === campaignId
+        );
+
+        return `
+Context: Creating ${contentType}
+Campaign: ${selectedCampaign?.title || "None"}
+Keywords: ${keywords || "None"}
+Writing Style: ${writingExpert}
+Web Search: ${webSearch ? "Enabled" : "Disabled"}
+
+Content Brief:
+${prompt}
+        `.trim();
+    };
+
+    const handleSaveResponse = async (response: GeneratedResponse) => {
+        if (response.outputType === "image") {
+            throw new Error("Image output can't be saved in Content Library. Save it from Design Studio.");
+        }
+
+        return await saveContent({
+            id: response.contentId ?? (isEditMode && currentResponses.length === 1 ? isEditId : null),
+            title: withPlatformSuffix(response.title, response.platform),
+            platform: response.platform,
+            content_type: contentType,
+            prompt: buildRichPrompt(),
+            result: response.result,
+        });
+    };
+
+    const ensureContentIdForPosting = async (
+        response: GeneratedResponse,
+        idx: number,
+    ): Promise<number | null> => {
+        if (response.contentId) {
+            return response.contentId;
+        }
+        if (response.outputType === "image") {
+            return null;
+        }
+
+        const saved = await handleSaveResponse(response);
+        const savedId = saved?.id ?? null;
+        setCurrentResponses((prev) =>
+            prev.map((item, itemIdx) =>
+                itemIdx === idx
+                    ? {
+                        ...item,
+                        contentId: saved.id,
+                        title: saved.title,
+                        platform: saved.platform,
+                        result: saved.result || item.result,
+                    }
+                    : item
+            )
+        );
+        if (savedId && currentResponses.length === 1) {
+            setIsEditMode(true);
+            setIsEditId(savedId);
+        }
+        if (savedId) {
+            setPostedContentIds((prev) => {
+                const next = new Set(prev);
+                next.add(savedId);
+                return next;
+            });
+        }
+        await loadHistory();
+        return savedId;
+    };
+
     const handleSave = async () => {
         if (!title || currentResponses.length === 0) {
             toast.error("Nothing to save");
@@ -229,65 +405,185 @@ ${prompt}
         }
 
         const toastId = toast.loading(isEditMode ? "Updating content..." : "Saving content...");
-
         try {
-            const selectedCampaign = availableCampaigns.find(
-                c => c.id === campaignId
-            );
+            const updatedResponses = [...currentResponses];
+            let savedCount = 0;
+            let firstError: string | null = null;
+            const newlyPostedContentIds: number[] = [];
 
-            const richPrompt = `
-Context: Creating ${contentType}
-Campaign: ${selectedCampaign?.title || "None"}
-Keywords: ${keywords || "None"}
-Writing Style: ${writingExpert}
-Web Search: ${webSearch ? "Enabled" : "Disabled"}
+            for (let idx = 0; idx < currentResponses.length; idx++) {
+                try {
+                    const saved = await handleSaveResponse(currentResponses[idx]);
+                    updatedResponses[idx] = {
+                        ...updatedResponses[idx],
+                        contentId: saved.id,
+                        title: saved.title,
+                        platform: saved.platform,
+                        result: saved.result || updatedResponses[idx].result,
+                    };
+                    if (postedIndices[idx] && saved?.id) {
+                        newlyPostedContentIds.push(saved.id);
+                    }
+                    savedCount += 1;
+                } catch (err: any) {
+                    if (!firstError) {
+                        firstError = err?.message || "Failed to save one of the responses.";
+                    }
+                }
+            }
 
-Content Brief:
-${prompt}
-        `.trim();
+            if (savedCount === 0) {
+                throw new Error(firstError || "Failed to save content");
+            }
 
-            const response = currentResponses[0]; // 🔥 SINGLE SOURCE OF TRUTH
-
-            const saved = await saveContent({
-                id: isEditMode ? isEditId : null, // 👈 THIS IS CRITICAL
-                title: response.title,
-                platform: response.platform,
-                content_type: contentType,
-                prompt: richPrompt,
-                result: response.result,
-            });
-
-            if (!isEditMode && saved?.id) {
+            setCurrentResponses(updatedResponses);
+            if (updatedResponses.length === 1 && updatedResponses[0].contentId) {
                 setIsEditMode(true);
-                setIsEditId(saved.id);
+                setIsEditId(updatedResponses[0].contentId ?? null);
+            }
+            if (newlyPostedContentIds.length > 0) {
+                setPostedContentIds((prev) => {
+                    const next = new Set(prev);
+                    newlyPostedContentIds.forEach((id) => next.add(id));
+                    return next;
+                });
             }
 
             await loadHistory();
-            toast.success(isEditMode ? "Content updated!" : "Content saved!", { id: toastId });
-
+            if (savedCount === currentResponses.length) {
+                toast.success(isEditMode ? "Content updated!" : "Content saved for selected platforms!", { id: toastId });
+            } else {
+                toast.error(`Saved ${savedCount}/${currentResponses.length}. ${firstError || ""}`.trim(), { id: toastId });
+            }
         } catch (err: any) {
             console.error(err);
-            toast.error("Failed to save content", { id: toastId });
+            toast.error(err?.message || "Failed to save content", { id: toastId });
+        }
+    };
+
+    const handlePost = async (
+        platform: string,
+        text: string,
+        imageUrl?: string,
+        contentId?: number | null,
+    ): Promise<PublishPostResponse | null> => {
+        if (!text?.trim()) {
+            toast.error("Nothing to post");
+            return null;
+        }
+
+        const platformKey = platform.toLowerCase();
+        if (!["linkedin", "facebook", "instagram"].includes(platformKey)) {
+            toast.error(`Direct publishing currently supports LinkedIn, Facebook, and Instagram only. "${platform}" is not supported yet.`);
+            return null;
+        }
+
+        if (imageUrl && platformKey !== "instagram") {
+            toast.error(`${platform} publishing currently supports text-only posts here`);
+            return null;
+        }
+
+        if (platformKey === "instagram" && !imageUrl) {
+            toast.error("Instagram posting requires an image output (public URL)");
+            return null;
+        }
+        if (platformKey === "instagram" && imageUrl && !/^https?:\/\//i.test(imageUrl)) {
+            toast.error("Instagram needs a public image URL. Save image to a public URL first.");
+            return null;
+        }
+
+        const status = await getConnectionStatus(platformKey);
+        if (!status.connected) {
+            toast.error(`Connect ${platform} in Onboarding or Settings before posting`);
+            return null;
+        }
+
+        const toastId = toast.loading(`Posting to ${platform}...`);
+        try {
+            const result = await publishSocialPost(platformKey, text, imageUrl, contentId ?? undefined);
+            if (!result.published) {
+                throw new Error(`Unexpected ${platform} publish response`);
+            }
+            toast.success(`Posted to ${result.target_name || platform}`, { id: toastId });
+            return result;
+        } catch (error: any) {
+            toast.error(error?.message || `Failed to post to ${platform}`, { id: toastId });
+            return null;
+        }
+    };
+
+    const handleSaveSingle = async (response: GeneratedResponse, idx: number) => {
+        const toastId = toast.loading(isEditMode ? "Updating content..." : "Saving content...");
+        try {
+            const saved = await handleSaveResponse(response);
+            setCurrentResponses((prev) =>
+                prev.map((item, itemIdx) =>
+                    itemIdx === idx
+                        ? {
+                            ...item,
+                            contentId: saved.id,
+                            title: saved.title,
+                            platform: saved.platform,
+                            result: saved.result || item.result,
+                        }
+                        : item
+                )
+            );
+            if (saved?.id && currentResponses.length === 1) {
+                setIsEditMode(true);
+                setIsEditId(saved.id);
+            }
+            if (postedIndices[idx] && saved?.id) {
+                setPostedContentIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(saved.id);
+                    return next;
+                });
+            }
+            await loadHistory();
+            toast.success(isEditMode ? "Content updated!" : "Content saved!", { id: toastId });
+        } catch (err: any) {
+            toast.error(err?.message || "Failed to save content", { id: toastId });
         }
     };
 
     const loadFromHistory = (item: ContentGeneration) => {
+        const parsedPrompt = parseSavedPrompt(item.prompt || "");
+        const matchedCampaign = parsedPrompt.campaignTitle
+            ? availableCampaigns.find((campaign) => campaign.title.trim().toLowerCase() === parsedPrompt.campaignTitle!.trim().toLowerCase())
+            : null;
+
         setIsEditMode(true);
         setIsEditId(item.id);
 
-        setTitle(item.title);
-        setPrompt(item.prompt || "");
-        setContentType(item.content_type);
+        setTitle(stripPlatformSuffixes(item.title));
+        setPrompt(parsedPrompt.parsed ? (parsedPrompt.brief || "") : (item.prompt || ""));
+        setContentType(parsedPrompt.contentType || item.content_type || "Post");
+        setKeywords(parsedPrompt.parsed ? parsedPrompt.keywords : "");
+        setWritingExpert(parsedPrompt.parsed ? (parsedPrompt.writingStyle || "General Marketing") : "General Marketing");
+        setWebSearch(parsedPrompt.parsed ? parsedPrompt.webSearch : false);
+        setCampaignId(matchedCampaign?.id ?? null);
+        setPendingCampaignTitle(matchedCampaign ? null : parsedPrompt.campaignTitle);
         setSelectedPlatforms([item.platform]);
 
         setCurrentResponses([
             {
+                contentId: item.id,
                 platform: item.platform,
                 result: item.result || "",
-                title: item.title,
+                title: withPlatformSuffix(item.title, item.platform),
                 outputType: "text",
             },
         ]);
+        if (item.is_posted) {
+            setPostedContentIds((prev) => {
+                const next = new Set(prev);
+                next.add(item.id);
+                return next;
+            });
+        }
+        setPostedPreviewByContentId({});
+        setPostedIndices({});
     };
 
     const startNew = () => {
@@ -298,6 +594,9 @@ ${prompt}
         setPrompt("");
         setCurrentResponses([]);
         setSelectedPlatforms(["LinkedIn"]);
+        setPendingCampaignTitle(null);
+        setPostedPreviewByContentId({});
+        setPostedIndices({});
     };
 
     // @ts-ignore
@@ -315,27 +614,6 @@ ${prompt}
         { id: "NanoBanana", label: "Nano Banana (Image)" },
         { id: "Gemini", label: "Gemini (Content)" },
     ];
-
-    const postToLinkedIn = async (text: string, sourcePlatform?: string) => {
-        if (!text?.trim()) {
-            toast.error("Nothing to post");
-            return;
-        }
-
-        if (sourcePlatform && sourcePlatform.toLowerCase() !== "linkedin") {
-            toast.error("LinkedIn publishing is enabled only for LinkedIn content right now");
-            return;
-        }
-
-        const status = await getConnectionStatus("linkedin");
-        if (!status.connected) {
-            toast.error("Connect LinkedIn in Onboarding/Settings before posting");
-            return;
-        }
-
-        await publishToLinkedIn({ text });
-        toast.success("Posted to LinkedIn");
-    };
 
     return (
         <DashboardLayout>
@@ -413,22 +691,38 @@ ${prompt}
                                         onClick={async () => {
                                             try {
                                                 setPostingPreview(true);
-                                                await postToLinkedIn(previewContent.result || "", previewContent.platform);
-                                                setPreviewPosted(true);
+                                                const publishResult = await handlePost(
+                                                    previewContent.platform,
+                                                    previewContent.result || "",
+                                                    undefined,
+                                                    previewContent.id,
+                                                );
+                                                if (publishResult?.published) {
+                                                    setPostedPreviewByContentId((prev) => ({
+                                                        ...prev,
+                                                        [previewContent.id]: publishResult.target_name || previewContent.platform,
+                                                    }));
+                                                    setPostedContentIds((prev) => {
+                                                        const next = new Set(prev);
+                                                        next.add(previewContent.id);
+                                                        return next;
+                                                    });
+                                                }
                                             } catch (error: any) {
-                                                toast.error(error?.message || "Failed to post to LinkedIn");
+                                                toast.error(error?.message || `Failed to post to ${previewContent.platform}`);
                                             } finally {
                                                 setPostingPreview(false);
                                             }
                                         }}
-                                        disabled={postingPreview || previewPosted}
-                                        className={`w-full py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 ${previewPosted
-                                            ? "bg-emerald-100 text-emerald-700 shadow-emerald-100 cursor-default"
-                                            : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200"
-                                            }`}
+                                        disabled={postingPreview}
+                                        className="w-full py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 disabled:opacity-60"
                                     >
                                         <Send className="w-4 h-4" />
-                                        {previewPosted ? "Posted" : postingPreview ? "Posting..." : "Post"}
+                                        {postingPreview
+                                            ? "Posting..."
+                                            : postedContentIds.has(previewContent.id) || postedPreviewByContentId[previewContent.id]
+                                                ? `Posted to ${previewContent.platform}`
+                                                : `Post to ${previewContent.platform}`}
                                     </button>
                                     <button
                                         onClick={() => {
@@ -655,36 +949,55 @@ ${prompt}
                                                             Copy
                                                         </button>
 
-                                                        <button onClick={async () => await handleSave()} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md shadow-indigo-200 transition-all">
-                                                            <Save className="w-3 h-3" />
-                                                            {isEditMode ? "Update" : "Save"}
-                                                        </button>
-
                                                         <button
                                                             onClick={async () => {
                                                                 try {
                                                                     setPostingIndex(idx);
-                                                                    await postToLinkedIn(response.result, response.platform);
-                                                                    setPostedIndices((prev) => {
-                                                                        const next = new Set(prev);
-                                                                        next.add(idx);
-                                                                        return next;
-                                                                    });
+                                                                    let contentIdForPost = response.contentId ?? null;
+                                                                    if (!contentIdForPost && response.outputType !== "image") {
+                                                                        contentIdForPost = await ensureContentIdForPosting(response, idx);
+                                                                    }
+                                                                    const publishResult = await handlePost(
+                                                                        response.platform,
+                                                                        response.result,
+                                                                        response.outputType === "image" ? response.result : undefined,
+                                                                        contentIdForPost,
+                                                                    );
+                                                                    if (publishResult?.published) {
+                                                                        setPostedIndices((prev) => ({
+                                                                            ...prev,
+                                                                            [idx]: publishResult.target_name || response.platform,
+                                                                        }));
+                                                                        if (contentIdForPost) {
+                                                                            setPostedContentIds((prev) => {
+                                                                                const next = new Set(prev);
+                                                                                next.add(contentIdForPost!);
+                                                                                return next;
+                                                                            });
+                                                                        }
+                                                                    }
                                                                 } catch (error: any) {
-                                                                    toast.error(error?.message || "Failed to post to LinkedIn");
+                                                                    toast.error(error?.message || `Failed to post to ${response.platform}`);
                                                                 } finally {
                                                                     setPostingIndex(null);
                                                                 }
                                                             }}
-                                                            disabled={postingIndex === idx || postedIndices.has(idx)}
-                                                            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-md transition-all ${postedIndices.has(idx)
-                                                                ? "bg-emerald-100 text-emerald-700 shadow-emerald-100 cursor-default"
-                                                                : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 disabled:opacity-60"
-                                                                }`}
+                                                            disabled={postingIndex === idx}
+                                                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md shadow-emerald-200 transition-all disabled:opacity-50"
                                                         >
                                                             <Send className="w-3 h-3" />
-                                                            {postedIndices.has(idx) ? "Posted" : postingIndex === idx ? "Posting" : "Post"}
+                                                            {postingIndex === idx
+                                                                ? "Posting..."
+                                                                : postedIndices[idx] || (response.contentId ? postedContentIds.has(response.contentId) : false)
+                                                                    ? `Posted to ${response.platform}`
+                                                                    : "Post"}
                                                         </button>
+
+                                                        <button onClick={async () => await handleSaveSingle(response, idx)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md shadow-indigo-200 transition-all">
+                                                            <Save className="w-3 h-3" />
+                                                            {isEditMode ? "Update" : "Save"}
+                                                        </button>
+
                                                     </div>
                                                 </div>
                                                 <div className="p-8 prose prose-slate max-w-none">

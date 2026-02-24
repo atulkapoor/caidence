@@ -1,13 +1,14 @@
-"""
-SocialAuthService — OAuth2 flows for 6 social platforms.
+"""SocialAuthService - OAuth2 flows for supported social platforms.
 
 Supports: Instagram, YouTube (Google), Facebook, LinkedIn, WhatsApp, Snapchat
 """
+
 import json
 import secrets
+import ipaddress
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional
-from urllib.parse import urlencode
+from typing import Any, Dict, Optional
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,21 +20,22 @@ from app.models.social import SocialConnection
 # OAuth configuration per platform
 PLATFORM_CONFIG: Dict[str, dict] = {
     "instagram": {
-        "auth_url": "https://api.instagram.com/oauth/authorize",
-        "token_url": "https://api.instagram.com/oauth/access_token",
-        "profile_url": "https://graph.instagram.com/me",
-        "profile_params": {"fields": "id,username"},
-        "scopes": "instagram_basic,instagram_manage_insights,instagram_content_publish",
+        # Instagram Business/Creator flow goes through Facebook OAuth.
+        "auth_url": "https://www.facebook.com/v18.0/dialog/oauth",
+        "token_url": "https://graph.facebook.com/v18.0/oauth/access_token",
+        "profile_url": "https://graph.facebook.com/me",
+        "profile_params": {"fields": "id,name"},
+        "scopes": "pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,business_management",
         "client_id_attr": "INSTAGRAM_CLIENT_ID",
         "client_secret_attr": "INSTAGRAM_CLIENT_SECRET",
-        "username_key": "username",
+        "username_key": "name",
     },
     "facebook": {
         "auth_url": "https://www.facebook.com/v18.0/dialog/oauth",
         "token_url": "https://graph.facebook.com/v18.0/oauth/access_token",
         "profile_url": "https://graph.facebook.com/me",
         "profile_params": {"fields": "id,name,email"},
-        "scopes": "pages_manage_posts,pages_read_engagement,leads_retrieval",
+        "scopes": "pages_show_list,pages_read_engagement,pages_manage_posts",
         "client_id_attr": "FACEBOOK_APP_ID",
         "client_secret_attr": "FACEBOOK_APP_SECRET",
         "username_key": "name",
@@ -91,6 +93,22 @@ class SocialAuthService:
     """Handles OAuth2 flows for social platform connections."""
 
     @staticmethod
+    def _resolve_client_id(platform: str, client_id_attr: str) -> str:
+        """Resolve OAuth client id with Instagram fallback to Facebook app id."""
+        client_id = getattr(settings, client_id_attr, "")
+        if platform == "instagram" and not client_id:
+            client_id = settings.FACEBOOK_APP_ID
+        return client_id or ""
+
+    @staticmethod
+    def _resolve_client_secret(platform: str, client_secret_attr: str) -> str:
+        """Resolve OAuth client secret with Instagram fallback to Facebook app secret."""
+        client_secret = getattr(settings, client_secret_attr, "")
+        if platform == "instagram" and not client_secret:
+            client_secret = settings.FACEBOOK_APP_SECRET
+        return client_secret or ""
+
+    @staticmethod
     def get_authorization_url(platform: str, user_id: int) -> str:
         """Build OAuth authorization URL with CSRF state parameter."""
         if platform not in PLATFORM_CONFIG:
@@ -104,11 +122,14 @@ class SocialAuthService:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        client_id = getattr(settings, config["client_id_attr"])
+        client_id = SocialAuthService._resolve_client_id(platform, config["client_id_attr"])
         if not client_id:
+            required = config["client_id_attr"]
+            if platform == "instagram":
+                required = "INSTAGRAM_CLIENT_ID (or FACEBOOK_APP_ID)"
             raise ValueError(
                 f"Missing OAuth client id for {platform}. "
-                f"Set {config['client_id_attr']} in backend .env and restart backend."
+                f"Set {required} in backend .env and restart backend."
             )
         redirect_uri = f"{settings.OAUTH_REDIRECT_BASE}/{platform}"
 
@@ -120,7 +141,6 @@ class SocialAuthService:
             "state": state,
         }
 
-        # Add platform-specific params (e.g., Google's access_type=offline)
         if "extra_auth_params" in config:
             params.update(config["extra_auth_params"])
 
@@ -134,7 +154,6 @@ class SocialAuthService:
         db: AsyncSession,
     ) -> SocialConnection:
         """Exchange authorization code for tokens, fetch profile, upsert SocialConnection."""
-        # Validate state
         state_data = _oauth_states.pop(state, None)
         if not state_data:
             raise ValueError("Invalid or expired OAuth state")
@@ -143,22 +162,27 @@ class SocialAuthService:
             raise ValueError("Platform mismatch in OAuth state")
 
         config = PLATFORM_CONFIG[platform]
-        client_id = getattr(settings, config["client_id_attr"])
-        client_secret = getattr(settings, config["client_secret_attr"])
+        client_id = SocialAuthService._resolve_client_id(platform, config["client_id_attr"])
+        client_secret = SocialAuthService._resolve_client_secret(platform, config["client_secret_attr"])
         if not client_id:
+            required = config["client_id_attr"]
+            if platform == "instagram":
+                required = "INSTAGRAM_CLIENT_ID (or FACEBOOK_APP_ID)"
             raise ValueError(
                 f"Missing OAuth client id for {platform}. "
-                f"Set {config['client_id_attr']} in backend .env and restart backend."
+                f"Set {required} in backend .env and restart backend."
             )
         if not client_secret:
+            required = config["client_secret_attr"]
+            if platform == "instagram":
+                required = "INSTAGRAM_CLIENT_SECRET (or FACEBOOK_APP_SECRET)"
             raise ValueError(
                 f"Missing OAuth client secret for {platform}. "
-                f"Set {config['client_secret_attr']} in backend .env and restart backend."
+                f"Set {required} in backend .env and restart backend."
             )
         redirect_uri = f"{settings.OAUTH_REDIRECT_BASE}/{platform}"
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # Exchange code for tokens
             token_payload = {
                 "client_id": client_id,
                 "client_secret": client_secret,
@@ -179,7 +203,6 @@ class SocialAuthService:
             if not access_token:
                 raise ValueError("No access_token in response")
 
-            # Fetch user profile from platform
             profile_params = dict(config.get("profile_params", {}))
             profile_resp = await client.get(
                 config["profile_url"],
@@ -188,11 +211,21 @@ class SocialAuthService:
             )
             profile_data = profile_resp.json() if profile_resp.status_code == 200 else {}
 
-        # Extract username from profile using the configured key path
+            facebook_pages: list[dict[str, str]] = []
+            if platform == "facebook":
+                facebook_pages = await SocialAuthService._fetch_facebook_pages(client, access_token)
+            instagram_accounts: list[dict[str, str]] = []
+            if platform == "instagram":
+                instagram_accounts = await SocialAuthService._fetch_instagram_business_accounts(client, access_token)
+                if not instagram_accounts:
+                    raise ValueError(
+                        "No Instagram Business/Creator account found on your Facebook Pages. "
+                        "Connect Instagram to a Facebook Page in Meta first."
+                    )
+
         username = _extract_nested(profile_data, config.get("username_key", "name"))
         platform_user_id = str(profile_data.get("id", ""))
 
-        # YouTube has a different profile structure
         if platform == "youtube" and "items" in profile_data:
             items = profile_data["items"]
             if items:
@@ -206,6 +239,11 @@ class SocialAuthService:
             last = profile_data.get("localizedLastName") or profile_data.get("family_name") or ""
             platform_user_id = str(profile_data.get("id") or profile_data.get("sub") or "")
             username = f"{first} {last}".strip() or profile_data.get("name") or username
+
+        if platform == "instagram":
+            selected_instagram = instagram_accounts[0]
+            platform_user_id = selected_instagram.get("instagram_business_id", "") or platform_user_id
+            username = selected_instagram.get("instagram_username", "") or username
 
         # Upsert SocialConnection
         user_id = state_data["user_id"]
@@ -229,7 +267,13 @@ class SocialAuthService:
         connection.platform_username = username or None
         connection.platform_display_name = username or None
         connection.is_active = True
-        connection.raw_profile_json = json.dumps(profile_data)
+        raw_profile_payload = {
+            "profile": profile_data,
+            "facebook_pages": facebook_pages if platform == "facebook" else [],
+            "instagram_accounts": instagram_accounts if platform == "instagram" else [],
+            "selected_instagram_account": instagram_accounts[0] if platform == "instagram" and instagram_accounts else None,
+        }
+        connection.raw_profile_json = json.dumps(raw_profile_payload)
 
         await db.commit()
         await db.refresh(connection)
@@ -316,6 +360,209 @@ class SocialAuthService:
             return connection
 
     @staticmethod
+    async def _fetch_facebook_pages(client: httpx.AsyncClient, access_token: str) -> list[dict[str, str]]:
+        """Fetch Facebook pages available for the connected user."""
+        try:
+            response = await client.get(
+                "https://graph.facebook.com/v18.0/me/accounts",
+                params={"fields": "id,name,access_token"},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if response.status_code != 200:
+                return []
+
+            payload = response.json()
+            pages: list[dict[str, str]] = []
+            for item in payload.get("data", []):
+                page_id = str(item.get("id", "")).strip()
+                name = str(item.get("name", "")).strip()
+                page_access_token = str(item.get("access_token", "")).strip()
+                if page_id and name:
+                    pages.append(
+                        {
+                            "id": page_id,
+                            "name": name,
+                            "access_token": page_access_token,
+                        }
+                    )
+            return pages
+        except Exception:
+            return []
+
+    @staticmethod
+    async def _fetch_instagram_business_accounts(
+        client: httpx.AsyncClient,
+        access_token: str,
+    ) -> list[dict[str, str]]:
+        """Fetch Instagram Business/Creator accounts connected to Facebook Pages."""
+        try:
+            response = await client.get(
+                "https://graph.facebook.com/v18.0/me/accounts",
+                params={
+                    "fields": "id,name,access_token,instagram_business_account{id,username,name},connected_instagram_account{id,username,name}"
+                },
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if response.status_code != 200:
+                return []
+
+            payload = response.json()
+            accounts: list[dict[str, str]] = []
+            for item in payload.get("data", []):
+                page_id = str(item.get("id", "")).strip()
+                page_name = str(item.get("name", "")).strip()
+                page_access_token = str(item.get("access_token", "")).strip()
+
+                ig_data = item.get("instagram_business_account") or item.get("connected_instagram_account") or {}
+                ig_id = str(ig_data.get("id", "")).strip()
+                ig_username = str(ig_data.get("username", "")).strip()
+                ig_name = str(ig_data.get("name", "")).strip()
+
+                if page_id and ig_id:
+                    accounts.append(
+                        {
+                            "page_id": page_id,
+                            "page_name": page_name,
+                            "page_access_token": page_access_token,
+                            "instagram_business_id": ig_id,
+                            "instagram_username": ig_username,
+                            "instagram_name": ig_name or ig_username,
+                        }
+                    )
+
+            return accounts
+        except Exception:
+            return []
+
+    @staticmethod
+    async def publish_facebook_post(
+        user_id: int,
+        message: str,
+        db: AsyncSession,
+    ) -> dict:
+        """Publish a post to a selected Facebook page."""
+        connection = await SocialAuthService.get_connection("facebook", user_id, db)
+        if not connection or not connection.access_token:
+            raise ValueError("Facebook is not connected for this user")
+
+        raw_payload = {}
+        if connection.raw_profile_json:
+            try:
+                raw_payload = json.loads(connection.raw_profile_json)
+            except Exception:
+                raw_payload = {}
+
+        selected_page = raw_payload.get("selected_page")
+        if not isinstance(selected_page, dict):
+            pages = raw_payload.get("facebook_pages")
+            if isinstance(pages, list) and pages:
+                selected_page = pages[0]
+
+        if not isinstance(selected_page, dict):
+            raise ValueError("No Facebook page selected. Select a page first.")
+
+        page_id = str(selected_page.get("id", "")).strip()
+        page_name = str(selected_page.get("name", "")).strip() or "Facebook Page"
+        page_access_token = str(selected_page.get("access_token", "")).strip()
+        if not page_id or not page_access_token:
+            raise ValueError("Selected Facebook page is missing id or access token")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"https://graph.facebook.com/v18.0/{page_id}/feed",
+                data={"message": message, "access_token": page_access_token},
+            )
+            if resp.status_code not in (200, 201):
+                raise ValueError(f"Facebook publish failed: {resp.text}")
+
+            data = resp.json()
+            return {
+                "platform": "facebook",
+                "status": "published",
+                "post_id": data.get("id"),
+                "target_name": page_name,
+            }
+
+    @staticmethod
+    async def publish_instagram_post(
+        user_id: int,
+        caption: str,
+        image_url: str,
+        db: AsyncSession,
+    ) -> dict:
+        """Publish an image post to selected Instagram business account."""
+        connection = await SocialAuthService.get_connection("instagram", user_id, db)
+        if not connection or not connection.access_token:
+            raise ValueError("Instagram is not connected for this user")
+
+        if not image_url or not image_url.startswith(("http://", "https://")):
+            raise ValueError("Instagram publishing requires a public image URL (http/https)")
+
+        raw_payload = {}
+        if connection.raw_profile_json:
+            try:
+                raw_payload = json.loads(connection.raw_profile_json)
+            except Exception:
+                raw_payload = {}
+
+        selected_account = raw_payload.get("selected_instagram_account")
+        if not isinstance(selected_account, dict):
+            accounts = raw_payload.get("instagram_accounts")
+            if isinstance(accounts, list) and accounts:
+                selected_account = accounts[0]
+
+        if not isinstance(selected_account, dict):
+            raise ValueError("No Instagram business account selected. Reconnect Instagram.")
+
+        ig_business_id = str(selected_account.get("instagram_business_id", "")).strip()
+        ig_name = (
+            str(selected_account.get("instagram_name", "")).strip()
+            or str(selected_account.get("instagram_username", "")).strip()
+            or "Instagram"
+        )
+        publish_token = str(selected_account.get("page_access_token", "")).strip() or connection.access_token
+
+        if not ig_business_id:
+            raise ValueError("Selected Instagram account is missing instagram_business_id")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            await _validate_instagram_media_url(client, image_url)
+
+            create_container = await client.post(
+                f"https://graph.facebook.com/v18.0/{ig_business_id}/media",
+                data={
+                    "image_url": image_url,
+                    "caption": caption or "",
+                    "access_token": publish_token,
+                },
+            )
+            if create_container.status_code not in (200, 201):
+                raise ValueError(_format_meta_graph_error("Instagram media creation failed", create_container.text))
+
+            container_data = create_container.json()
+            creation_id = str(container_data.get("id", "")).strip()
+            if not creation_id:
+                raise ValueError("Instagram media creation did not return an id")
+
+            publish_resp = await client.post(
+                f"https://graph.facebook.com/v18.0/{ig_business_id}/media_publish",
+                data={
+                    "creation_id": creation_id,
+                    "access_token": publish_token,
+                },
+            )
+            if publish_resp.status_code not in (200, 201):
+                raise ValueError(_format_meta_graph_error("Instagram publish failed", publish_resp.text))
+
+            publish_data = publish_resp.json()
+            return {
+                "platform": "instagram",
+                "status": "published",
+                "post_id": publish_data.get("id"),
+                "target_name": ig_name,
+            }
+
+    @staticmethod
     async def publish_linkedin_post(
         user_id: int,
         text: str,
@@ -397,7 +644,7 @@ class SocialAuthService:
 def _extract_nested(data: dict, key_path: str) -> Optional[str]:
     """Extract a value from nested dict using dot-notation key path."""
     keys = key_path.split(".")
-    current = data
+    current: Any = data
     for key in keys:
         if isinstance(current, dict):
             current = current.get(key)
@@ -478,9 +725,80 @@ def _safe_json(text: str | None) -> dict:
     return parsed
 
 
+def _format_meta_graph_error(prefix: str, raw_text: str) -> str:
+    """Return a compact, user-actionable message from Meta Graph error payload."""
+    try:
+        payload = json.loads(raw_text or "{}")
+    except Exception:
+        return f"{prefix}: {raw_text}"
+
+    if not isinstance(payload, dict):
+        return f"{prefix}: {raw_text}"
+
+    err = payload.get("error")
+    if not isinstance(err, dict):
+        return f"{prefix}: {raw_text}"
+
+    message = str(err.get("message") or "").strip()
+    code = err.get("code")
+    subcode = err.get("error_subcode")
+    user_title = str(err.get("error_user_title") or "").strip()
+    user_msg = str(err.get("error_user_msg") or "").strip()
+
+    if code == 25 and subcode == 2207050:
+        return (
+            "Instagram account is restricted for API publishing. "
+            "Open Instagram Account Status, remove/appeal restrictions, "
+            "then reconnect Instagram."
+        )
+    if code == 9004 and subcode == 2207052:
+        return (
+            "Instagram could not download your media URL. Use a direct, public image/video URL "
+            "(not localhost/private/auth-required page, no HTML redirect/login)."
+        )
+
+    detail_parts = [part for part in [user_title, user_msg, message] if part]
+    detail = " | ".join(detail_parts) if detail_parts else raw_text
+    if code is not None or subcode is not None:
+        detail = f"{detail} (code={code}, subcode={subcode})"
+    return f"{prefix}: {detail}"
+
+
 def _is_expired(expires_at: datetime) -> bool:
     """Compare expiry safely across naive/aware datetime values."""
     now_utc = datetime.now(timezone.utc)
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     return expires_at <= now_utc
+
+
+async def _validate_instagram_media_url(client: httpx.AsyncClient, media_url: str) -> None:
+    """Validate media URL is remotely reachable by Meta and points to image/video content."""
+    parsed = urlparse(media_url)
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise ValueError("Instagram media URL is missing a valid hostname")
+    if host in {"localhost", "127.0.0.1", "0.0.0.0"} or host.endswith(".local"):
+        raise ValueError("Instagram cannot fetch localhost/private URLs. Use a public URL.")
+
+    ip = None
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip and (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast):
+        raise ValueError("Instagram cannot fetch private IP URLs. Use a public URL.")
+
+    try:
+        resp = await client.get(media_url, follow_redirects=True)
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"Media URL is unreachable from server: {exc}") from exc
+
+    if resp.status_code < 200 or resp.status_code >= 300:
+        raise ValueError(f"Media URL returned HTTP {resp.status_code}. Use a direct public file URL.")
+
+    content_type = (resp.headers.get("content-type") or "").lower()
+    if not (content_type.startswith("image/") or content_type.startswith("video/")):
+        raise ValueError(
+            f"Media URL content-type must be image/* or video/*, got '{content_type or 'unknown'}'."
+        )

@@ -5,7 +5,7 @@ import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { generateDesign, generateContent, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
 import { saveDesign } from "@/lib/api/design";
-import { getConnectionStatus, publishToLinkedIn } from "@/lib/api/social";
+import { getConnectionStatus, publishSocialPost, publishToLinkedIn } from "@/lib/api/social";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
@@ -178,6 +178,12 @@ function DesignStudioContent() {
         imageDataUrl?: string;
         designAssetId?: number;
     }) => {
+        const normalizedText = (text || "").trim();
+        if (!normalizedText) {
+            toast.error("Nothing to post");
+            return;
+        }
+
         const status = await getConnectionStatus("linkedin");
         if (!status.connected) {
             toast.error("Connect LinkedIn in Onboarding/Settings before posting");
@@ -185,11 +191,39 @@ function DesignStudioContent() {
         }
 
         await publishToLinkedIn({
-            text,
+            text: normalizedText,
             image_data_url: imageDataUrl,
             design_asset_id: designAssetId,
         });
         toast.success("Posted to LinkedIn");
+    };
+
+    const postImageToInstagram = async ({
+        caption,
+        imageUrl,
+    }: {
+        caption: string;
+        imageUrl: string;
+    }) => {
+        const normalizedCaption = (caption || "").trim() || "New Instagram post";
+        const normalizedImageUrl = (imageUrl || "").trim();
+        if (!normalizedImageUrl) {
+            toast.error("Instagram posting requires an image URL");
+            return;
+        }
+        if (!/^https?:\/\//i.test(normalizedImageUrl)) {
+            toast.error("Instagram needs a public image URL. Use an externally hosted image.");
+            return;
+        }
+
+        const status = await getConnectionStatus("instagram");
+        if (!status.connected) {
+            toast.error("Connect Instagram in Onboarding/Settings before posting");
+            return;
+        }
+
+        await publishSocialPost("instagram", normalizedCaption, normalizedImageUrl);
+        toast.success("Posted to Instagram");
     };
 
     return (
@@ -572,7 +606,7 @@ function DesignStudioContent() {
                                                     : "bg-emerald-600 hover:bg-emerald-700 text-white"
                                                     }`}
                                             >
-                                                {generatedTextPosted ? "Posted" : postingGeneratedText ? "Posting..." : "Post to LinkedIn"}
+                                                {generatedTextPosted ? "Posted on LinkedIn" : postingGeneratedText ? "Posting..." : "Post to LinkedIn"}
                                             </button>
                                         </div>
                                     </div>

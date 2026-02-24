@@ -33,7 +33,13 @@ export default function LoginPage() {
                 console.error("Failed to fetch user details", userErr);
             }
 
-            // Check onboarding status — redirect to onboarding if not complete
+            // If user is not approved, send to pending-approval page first.
+            if (user && !user.is_approved) {
+                router.push("/pending-approval");
+                return;
+            }
+
+            // For approved users, enforce onboarding completion before dashboard.
             try {
                 const onboarding = await getOnboardingProgress();
                 if (!onboarding.is_complete) {
@@ -41,13 +47,7 @@ export default function LoginPage() {
                     return;
                 }
             } catch {
-                // If onboarding check fails, proceed based on approval status
-            }
-
-            // If user is not approved, send to pending-approval page
-            if (user && !user.is_approved) {
-                router.push("/pending-approval");
-                return;
+                // If onboarding check fails, continue to dashboard.
             }
 
             router.push("/dashboard");
@@ -91,7 +91,7 @@ export default function LoginPage() {
                         type="password"
                         required
                         className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
-                        placeholder="••••••••"
+                        placeholder="********"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                     />

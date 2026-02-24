@@ -165,6 +165,9 @@ class ContentGenerationCreate(ContentGenerationBase):
 class ContentGeneration(ContentGenerationBase):
     id: int
     result: Optional[str] = None
+    is_posted: bool = False
+    posted_at: Optional[datetime] = None
+    posted_target_name: Optional[str] = None
     created_at: datetime
     user_id: int
 

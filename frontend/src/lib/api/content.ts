@@ -8,6 +8,9 @@ export interface ContentGeneration {
     result: string;
     created_at: string;
     prompt?: string;
+    is_posted?: boolean;
+    posted_at?: string | null;
+    posted_target_name?: string | null;
 }
 
 export interface GenerateContentRequest {
