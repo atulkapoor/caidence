@@ -1,4 +1,4 @@
-import { API_BASE_URL } from './core';
+import { API_BASE_URL, authenticatedFetch } from './core';
 
 export interface UserProfile {
     id: number;
@@ -23,7 +23,7 @@ export interface ProfileUpdateData {
 
 
 export async function getProfile(): Promise<UserProfile> {
-    const response = await fetch(`${API_BASE_URL}/profile/`);
+    const response = await authenticatedFetch(`${API_BASE_URL}/profile/`);
     if (!response.ok) {
         throw new Error('Failed to fetch profile');
     }
@@ -31,7 +31,7 @@ export async function getProfile(): Promise<UserProfile> {
 }
 
 export async function updateProfile(data: ProfileUpdateData): Promise<UserProfile> {
-    const response = await fetch(`${API_BASE_URL}/profile/`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/profile/`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',

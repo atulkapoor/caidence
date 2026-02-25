@@ -39,20 +39,6 @@ export function ProfileForm() {
                 }
             } catch (error) {
                 console.error("Failed to load profile:", error);
-                // Fallback: Try to get user info from localStorage
-                try {
-                    const userJson = localStorage.getItem("user");
-                    if (userJson) {
-                        const user = JSON.parse(userJson);
-                        setFormData(prev => ({
-                            ...prev,
-                            full_name: user.full_name || prev.full_name,
-                            email: user.email || prev.email,
-                        }));
-                    }
-                } catch (e) {
-                    console.error("Failed to load from localStorage:", e);
-                }
                 toast.error("Failed to load profile from server");
             } finally {
                 setLoading(false);

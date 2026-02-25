@@ -139,7 +139,7 @@ function DesignStudioContent() {
     const ratios = ["16:9", "1:1", "9:16", "4:3"];
     const models = [
         { id: "NanoBanana", label: "Nano Banana (Image)" },
-        { id: "Gemini", label: "Gemini (Content)" },
+        // { id: "Gemini", label: "Gemini (Content)" },
     ];
 
 
