@@ -122,12 +122,12 @@ function SettingsContent() {
                         <div className="md:col-span-1 space-y-6">
                             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm text-center">
                                 <div className="w-24 h-24 bg-indigo-100 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl font-bold text-indigo-600">
-                                    {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : profile?.email.charAt(0).toUpperCase()}
+                                    {(profile?.full_name?.charAt(0) || profile?.email?.charAt(0) || "").toUpperCase()}
                                 </div>
-                                <h3 className="font-bold text-slate-900">{profile?.full_name || "User"}</h3>
-                                <p className="text-sm text-slate-500 mb-4">{profile?.email}</p>
+                                <h3 className="font-bold text-slate-900">{profile?.full_name || ""}</h3>
+                                <p className="text-sm text-slate-500 mb-4">{profile?.email || ""}</p>
                                 <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">
-                                    {profile?.role} Plan
+                                    {profile?.role ? `${profile.role} Plan` : ""}
                                 </div>
                             </div>
                         </div>

@@ -284,7 +284,7 @@ ${prompt}
                     prompt: baseRichPrompt,
                     model: selectedModel,
                     generate_with_image: generateWithImage,
-                    brand_colors: generateWithImage ? brandColors : undefined,
+                    brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
                 });
 
                 const sharedImageUrl = baseResult.image_url || null;
@@ -300,7 +300,7 @@ ${prompt}
                         base_result: baseResult.result || "",
                         image_url: sharedImageUrl || undefined,
                         generate_with_image: false,
-                        brand_colors: generateWithImage ? brandColors : undefined,
+                        brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
                     });
 
                     setCurrentResponses(prev => [...prev, {
@@ -352,7 +352,7 @@ ${prompt}
                             prompt: richPrompt,
                             model: selectedModel,
                             generate_with_image: generateWithImage,
-                            brand_colors: generateWithImage ? brandColors : undefined,
+                            brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
                         });
 
                         setCurrentResponses(prev => [...prev, {
@@ -419,8 +419,22 @@ ${prompt}
     const isResponsePosted = (response: GeneratedResponse, idx: number) =>
         Boolean(postedIndices[idx] || (response.contentId ? postedContentIds.has(response.contentId) : false));
 
+    const toHexColorOrNull = (value?: string | null) => {
+        const cleaned = (value || "").trim().replace(/^#/, "");
+        if (/^[0-9A-Fa-f]{3}$/.test(cleaned)) {
+            return `#${cleaned.split("").map((c) => c + c).join("").toLowerCase()}`;
+        }
+        if (/^[0-9A-Fa-f]{6}$/.test(cleaned)) {
+            return `#${cleaned.toLowerCase()}`;
+        }
+        return null;
+    };
+
+    const isValidHexColor = (value?: string | null) =>
+        toHexColorOrNull(value) !== null;
+
     const normalizeHexColor = (value?: string | null) =>
-        /^#[0-9A-Fa-f]{6}$/.test((value || "").trim()) ? (value as string) : "#7c3aed";
+        toHexColorOrNull(value) || "#7c3aed";
 
     const markContentPostedLocally = (contentId: number | null | undefined, targetName?: string) => {
         if (!contentId) return;
@@ -733,7 +747,7 @@ ${prompt}
     });
 
     const models = [
-        { id: "NanoBanana", label: "Nano Banana (Image)" },
+        // { id: "NanoBanana", label: "Nano Banana (Image)" },
         { id: "Gemini", label: "Gemini (Content)" },
     ];
 
@@ -1038,10 +1052,17 @@ ${prompt}
                                                             />
                                                             <input
                                                                 type="text"
-                                                                value={normalizeHexColor(brandColors)}
+                                                                value={brandColors}
                                                                 onChange={(e) => setBrandColors(e.target.value)}
-                                                                placeholder="#7c3aed"
-                                                                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-violet-500 outline-none"
+                                                                onBlur={() => {
+                                                                    const normalized = toHexColorOrNull(brandColors);
+                                                                    if (normalized) setBrandColors(normalized);
+                                                                }}
+                                                                placeholder="#7c3aed or 7c3aed"
+                                                                className={`w-full p-3 bg-white border rounded-xl text-sm font-medium focus:ring-2 outline-none ${brandColors && !isValidHexColor(brandColors)
+                                                                    ? "border-rose-300 focus:ring-rose-400"
+                                                                    : "border-slate-200 focus:ring-violet-500"
+                                                                    }`}
                                                             />
                                                         </div>
                                                     )}
