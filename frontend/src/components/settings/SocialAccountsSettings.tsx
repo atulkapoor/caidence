@@ -64,6 +64,7 @@ export default function SocialAccountsSettings() {
                         platform={platform}
                         connection={connections.find((c) => c.platform === platform && c.is_active) ?? null}
                         onStatusChange={refresh}
+                        redirectTo="/settings?tab=social"
                     />
                 ))}
             </div>

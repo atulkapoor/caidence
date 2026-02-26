@@ -237,7 +237,7 @@ function ContentStudioContent() {
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/agent/enhance_description`, {
                 method: "POST",
                 headers: { ...headers, "Content-Type": "application/json" },
-                body: JSON.stringify({ text: prompt })
+                body: JSON.stringify({ text: prompt, model: selectedModel })
             });
 
             if (!res.ok) throw new Error("Enhancement failed");

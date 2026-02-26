@@ -45,8 +45,12 @@ export interface PublishPostResponse {
     published: boolean;
 }
 
-export async function getConnectionUrl(platform: string): Promise<{ authorization_url: string; platform: string }> {
-    const res = await authenticatedFetch(`${API_BASE_URL}/social/connect/${platform}`, { method: "POST" });
+export async function getConnectionUrl(
+    platform: string,
+    redirectTo?: string,
+): Promise<{ authorization_url: string; platform: string }> {
+    const query = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : "";
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/connect/${platform}${query}`, { method: "POST" });
     if (!res.ok) throw new Error(`Failed to get auth URL for ${platform}`);
     return res.json();
 }

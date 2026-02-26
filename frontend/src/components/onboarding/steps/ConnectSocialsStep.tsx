@@ -61,6 +61,7 @@ export function ConnectSocialsStep({ onNext, loading }: StepProps) {
                         connection={getConnection(platform)}
                         onStatusChange={fetchConnections}
                         buttonSize="compact"
+                        redirectTo="/onboarding?step=connect_socials"
                     />
                 ))}
             </div>

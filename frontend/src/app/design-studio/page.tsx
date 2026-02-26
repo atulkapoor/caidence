@@ -534,7 +534,7 @@ function DesignStudioContent() {
                                                 if (!prompt) return;
                                                 setIsEnhancing(true);
                                                 try {
-                                                    const enhanced = await enhanceDescription(prompt);
+                                                    const enhanced = await enhanceDescription(prompt, selectedModel);
                                                     setPrompt(enhanced);
                                                 } catch (e) {
                                                     console.error("Enhance failed", e);

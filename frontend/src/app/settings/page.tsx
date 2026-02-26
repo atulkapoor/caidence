@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { User, Building, MapPin, Briefcase, Save, Loader2, FileText, Globe } from "lucide-react";
 import { useEffect, useState, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getProfile, updateProfile, UserProfile } from "@/lib/api/profile";
 import SocialAccountsSettings from "@/components/settings/SocialAccountsSettings";
 import OnboardingSettings from "@/components/settings/OnboardingSettings";
@@ -11,6 +11,7 @@ import { toast } from "sonner";
 
 function SettingsContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -27,6 +28,13 @@ function SettingsContent() {
     useEffect(() => {
         loadProfile();
     }, []);
+
+    useEffect(() => {
+        const tab = (searchParams.get("tab") || "").toLowerCase();
+        if (["profile", "preferences", "social", "onboarding"].includes(tab)) {
+            setActiveTab(tab);
+        }
+    }, [searchParams]);
 
     const loadProfile = async () => {
         try {
