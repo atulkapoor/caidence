@@ -323,6 +323,32 @@ Base Post:
         text = AIService._clean_text_output(response.text or "")
         return text or f"[{selected_model_name}] No response generated."
 
+    @staticmethod
+    async def enhance_text(
+        text: str,
+        model: Optional[str] = None,
+    ) -> str:
+        selected_model, selected_model_name = AIService._get_google_model(
+            model,
+            task="content",
+        )
+        enhance_prompt = f"""
+You are an expert marketing copy editor.
+
+Rewrite the text below to be more engaging, professional, and persuasive.
+Rules:
+- Keep the original meaning and intent.
+- Keep it concise.
+- Improve clarity, grammar, and flow.
+- Return only the rewritten text.
+
+Text:
+{text}
+"""
+        response = await asyncio.to_thread(selected_model.generate_content, enhance_prompt)
+        rewritten = AIService._clean_text_output(response.text or "")
+        return rewritten or f"[{selected_model_name}] No response generated."
+
     # @staticmethod
     # async def generate_image(style: str, prompt: str, aspect_ratio: str = "1:1") -> str:
     #     """Generates an image via Stable Diffusion (AI Worker)."""
@@ -414,6 +440,7 @@ Base Post:
         - Clean layout
         - Social media ready
         - Aspect ratio: {aspect_ratio}
+        - Do not include platform words like LinkedIn, Twitter, Instagram, Facebook in on-image text unless explicitly requested.
 
         Brand Guidelines:
         - Use these brand colors: {brand_colors if brand_colors else "modern vibrant palette"}
