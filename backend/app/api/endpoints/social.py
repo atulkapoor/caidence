@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -95,6 +95,7 @@ class LinkedInPublishRequest(BaseModel):
 @router.post("/connect/{platform}")
 async def initiate_connection(
     platform: str,
+    redirect_to: str | None = Query(default=None),
     current_user: User = Depends(get_current_authenticated_user),
 ):
     """Generate OAuth authorization URL for a social platform."""
@@ -105,7 +106,7 @@ async def initiate_connection(
         )
 
     try:
-        url = SocialAuthService.get_authorization_url(platform, current_user.id)
+        url = SocialAuthService.get_authorization_url(platform, current_user.id, redirect_to=redirect_to)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"authorization_url": url, "platform": platform}
@@ -120,22 +121,23 @@ async def oauth_callback(
     error_description: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Handle OAuth callback and redirect back to onboarding."""
+    """Handle OAuth callback and redirect back to the originating page."""
     if platform not in VALID_PLATFORMS:
         raise HTTPException(status_code=400, detail=f"Unsupported platform: {platform}")
 
     if error:
         desc = (error_description or error).replace('"', "")
         return RedirectResponse(
-            f"{settings.FRONTEND_URL}/onboarding?step=connect_socials&error={platform}:{desc}"
+            f"{settings.FRONTEND_URL}/settings?tab=social&error={platform}:{desc}"
         )
 
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing OAuth callback code/state")
 
     try:
-        await SocialAuthService.handle_callback(platform, code, state, db)
-        return RedirectResponse(f"{settings.FRONTEND_URL}/onboarding?step=connect_socials&connected={platform}")
+        _, redirect_to = await SocialAuthService.handle_callback(platform, code, state, db)
+        separator = "&" if "?" in redirect_to else "?"
+        return RedirectResponse(f"{settings.FRONTEND_URL}{redirect_to}{separator}connected={platform}")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

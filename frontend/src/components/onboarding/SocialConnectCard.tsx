@@ -21,6 +21,7 @@ interface SocialConnectCardProps {
     onStatusChange: () => void;
     showReconnect?: boolean;
     buttonSize?: "compact" | "default";
+    redirectTo?: string;
 }
 
 export function SocialConnectCard({
@@ -29,25 +30,30 @@ export function SocialConnectCard({
     onStatusChange,
     showReconnect = true,
     buttonSize = "default",
+    redirectTo,
 }: SocialConnectCardProps) {
-    const [loading, setLoading] = useState(false);
+    const [loadingAction, setLoadingAction] = useState<"connect" | "reconnect" | "disconnect" | null>(null);
     const meta = PLATFORM_META[platform] || { label: platform, color: "text-slate-600", bgColor: "bg-slate-50" };
     const isConnected = connection?.is_active ?? false;
     const compact = buttonSize === "compact";
+    const isLoading = loadingAction !== null;
+    const isConnectLoading = loadingAction === "connect";
+    const isReconnectLoading = loadingAction === "reconnect";
+    const isDisconnectLoading = loadingAction === "disconnect";
 
     const handleConnect = async () => {
-        setLoading(true);
+        setLoadingAction("connect");
         try {
-            const { authorization_url } = await getConnectionUrl(platform);
+            const { authorization_url } = await getConnectionUrl(platform, redirectTo);
             window.location.href = authorization_url;
         } catch {
             toast.error(`Failed to connect ${meta.label}`);
-            setLoading(false);
+            setLoadingAction(null);
         }
     };
 
     const handleDisconnect = async () => {
-        setLoading(true);
+        setLoadingAction("disconnect");
         try {
             await disconnectPlatform(platform);
             toast.success(`Disconnected from ${meta.label}`);
@@ -55,18 +61,18 @@ export function SocialConnectCard({
         } catch {
             toast.error(`Failed to disconnect ${meta.label}`);
         } finally {
-            setLoading(false);
+            setLoadingAction(null);
         }
     };
 
     const handleReconnect = async () => {
-        setLoading(true);
+        setLoadingAction("reconnect");
         try {
-            const { authorization_url } = await getConnectionUrl(platform);
+            const { authorization_url } = await getConnectionUrl(platform, redirectTo);
             window.location.href = authorization_url;
         } catch {
             toast.error(`Failed to reconnect ${meta.label}`);
-            setLoading(false);
+            setLoadingAction(null);
         }
     };
 
@@ -92,10 +98,10 @@ export function SocialConnectCard({
                 {!isConnected ? (
                     <button
                         onClick={handleConnect}
-                        disabled={loading}
+                        disabled={isLoading}
                         className="px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-slate-900 text-white hover:bg-slate-800 whitespace-nowrap shrink-0"
                     >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink size={14} />}
+                        {isConnectLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink size={14} />}
                         Connect
                     </button>
                 ) : (
@@ -103,19 +109,19 @@ export function SocialConnectCard({
                         {showReconnect && (
                             <button
                                 onClick={handleReconnect}
-                                disabled={loading}
+                                disabled={isLoading}
                                 className="px-3 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 whitespace-nowrap"
                             >
-                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw size={14} />}
+                                {isReconnectLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw size={14} />}
                                 Reconnect
                             </button>
                         )}
                         <button
                             onClick={handleDisconnect}
-                            disabled={loading}
+                            disabled={isLoading}
                             className="px-3 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check size={14} className="text-emerald-500" />}
+                            {isDisconnectLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check size={14} className="text-emerald-500" />}
                             Disconnect
                         </button>
                     </div>
@@ -147,10 +153,10 @@ export function SocialConnectCard({
             {!isConnected ? (
                 <button
                     onClick={handleConnect}
-                    disabled={loading}
+                    disabled={isLoading}
                     className="w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 bg-slate-900 text-white hover:bg-slate-800 whitespace-nowrap"
                 >
-                    {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink size={12} />}
+                    {isConnectLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink size={12} />}
                     Connect
                 </button>
             ) : (
@@ -158,19 +164,19 @@ export function SocialConnectCard({
                     {showReconnect && (
                         <button
                             onClick={handleReconnect}
-                            disabled={loading}
+                            disabled={isLoading}
                             className="flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 whitespace-nowrap"
                         >
-                            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw size={12} />}
+                            {isReconnectLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw size={12} />}
                             Reconnect
                         </button>
                     )}
                     <button
                         onClick={handleDisconnect}
-                        disabled={loading}
+                        disabled={isLoading}
                         className="flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"
                     >
-                        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check size={12} className="text-emerald-500" />}
+                        {isDisconnectLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check size={12} className="text-emerald-500" />}
                         Disconnect
                     </button>
                 </div>

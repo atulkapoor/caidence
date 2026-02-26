@@ -9,7 +9,7 @@ import secrets
 import ipaddress
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, unquote
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -110,16 +110,18 @@ class SocialAuthService:
         return client_secret or ""
 
     @staticmethod
-    def get_authorization_url(platform: str, user_id: int) -> str:
+    def get_authorization_url(platform: str, user_id: int, redirect_to: Optional[str] = None) -> str:
         """Build OAuth authorization URL with CSRF state parameter."""
         if platform not in PLATFORM_CONFIG:
             raise ValueError(f"Unsupported platform: {platform}")
 
         config = PLATFORM_CONFIG[platform]
         state = secrets.token_urlsafe(32)
+        redirect_target = SocialAuthService._sanitize_redirect_to(redirect_to)
         _oauth_states[state] = {
             "user_id": user_id,
             "platform": platform,
+            "redirect_to": redirect_target,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -148,12 +150,26 @@ class SocialAuthService:
         return f"{config['auth_url']}?{urlencode(params)}"
 
     @staticmethod
+    def _sanitize_redirect_to(redirect_to: Optional[str]) -> str:
+        """Allow only relative frontend paths to prevent open redirects."""
+        default_path = "/settings?tab=social"
+        if not redirect_to:
+            return default_path
+
+        candidate = unquote(str(redirect_to)).strip()
+        if not candidate.startswith("/"):
+            return default_path
+        if candidate.startswith("//") or "://" in candidate:
+            return default_path
+        return candidate
+
+    @staticmethod
     async def handle_callback(
         platform: str,
         code: str,
         state: str,
         db: AsyncSession,
-    ) -> SocialConnection:
+    ) -> tuple[SocialConnection, str]:
         """Exchange authorization code for tokens, fetch profile, upsert SocialConnection."""
         state_data = _oauth_states.pop(state, None)
         if not state_data:
@@ -278,7 +294,8 @@ class SocialAuthService:
 
         await db.commit()
         await db.refresh(connection)
-        return connection
+        redirect_to = SocialAuthService._sanitize_redirect_to(state_data.get("redirect_to"))
+        return connection, redirect_to
 
     @staticmethod
     async def get_connection(platform: str, user_id: int, db: AsyncSession) -> Optional[SocialConnection]:
