@@ -11,9 +11,19 @@ import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
 // import Link from "next/link"; // Unused
 import { toast } from "sonner";
-import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send } from "lucide-react";
+import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send, Save, Copy } from "lucide-react";
 
 function DesignStudioContent() {
+    type GeneratedDesignPreview = {
+        title: string;
+        style: string;
+        aspect_ratio: string;
+        prompt: string;
+        image_url: string;
+        brand_colors?: string;
+        reference_image?: string;
+    };
+
     // @ts-ignore
     const [activeTab, setActiveTab] = useTabState("generate");
 
@@ -29,6 +39,10 @@ function DesignStudioContent() {
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [recentDesigns, setRecentDesigns] = useState<DesignAsset[]>([]);
     const [generatedContent, setGeneratedContent] = useState("");
+    const [generatedDesignPreview, setGeneratedDesignPreview] = useState<GeneratedDesignPreview | null>(null);
+    const [isSavingDesign, setIsSavingDesign] = useState(false);
+    const [editingDesignId, setEditingDesignId] = useState<number | null>(null);
+    const [postingPreviewDesign, setPostingPreviewDesign] = useState(false);
     const [postingDesign, setPostingDesign] = useState<number | null>(null);
     const [postingGeneratedText, setPostingGeneratedText] = useState(false);
     const [generatedTextPosted, setGeneratedTextPosted] = useState(false);
@@ -54,17 +68,33 @@ function DesignStudioContent() {
         if (editId) loadForEdit(parseInt(editId));
     }, []);
 
+    const loadDesignIntoGenerator = (asset: DesignAsset) => {
+        setPrompt(asset.prompt);
+        setSelectedStyle(asset.style);
+        setTitle(asset.title);
+        setAspectRatio(asset.aspect_ratio || "16:9");
+        setBrandColors(asset.brand_colors || "");
+        setReferenceImage(asset.reference_image || "");
+        setEditingDesignId(asset.id);
+        setGeneratedDesignPreview({
+            title: asset.title || "Untitled Design",
+            style: asset.style || "Minimalist",
+            aspect_ratio: asset.aspect_ratio || "16:9",
+            prompt: asset.prompt || "",
+            image_url: asset.image_url || "",
+            brand_colors: asset.brand_colors || undefined,
+            reference_image: asset.reference_image || undefined,
+        });
+        setGeneratedContent("");
+        setActiveTab("generate");
+    };
+
     const loadForEdit = async (id: number) => {
         try {
             const { fetchDesignAssetById } = await import("@/lib/api");
             const asset = await fetchDesignAssetById(id);
             if (asset) {
-                setPrompt(asset.prompt);
-                setSelectedStyle(asset.style);
-                setTitle(asset.title);
-                setAspectRatio(asset.aspect_ratio || "16:9");
-                setBrandColors(asset.brand_colors || "");
-                setActiveTab("generate");
+                loadDesignIntoGenerator(asset);
                 window.history.replaceState({}, '', '/design-studio');
                 toast.success("Design loaded for editing");
             }
@@ -112,26 +142,78 @@ function DesignStudioContent() {
                     brand_colors: brandColors,
                     reference_image: referenceImage
                 });
-                const newDesign = await saveDesign({
+                setGeneratedDesignPreview({
                     title: generated.title || title || "Untitled Design",
                     style: generated.style || selectedStyle,
                     aspect_ratio: generated.aspect_ratio || aspectRatio,
                     prompt: generated.prompt || prompt,
                     image_url: generated.image_url,
-                    model: selectedModel,
-                    brand_colors: generated.brand_colors || brandColors,
-                    reference_image: generated.reference_image || referenceImage,
+                    brand_colors: generated.brand_colors || brandColors || undefined,
+                    reference_image: generated.reference_image || referenceImage || undefined,
                 });
                 setGeneratedContent("");
-                setRecentDesigns((prev) => [newDesign, ...prev]);
-                setActiveTab("library"); // Switch immediately for better UX
-                toast.success("Design generated successfully!");
+                setActiveTab("generate");
+                toast.success(
+                    editingDesignId
+                        ? "Design regenerated. Review preview and save changes."
+                        : "Design generated. Review preview and save to library.",
+                );
             }
         } catch (error) {
             console.error("Failed to generate design", error);
             toast.error("Generation failed. Please try again.");
         } finally {
             setIsGenerating(false);
+        }
+    };
+
+    const handleSaveGeneratedDesign = async () => {
+        if (!generatedDesignPreview?.image_url) {
+            toast.error("Generate a design preview before saving.");
+            return;
+        }
+
+        const wasEditing = editingDesignId !== null;
+        setIsSavingDesign(true);
+        try {
+            const saved = await saveDesign({
+                id: editingDesignId ?? undefined,
+                title: generatedDesignPreview.title || title || "Untitled Design",
+                style: generatedDesignPreview.style || selectedStyle,
+                aspect_ratio: generatedDesignPreview.aspect_ratio || aspectRatio,
+                prompt: generatedDesignPreview.prompt || prompt,
+                image_url: generatedDesignPreview.image_url,
+                model: selectedModel,
+                brand_colors: generatedDesignPreview.brand_colors || brandColors || undefined,
+                reference_image: generatedDesignPreview.reference_image || referenceImage || undefined,
+            });
+
+            setRecentDesigns((prev) => {
+                const existingIndex = prev.findIndex((item) => item.id === saved.id);
+                if (existingIndex >= 0) {
+                    return prev.map((item) => (item.id === saved.id ? saved : item));
+                }
+                return [saved, ...prev];
+            });
+
+            setEditingDesignId(wasEditing ? saved.id : null);
+            setGeneratedDesignPreview({
+                title: saved.title || generatedDesignPreview.title,
+                style: saved.style || generatedDesignPreview.style,
+                aspect_ratio: saved.aspect_ratio || generatedDesignPreview.aspect_ratio,
+                prompt: saved.prompt || generatedDesignPreview.prompt,
+                image_url: saved.image_url || generatedDesignPreview.image_url,
+                brand_colors: saved.brand_colors || generatedDesignPreview.brand_colors,
+                reference_image: saved.reference_image || generatedDesignPreview.reference_image,
+            });
+
+            toast.success(wasEditing ? "Design updated in library." : "Design saved to library.");
+            setActiveTab("library");
+        } catch (error) {
+            console.error("Failed to save design", error);
+            toast.error("Failed to save design. Please try again.");
+        } finally {
+            setIsSavingDesign(false);
         }
     };
 
@@ -287,12 +369,7 @@ function DesignStudioContent() {
                                 <div className="mt-auto flex flex-col gap-3">
                                     <button
                                         onClick={() => {
-                                            setPrompt(previewDesign.prompt);
-                                            setSelectedStyle(previewDesign.style);
-                                            setTitle(previewDesign.title);
-                                            setAspectRatio(previewDesign.aspect_ratio || "16:9");
-                                            setBrandColors(previewDesign.brand_colors || "");
-                                            setActiveTab("generate");
+                                            loadDesignIntoGenerator(previewDesign);
                                             setPreviewDesign(null);
                                         }}
                                         className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-200 transition-all flex items-center justify-center gap-2"
@@ -389,7 +466,8 @@ function DesignStudioContent() {
 
                     {/* GENERATE TAB */}
                     {activeTab === "generate" && (
-                        <div className="max-w-3xl mx-auto space-y-8 pb-20">
+                        <div className="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-12 gap-8 pb-20">
+                            <div className="xl:col-span-6 space-y-8">
 
                             <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm space-y-8">
                                 {/* Design Name */}
@@ -572,7 +650,7 @@ function DesignStudioContent() {
                                     {isGenerating ? (
                                         <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Generating...</>
                                     ) : (
-                                        <><Wand2 className="w-5 h-5" /> Generate AI Design</>
+                                        <><Wand2 className="w-5 h-5" /> {editingDesignId ? "Regenerate Design" : "Generate AI Design"}</>
                                     )}
                                 </button>
                             </div>
@@ -613,6 +691,89 @@ function DesignStudioContent() {
                                     <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{generatedContent}</p>
                                 </div>
                             )}
+                            </div>
+
+                            <div className="xl:col-span-6">
+                                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-900 truncate">{generatedDesignPreview?.title || title || "Untitled Design"}</p>
+                                            <p className="text-xs text-slate-500 font-medium">LinkedIn</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={async () => {
+                                                    if (!generatedDesignPreview?.image_url) return;
+                                                    try {
+                                                        await navigator.clipboard.writeText(generatedDesignPreview.image_url);
+                                                        toast.success("Copied preview image URL");
+                                                    } catch {
+                                                        toast.error("Failed to copy");
+                                                    }
+                                                }}
+                                                disabled={!generatedDesignPreview?.image_url}
+                                                className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-all disabled:opacity-50"
+                                            >
+                                                <span className="inline-flex items-center gap-1"><Copy className="w-3.5 h-3.5" /> Copy</span>
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    if (!generatedDesignPreview?.image_url) return;
+                                                    try {
+                                                        setPostingPreviewDesign(true);
+                                                        await postToLinkedIn({
+                                                            text: generatedDesignPreview.title || title || "New design",
+                                                            imageDataUrl: generatedDesignPreview.image_url.startsWith("data:") ? generatedDesignPreview.image_url : undefined,
+                                                            designAssetId: editingDesignId || undefined,
+                                                        });
+                                                    } catch (error: any) {
+                                                        toast.error(error?.message || "Failed to post to LinkedIn");
+                                                    } finally {
+                                                        setPostingPreviewDesign(false);
+                                                    }
+                                                }}
+                                                disabled={postingPreviewDesign || !generatedDesignPreview?.image_url}
+                                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                                            >
+                                                <span className="inline-flex items-center gap-1"><Send className="w-3.5 h-3.5" /> {postingPreviewDesign ? "Posting..." : "Post"}</span>
+                                            </button>
+                                            <button
+                                                onClick={handleSaveGeneratedDesign}
+                                                disabled={isSavingDesign || isGenerating || !generatedDesignPreview?.image_url}
+                                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                <span className="inline-flex items-center gap-1">
+                                                    {isSavingDesign ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                                    {isSavingDesign ? "Saving..." : (editingDesignId ? "Update" : "Save")}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="relative rounded-xl border border-slate-200 bg-slate-50 min-h-[560px] flex items-center justify-center overflow-hidden">
+
+                                        {isGenerating ? (
+                                            <div className="flex flex-col items-center gap-3 text-slate-500">
+                                                <div className="w-10 h-10 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin"></div>
+                                                <p className="text-xs font-semibold uppercase tracking-wider">Generating Preview...</p>
+                                            </div>
+                                        ) : generatedDesignPreview?.image_url ? (
+                                            <img
+                                                src={generatedDesignPreview.image_url}
+                                                alt={generatedDesignPreview.title || "Generated design preview"}
+                                                className="w-full h-full object-contain"
+                                            />
+                                        ) : (
+                                            <div className="text-center p-6">
+                                                <ImageIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                                                <p className="text-sm font-medium text-slate-500">
+                                                    Generate a design to preview it here before saving.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -655,28 +816,6 @@ function DesignStudioContent() {
 
                             {/* Grid Content */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                                {/* Skeleton Loading Card */}
-                                {isGenerating && (
-                                    <div className="group flex flex-col bg-white rounded-2xl border border-rose-200 shadow-xl overflow-hidden animate-pulse">
-                                        <div className="aspect-[4/3] bg-rose-50 relative flex items-center justify-center">
-                                            <div className="flex flex-col items-center gap-3">
-                                                <div className="w-12 h-12 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin"></div>
-                                                <div className="text-sm font-bold text-rose-500 uppercase tracking-wider animate-pulse">
-                                                    Developing {selectedStyle === 'Photorealistic' ? 'Photo' : selectedStyle}...
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="p-5 flex flex-col gap-3">
-                                            <div className="h-4 bg-slate-100 rounded w-3/4"></div>
-                                            <div className="h-3 bg-slate-100 rounded w-1/2"></div>
-                                            <div className="w-full h-px bg-slate-50 my-2"></div>
-                                            <div className="flex justify-between">
-                                                <div className="h-3 bg-slate-100 rounded w-1/4"></div>
-                                                <div className="h-3 bg-slate-100 rounded w-1/4"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                                 {filteredDesigns.length > 0 ? (
                                     filteredDesigns.map((asset) => (
                                         <div key={asset.id} className="group flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
@@ -747,11 +886,7 @@ function DesignStudioContent() {
                                                 <div className="flex items-center justify-between">
                                                     <button
                                                         onClick={() => {
-                                                            setPrompt(asset.prompt);
-                                                            setSelectedStyle(asset.style);
-                                                            setTitle(asset.title);
-                                                            setAspectRatio(asset.aspect_ratio || "16:9");
-                                                            setActiveTab("generate");
+                                                            loadDesignIntoGenerator(asset);
                                                         }}
                                                         className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1"
                                                     >
