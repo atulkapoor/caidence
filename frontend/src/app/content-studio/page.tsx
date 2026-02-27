@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
 import { toast } from "sonner";
-import { generateContent, generateDesign, fetchContentGenerations, ContentGeneration, saveContent, deleteContent } from "@/lib/api";
+import { generateContent, generateDesign, fetchContentGenerations, ContentGeneration, saveContent, deleteContent, enhanceDescription } from "@/lib/api";
 import { getConnectionStatus, publishSocialPost, publishToLinkedIn, type PublishPostResponse } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useState, Suspense } from "react";
@@ -231,19 +231,8 @@ function ContentStudioContent() {
         if (!prompt) return;
         const toastId = toast.loading("Enhancing brief...");
         try {
-            const { getAuthHeaders } = await import("@/lib/api");
-            // We can reuse the agent endpoint or a new one. Agent endpoint exists: /api/v1/agent/enhance_description
-            const headers = await getAuthHeaders();
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/v1/agent/enhance_description`, {
-                method: "POST",
-                headers: { ...headers, "Content-Type": "application/json" },
-                body: JSON.stringify({ text: prompt, model: selectedModel })
-            });
-
-            if (!res.ok) throw new Error("Enhancement failed");
-
-            const data = await res.json();
-            setPrompt(data.enhanced_text);
+            const enhanced = await enhanceDescription(prompt, selectedModel);
+            setPrompt(enhanced);
             toast.success("Brief enhanced!", { id: toastId });
         } catch (error) {
             console.error(error);
