@@ -101,16 +101,16 @@ export function OnboardingWizard({ initialProgress, mode = "default", onComplete
                     profileType,
                 );
                 setProgress(updated);
+                setCurrentStepIndex(updated.current_step);
 
-                if (isLastStep) {
+                const submittedStepIsLastInUpdatedFlow = currentStepIndex >= updated.steps.length - 1;
+                if (submittedStepIsLastInUpdatedFlow) {
                     try {
                         await handleCompleteAndRedirect();
                     } catch (e) {
                         const msg = e instanceof Error ? e.message : "Cannot complete onboarding yet";
                         toast.error(msg);
                     }
-                } else {
-                    setCurrentStepIndex((prev) => prev + 1);
                 }
             } catch {
                 toast.error("Failed to save progress");
@@ -118,7 +118,7 @@ export function OnboardingWizard({ initialProgress, mode = "default", onComplete
                 setSaving(false);
             }
         },
-        [currentStepIndex, isLastStep, handleCompleteAndRedirect],
+        [currentStepIndex, handleCompleteAndRedirect],
     );
 
     const handleBack = () => {
@@ -133,7 +133,7 @@ export function OnboardingWizard({ initialProgress, mode = "default", onComplete
             try {
                 const updated = await updateOnboardingStep(currentStepIndex, {});
                 setProgress(updated);
-                setCurrentStepIndex((prev) => prev + 1);
+                setCurrentStepIndex(updated.current_step);
             } catch {
                 toast.error("Failed to skip step");
             } finally {
