@@ -26,6 +26,9 @@ function ContentStudioContent() {
         outputType: "text" | "image"
     };
 
+    // @ts-ignore
+    const [activeTab, setActiveTab] = useTabState("generator");
+
     // Form State
     const [title, setTitle] = useState("");
     const [campaignId, setCampaignId] = useState<number | null>(null);
@@ -177,13 +180,10 @@ function ContentStudioContent() {
     }, []);
 
     useEffect(() => {
-        const intervalId = window.setInterval(() => {
-            // Keep posted state in sync when scheduled posts are published by backend worker.
+        if (activeTab === "library") {
             loadHistory();
-        }, 5000);
-
-        return () => window.clearInterval(intervalId);
-    }, []);
+        }
+    }, [activeTab]);
 
     useEffect(() => {
         if (!pendingCampaignTitle || campaignId !== null || availableCampaigns.length === 0) {
@@ -830,9 +830,6 @@ ${prompt}
         setPostedPreviewByContentId({});
         setPostedIndices({});
     };
-
-    // @ts-ignore
-    const [activeTab, setActiveTab] = useTabState("generator");
 
     // Filtered Creations
     const filteredCreations = recentCreations.filter(item => {

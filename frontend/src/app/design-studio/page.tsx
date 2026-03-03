@@ -70,7 +70,6 @@ function DesignStudioContent() {
     });
 
     useEffect(() => {
-        loadDesigns();
         // Check for edit mode
         const params = new URLSearchParams(window.location.search);
         const editId = params.get('edit');
@@ -78,11 +77,10 @@ function DesignStudioContent() {
     }, []);
 
     useEffect(() => {
-        const intervalId = window.setInterval(() => {
+        if (activeTab === "library") {
             loadDesigns();
-        }, 5000);
-        return () => window.clearInterval(intervalId);
-    }, []);
+        }
+    }, [activeTab]);
 
     const loadDesignIntoGenerator = (asset: DesignAsset) => {
         setPrompt(asset.prompt);
