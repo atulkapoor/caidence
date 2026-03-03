@@ -5,10 +5,11 @@ import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { generateDesign, generateContent, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
 import { saveDesign } from "@/lib/api/design";
-import { getConnectionStatus, publishSocialPost, publishToLinkedIn } from "@/lib/api/social";
+import { getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost } from "@/lib/api/social";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
+import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalendar";
 // import Link from "next/link"; // Unused
 import { toast } from "sonner";
 import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send, Save, Copy } from "lucide-react";
@@ -47,12 +48,20 @@ function DesignStudioContent() {
     const [postingGeneratedText, setPostingGeneratedText] = useState(false);
     const [generatedTextPosted, setGeneratedTextPosted] = useState(false);
     const [postedDesignIds, setPostedDesignIds] = useState<Set<number>>(new Set());
+    const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+    const [scheduleDateTime, setScheduleDateTime] = useState("");
+    const [isScheduling, setIsScheduling] = useState(false);
+    const [scheduleDraft, setScheduleDraft] = useState<{
+        title: string;
+        imageUrl: string;
+        designAssetId?: number;
+    } | null>(null);
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState("All Types");
     const [previewDesign, setPreviewDesign] = useState<DesignAsset | null>(null);
-    useModalScroll(!!previewDesign);
+    useModalScroll(!!previewDesign || isScheduleOpen);
 
     const filteredDesigns = recentDesigns.filter(d => {
         const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase()) || d.prompt.toLowerCase().includes(searchQuery.toLowerCase());
@@ -66,6 +75,13 @@ function DesignStudioContent() {
         const params = new URLSearchParams(window.location.search);
         const editId = params.get('edit');
         if (editId) loadForEdit(parseInt(editId));
+    }, []);
+
+    useEffect(() => {
+        const intervalId = window.setInterval(() => {
+            loadDesigns();
+        }, 5000);
+        return () => window.clearInterval(intervalId);
     }, []);
 
     const loadDesignIntoGenerator = (asset: DesignAsset) => {
@@ -108,9 +124,60 @@ function DesignStudioContent() {
         try {
             const data = await fetchDesignAssets();
             setRecentDesigns(data);
-        } catch (error) {
+            const persistedPostedIds = data.filter((item) => item.is_posted).map((item) => item.id);
+            setPostedDesignIds(new Set(persistedPostedIds));
+        } catch (error: any) {
             console.error("Failed to load designs", error);
-            // toast.error("Failed to load design library"); // Optional: don't spam on load
+            toast.error(error?.message || "Failed to load design library");
+        }
+    };
+
+    const toDateTimeLocalValue = (date: Date) => {
+        const tzOffsetMs = date.getTimezoneOffset() * 60_000;
+        return new Date(date.getTime() - tzOffsetMs).toISOString().slice(0, 16);
+    };
+
+    const openDesignScheduleModal = (draft: { title: string; imageUrl: string; designAssetId?: number }) => {
+        setScheduleDraft(draft);
+        setScheduleDateTime(toDateTimeLocalValue(new Date(Date.now() + 30 * 60 * 1000)));
+        setIsScheduleOpen(true);
+    };
+
+    const handleScheduleDesign = async () => {
+        if (!scheduleDraft) return;
+        if (!scheduleDraft.designAssetId) {
+            toast.error("Save design to library before scheduling");
+            return;
+        }
+        if (!scheduleDateTime) {
+            toast.error("Select date and time");
+            return;
+        }
+
+        const status = await getConnectionStatus("linkedin");
+        if (!status.connected) {
+            toast.error("Connect LinkedIn in Onboarding/Settings before scheduling");
+            return;
+        }
+
+        setIsScheduling(true);
+        const toastId = toast.loading("Scheduling design post...");
+        try {
+            await scheduleSocialPost({
+                title: scheduleDraft.title || "New design",
+                platform: "linkedin",
+                message: scheduleDraft.title || "New design",
+                image_url: scheduleDraft.imageUrl,
+                design_asset_id: scheduleDraft.designAssetId,
+                scheduled_at: new Date(scheduleDateTime).toISOString(),
+            });
+            toast.success("Design post scheduled", { id: toastId });
+            setIsScheduleOpen(false);
+            setScheduleDraft(null);
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to schedule design post", { id: toastId });
+        } finally {
+            setIsScheduling(false);
         }
     };
 
@@ -419,7 +486,72 @@ function DesignStudioContent() {
                                                 ? "Posting..."
                                                 : "Post to LinkedIn"}
                                     </button>
+                                    <button
+                                        onClick={() =>
+                                            openDesignScheduleModal({
+                                                title: previewDesign.title || "New design",
+                                                imageUrl: previewDesign.image_url,
+                                                designAssetId: previewDesign.id || undefined,
+                                            })
+                                        }
+                                        disabled={postedDesignIds.has(previewDesign.id || 0)}
+                                        className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                                    >
+                                        <Calendar className="w-4 h-4" />
+                                        Schedule LinkedIn
+                                    </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {isScheduleOpen && scheduleDraft && (
+                    <div
+                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+                        onClick={() => {
+                            if (!isScheduling) {
+                                setIsScheduleOpen(false);
+                                setScheduleDraft(null);
+                            }
+                        }}
+                    >
+                        <div
+                            className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <h3 className="text-lg font-bold text-slate-900 mb-1">Schedule Design Post</h3>
+                            <p className="text-sm text-slate-500 mb-5">Platform: LinkedIn</p>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Date and Time</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={scheduleDateTime}
+                                        onChange={(e) => setScheduleDateTime(e.target.value)}
+                                        min={toDateTimeLocalValue(new Date())}
+                                        className="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                    />
+                                </div>
+                            </div>
+                            <div className="mt-6 flex justify-end gap-2">
+                                <button
+                                    onClick={() => {
+                                        setIsScheduleOpen(false);
+                                        setScheduleDraft(null);
+                                    }}
+                                    disabled={isScheduling}
+                                    className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-60"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleScheduleDesign}
+                                    disabled={isScheduling}
+                                    className="px-4 py-2 text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg disabled:opacity-60"
+                                >
+                                    {isScheduling ? "Scheduling..." : "Schedule Post"}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -442,6 +574,7 @@ function DesignStudioContent() {
                         <div className="flex p-1 bg-slate-100 rounded-lg ml-6">
                             <button onClick={() => setActiveTab("generate")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "generate" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Generate Designs</button>
                             <button onClick={() => setActiveTab("library")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "library" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Design Library</button>
+                            <button onClick={() => setActiveTab("calendar")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "calendar" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Design Calendar</button>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -738,6 +871,20 @@ function DesignStudioContent() {
                                                 <span className="inline-flex items-center gap-1"><Send className="w-3.5 h-3.5" /> {postingPreviewDesign ? "Posting..." : "Post"}</span>
                                             </button>
                                             <button
+                                                onClick={() => {
+                                                    if (!generatedDesignPreview?.image_url) return;
+                                                    openDesignScheduleModal({
+                                                        title: generatedDesignPreview.title || title || "New design",
+                                                        imageUrl: generatedDesignPreview.image_url,
+                                                        designAssetId: editingDesignId || undefined,
+                                                    });
+                                                }}
+                                                disabled={!generatedDesignPreview?.image_url}
+                                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                                            >
+                                                <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule</span>
+                                            </button>
+                                            <button
                                                 onClick={handleSaveGeneratedDesign}
                                                 disabled={isSavingDesign || isGenerating || !generatedDesignPreview?.image_url}
                                                 className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -967,6 +1114,16 @@ function DesignStudioContent() {
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    )}
+
+                    {activeTab === "calendar" && (
+                        <div className="max-w-7xl mx-auto h-full">
+                            <ScheduledPostsCalendar
+                                scope="design"
+                                title="Design Calendar"
+                                subtitle="Shows only scheduled posts from Design Studio, including upcoming and already posted items."
+                            />
                         </div>
                     )}
                 </div>

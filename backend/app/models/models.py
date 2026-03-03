@@ -195,6 +195,28 @@ class ContentGeneration(Base):
 
     # owner = relationship("User") # Add back_populate if needed
 
+
+class ScheduledPost(Base):
+    __tablename__ = "scheduled_posts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    content_id = Column(Integer, ForeignKey("content_generations.id"), nullable=True, index=True)
+    design_asset_id = Column(Integer, ForeignKey("design_assets.id"), nullable=True, index=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=True, index=True)
+    title = Column(String, nullable=True)
+    platform = Column(String, nullable=False, index=True)
+    message = Column(Text, nullable=False)
+    image_url = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="scheduled", index=True)
+    scheduled_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    post_id = Column(String, nullable=True)
+    target_name = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
 class DesignAsset(Base):
     __tablename__ = "design_assets"
 
@@ -206,6 +228,9 @@ class DesignAsset(Base):
     image_url = Column(Text) # Base64 is large
     brand_colors = Column(String, nullable=True) # Check if this causes migration issues
     reference_image = Column(String, nullable=True)
+    is_posted = Column(Boolean, default=False, nullable=False)
+    posted_at = Column(DateTime(timezone=True), nullable=True)
+    posted_target_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     user_id = Column(Integer, ForeignKey("users.id"))
 

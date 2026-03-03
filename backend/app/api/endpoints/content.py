@@ -189,6 +189,8 @@ async def save_content(
         return db_content
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+import asyncio
 from app.core.config import settings
 from app.core.database import engine, Base
 import app.models # Import all models to register them with Base
@@ -17,7 +18,14 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as session:
         await seed_roles(session)
 
+    from app.services.scheduled_post_runner import scheduled_post_worker
+    scheduled_post_task = asyncio.create_task(scheduled_post_worker())
+
     yield
+
+    scheduled_post_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await scheduled_post_task
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
