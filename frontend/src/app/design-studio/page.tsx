@@ -61,13 +61,21 @@ function DesignStudioContent() {
     const [searchQuery, setSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState("All Types");
     const [previewDesign, setPreviewDesign] = useState<DesignAsset | null>(null);
+    const [isLibraryLoading, setIsLibraryLoading] = useState(false);
+    const [libraryPage, setLibraryPage] = useState(1);
     useModalScroll(!!previewDesign || isScheduleOpen);
+    const LIBRARY_PAGE_SIZE = 20;
 
     const filteredDesigns = recentDesigns.filter(d => {
         const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase()) || d.prompt.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesType = typeFilter === "All Types" || d.style === typeFilter; // Assuming style maps roughly to type for now, or just filtering by style
         return matchesSearch && matchesType;
     });
+    const totalLibraryPages = Math.max(1, Math.ceil(filteredDesigns.length / LIBRARY_PAGE_SIZE));
+    const paginatedDesigns = filteredDesigns.slice(
+        (libraryPage - 1) * LIBRARY_PAGE_SIZE,
+        libraryPage * LIBRARY_PAGE_SIZE
+    );
 
     useEffect(() => {
         // Check for edit mode
@@ -81,6 +89,16 @@ function DesignStudioContent() {
             loadDesigns();
         }
     }, [activeTab]);
+
+    useEffect(() => {
+        setLibraryPage(1);
+    }, [searchQuery, typeFilter]);
+
+    useEffect(() => {
+        if (libraryPage > totalLibraryPages) {
+            setLibraryPage(totalLibraryPages);
+        }
+    }, [libraryPage, totalLibraryPages]);
 
     const loadDesignIntoGenerator = (asset: DesignAsset) => {
         setPrompt(asset.prompt);
@@ -119,6 +137,7 @@ function DesignStudioContent() {
     };
 
     const loadDesigns = async () => {
+        setIsLibraryLoading(true);
         try {
             const data = await fetchDesignAssets();
             setRecentDesigns(data);
@@ -127,6 +146,8 @@ function DesignStudioContent() {
         } catch (error: any) {
             console.error("Failed to load designs", error);
             toast.error(error?.message || "Failed to load design library");
+        } finally {
+            setIsLibraryLoading(false);
         }
     };
 
@@ -961,8 +982,13 @@ function DesignStudioContent() {
 
                             {/* Grid Content */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                                {filteredDesigns.length > 0 ? (
-                                    filteredDesigns.map((asset) => (
+                                {isLibraryLoading ? (
+                                    <div className="col-span-full py-20 text-center bg-white rounded-2xl border border-slate-200 border-dashed">
+                                        <div className="w-10 h-10 mx-auto border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin mb-4"></div>
+                                        <p className="text-slate-500 font-medium">Loading designs...</p>
+                                    </div>
+                                ) : filteredDesigns.length > 0 ? (
+                                    paginatedDesigns.map((asset) => (
                                         <div key={asset.id} className="group flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
                                             {/* Image Preview */}
                                             <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden cursor-pointer" onClick={() => setPreviewDesign(asset)}>
@@ -1112,6 +1138,32 @@ function DesignStudioContent() {
                                     </div>
                                 )}
                             </div>
+                            {!isLibraryLoading && filteredDesigns.length > 0 && (
+                                <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-4 py-3">
+                                    <p className="text-sm text-slate-500">
+                                        Showing {(libraryPage - 1) * LIBRARY_PAGE_SIZE + 1}-{Math.min(libraryPage * LIBRARY_PAGE_SIZE, filteredDesigns.length)} of {filteredDesigns.length}
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setLibraryPage((prev) => Math.max(1, prev - 1))}
+                                            disabled={libraryPage === 1}
+                                            className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                                        >
+                                            Previous
+                                        </button>
+                                        <span className="text-xs font-bold text-slate-600">
+                                            Page {libraryPage} / {totalLibraryPages}
+                                        </span>
+                                        <button
+                                            onClick={() => setLibraryPage((prev) => Math.min(totalLibraryPages, prev + 1))}
+                                            disabled={libraryPage === totalLibraryPages}
+                                            className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

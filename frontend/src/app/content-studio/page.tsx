@@ -73,7 +73,10 @@ function ContentStudioContent() {
     const [searchQuery, setSearchQuery] = useState("");
     const [filterPlatform, setFilterPlatform] = useState("All Platforms");
     const [previewContent, setPreviewContent] = useState<ContentGeneration | null>(null);
+    const [isLibraryLoading, setIsLibraryLoading] = useState(false);
+    const [libraryPage, setLibraryPage] = useState(1);
     useModalScroll(!!previewContent || isScheduleOpen);
+    const LIBRARY_PAGE_SIZE = 20;
 
     // Lists
     const platforms = [
@@ -186,6 +189,10 @@ function ContentStudioContent() {
     }, [activeTab]);
 
     useEffect(() => {
+        setLibraryPage(1);
+    }, [searchQuery, filterPlatform]);
+
+    useEffect(() => {
         if (!pendingCampaignTitle || campaignId !== null || availableCampaigns.length === 0) {
             return;
         }
@@ -219,7 +226,10 @@ function ContentStudioContent() {
         }
     };
 
-    const loadHistory = async () => {
+    const loadHistory = async (showLoader = activeTab === "library") => {
+        if (showLoader) {
+            setIsLibraryLoading(true);
+        }
         try {
             const data = await fetchContentGenerations();
             setRecentCreations((prev) => {
@@ -236,6 +246,10 @@ function ContentStudioContent() {
             setPostedContentIds(new Set(persistedPostedIds));
         } catch (error) {
             console.error("Failed to load history", error);
+        } finally {
+            if (showLoader) {
+                setIsLibraryLoading(false);
+            }
         }
     };
 
@@ -838,6 +852,17 @@ ${prompt}
         const matchesFilter = filterPlatform === "All Platforms" || item.platform === filterPlatform;
         return matchesSearch && matchesFilter;
     });
+    const totalLibraryPages = Math.max(1, Math.ceil(filteredCreations.length / LIBRARY_PAGE_SIZE));
+    const paginatedCreations = filteredCreations.slice(
+        (libraryPage - 1) * LIBRARY_PAGE_SIZE,
+        libraryPage * LIBRARY_PAGE_SIZE
+    );
+
+    useEffect(() => {
+        if (libraryPage > totalLibraryPages) {
+            setLibraryPage(totalLibraryPages);
+        }
+    }, [libraryPage, totalLibraryPages]);
 
     const models = [
         // { id: "NanoBanana", label: "Nano Banana (Image)" },
@@ -1504,7 +1529,13 @@ ${prompt}
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                    {filteredCreations.map((item) => (
+                                    {isLibraryLoading && (
+                                        <div className="col-span-full py-20 text-center bg-white rounded-2xl border border-slate-200 border-dashed">
+                                            <div className="w-10 h-10 mx-auto border-4 border-slate-200 border-t-violet-500 rounded-full animate-spin mb-4"></div>
+                                            <p className="text-slate-500 font-medium">Loading content...</p>
+                                        </div>
+                                    )}
+                                    {!isLibraryLoading && paginatedCreations.map((item) => (
                                         <div
                                             key={item.id}
                                             onClick={() => setPreviewContent(item)}
@@ -1594,7 +1625,7 @@ ${prompt}
                                             </div>
                                         </div>
                                     ))}
-                                    {filteredCreations.length === 0 && (
+                                    {!isLibraryLoading && filteredCreations.length === 0 && (
                                         <div className="col-span-full py-20 text-center">
                                             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                                 <History className="w-6 h-6 text-slate-400" />
@@ -1603,6 +1634,32 @@ ${prompt}
                                         </div>
                                     )}
                                 </div>
+                                {!isLibraryLoading && filteredCreations.length > 0 && (
+                                    <div className="mt-6 flex items-center justify-between bg-white border border-slate-200 rounded-xl px-4 py-3">
+                                        <p className="text-sm text-slate-500">
+                                            Showing {(libraryPage - 1) * LIBRARY_PAGE_SIZE + 1}-{Math.min(libraryPage * LIBRARY_PAGE_SIZE, filteredCreations.length)} of {filteredCreations.length}
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setLibraryPage((prev) => Math.max(1, prev - 1))}
+                                                disabled={libraryPage === 1}
+                                                className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                                            >
+                                                Previous
+                                            </button>
+                                            <span className="text-xs font-bold text-slate-600">
+                                                Page {libraryPage} / {totalLibraryPages}
+                                            </span>
+                                            <button
+                                                onClick={() => setLibraryPage((prev) => Math.min(totalLibraryPages, prev + 1))}
+                                                disabled={libraryPage === totalLibraryPages}
+                                                className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
