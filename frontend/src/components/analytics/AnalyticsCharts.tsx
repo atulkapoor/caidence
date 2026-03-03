@@ -15,8 +15,8 @@ export default function AnalyticsCharts({ data }: { data: AnalyticsDashboardResp
                     <TrendingUp className="w-5 h-5 text-indigo-600" />
                     Revenue & Growth Trend
                 </h3>
-                <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
+                <div className="h-72 min-w-0">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                         <LineChart data={data.trends}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} dy={10} />
@@ -39,8 +39,8 @@ export default function AnalyticsCharts({ data }: { data: AnalyticsDashboardResp
                     <Users className="w-5 h-5 text-purple-600" />
                     Audience Segments
                 </h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
+                <div className="h-64 min-w-0">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                         <PieChart>
                             <Pie
                                 data={data.audience}
@@ -68,8 +68,8 @@ export default function AnalyticsCharts({ data }: { data: AnalyticsDashboardResp
                     <BarChart3 className="w-5 h-5 text-orange-500" />
                     Campaign Performance Comparison
                 </h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
+                <div className="h-64 min-w-0">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                         <BarChart data={data.trends.slice(0, 7)}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} dy={10} />

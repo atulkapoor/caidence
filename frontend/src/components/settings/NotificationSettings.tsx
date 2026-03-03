@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Bell, Mail, Smartphone, Globe } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE_URL, authenticatedFetch } from "@/lib/api/core";
 
 export default function NotificationSettings() {
     const [settings, setSettings] = useState({
@@ -20,10 +19,7 @@ export default function NotificationSettings() {
     useEffect(() => {
         const loadSettings = async () => {
             try {
-                const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
-                const headers: Record<string, string> = {};
-                if (token) headers['Authorization'] = `Bearer ${token}`;
-                const res = await fetch(`${API_BASE}/api/v1/profile/preferences`, { headers });
+                const res = await authenticatedFetch(`${API_BASE_URL}/profile/preferences`);
                 if (res.ok) {
                     const data = await res.json();
                     if (data.notification_settings) {
@@ -39,12 +35,8 @@ export default function NotificationSettings() {
 
     const saveSettings = async (newSettings: typeof settings) => {
         try {
-            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-            await fetch(`${API_BASE}/api/v1/profile/preferences`, {
+            await authenticatedFetch(`${API_BASE_URL}/profile/preferences`, {
                 method: 'PUT',
-                headers,
                 body: JSON.stringify({ notification_settings: newSettings }),
             });
         } catch {

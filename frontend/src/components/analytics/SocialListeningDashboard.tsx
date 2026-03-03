@@ -122,8 +122,8 @@ export function SocialListeningDashboard() {
                 {/* Sentiment Trend Chart */}
                 <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                     <h3 className="font-bold text-slate-900 mb-6">Sentiment Trends (Last 24h)</h3>
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-[300px] w-full min-w-0">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                             <AreaChart data={SENTIMENT_TREND_DATA} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="colorPos" x1="0" y1="0" x2="0" y2="1">

@@ -19,8 +19,6 @@ const AGENT_PLACEHOLDERS: Record<string, { project: string; objective: string }>
     "Healthcare": { project: "e.g. New Clinic Opening", objective: "Describe patient services, facility highlights, and community outreach goals..." }
 };
 
-const API_Base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 function AIAgentContent() {
     const { industry } = usePreferences();
     const [step, setStep] = useState(1);

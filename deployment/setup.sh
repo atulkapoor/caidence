@@ -104,7 +104,7 @@ if [ ! -f "$APP_DIR/.env" ]; then
 # Production Environment Variables
 DATABASE_URL=postgresql+asyncpg://$DB_USER:$DB_PASS@localhost/$DB_NAME
 SECRET_KEY=$(openssl rand -hex 32)
-NEXT_PUBLIC_API_URL=https://dev.caidence.kclub.me/api
+NEXT_PUBLIC_API_BASE_URL=https://dev.caidence.kclub.me/api/v1
 ALLOWED_ORIGINS="http://localhost:3000,https://dev.caidence.kclub.me"
 FIRST_SUPERUSER=admin@caidence.ai
 FIRST_SUPERUSER_PASSWORD=admin123

@@ -27,8 +27,17 @@ function buildApiBaseUrl(): string {
 
 export const API_BASE_URL = buildApiBaseUrl();
 
-// --- Auth Helper ---
-// --- Auth Helper ---
+function resolveUrl(url: string): string {
+    if (!url) return API_BASE_URL;
+    if (/^https?:\/\//i.test(url)) return url;
+    if (url.startsWith("/")) return url;
+    return `${API_BASE_URL}/${url.replace(/^\/+/, "")}`;
+}
+
+export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+    return fetch(resolveUrl(url), options);
+}
+
 export async function getAuthHeaders(options: { includeJsonContentType?: boolean } = {}): Promise<HeadersInit> {
     const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
     const includeJsonContentType = options.includeJsonContentType ?? true;

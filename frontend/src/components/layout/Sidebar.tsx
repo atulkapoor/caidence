@@ -92,7 +92,7 @@ export function Sidebar() {
     const pathname = usePathname();
     const [user, setUser] = useState<UserInfo | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const { hasPermission, isSuperAdmin, loading: permLoading } = usePermissionContext();
+    const { data: permissionData, hasPermission, isSuperAdmin, loading: permLoading } = usePermissionContext();
 
     useEffect(() => {
         const userJson = localStorage.getItem("user");
@@ -137,6 +137,9 @@ export function Sidebar() {
         if (!item.permission) return true;
         // Super admin sees everything
         if (isSuperAdmin) return true;
+        // Still loading or permission API unavailable — show all to avoid broken navigation.
+        // Route-level permission gates still protect access.
+        if (!permissionData) return true;
         // Still loading — show all (prevent flash of missing items)
         if (permLoading) return true;
         // Check permission
