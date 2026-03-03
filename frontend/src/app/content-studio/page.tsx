@@ -4,11 +4,12 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
 import { toast } from "sonner";
 import { generateContent, generateDesign, fetchContentGenerations, ContentGeneration, saveContent, deleteContent, enhanceDescription } from "@/lib/api";
-import { getConnectionStatus, publishSocialPost, publishToLinkedIn, type PublishPostResponse } from "@/lib/api/social";
+import { getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost, type PublishPostResponse } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
+import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalendar";
 
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
@@ -46,18 +47,30 @@ function ContentStudioContent() {
     const [isEditId, setIsEditId] = useState<number | null>(null);
 
     const [recentCreations, setRecentCreations] = useState<ContentGeneration[]>([]);
+    const [deletedContentIds, setDeletedContentIds] = useState<Set<number>>(new Set());
     const [currentResponses, setCurrentResponses] = useState<GeneratedResponse[]>([]);
     const [postingPreview, setPostingPreview] = useState(false);
     const [postingIndex, setPostingIndex] = useState<number | null>(null);
     const [postedPreviewByContentId, setPostedPreviewByContentId] = useState<Record<number, string>>({});
     const [postedIndices, setPostedIndices] = useState<Record<number, string>>({});
     const [postedContentIds, setPostedContentIds] = useState<Set<number>>(new Set());
+    const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+    const [scheduleDateTime, setScheduleDateTime] = useState("");
+    const [scheduleCampaignId, setScheduleCampaignId] = useState<number | null>(null);
+    const [scheduling, setScheduling] = useState(false);
+    const [scheduleDraft, setScheduleDraft] = useState<{
+        title: string;
+        platform: string;
+        text: string;
+        imageUrl?: string;
+        contentId?: number | null;
+    } | null>(null);
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
     const [filterPlatform, setFilterPlatform] = useState("All Platforms");
     const [previewContent, setPreviewContent] = useState<ContentGeneration | null>(null);
-    useModalScroll(!!previewContent);
+    useModalScroll(!!previewContent || isScheduleOpen);
 
     // Lists
     const platforms = [
@@ -164,6 +177,15 @@ function ContentStudioContent() {
     }, []);
 
     useEffect(() => {
+        const intervalId = window.setInterval(() => {
+            // Keep posted state in sync when scheduled posts are published by backend worker.
+            loadHistory();
+        }, 5000);
+
+        return () => window.clearInterval(intervalId);
+    }, []);
+
+    useEffect(() => {
         if (!pendingCampaignTitle || campaignId !== null || availableCampaigns.length === 0) {
             return;
         }
@@ -200,7 +222,16 @@ function ContentStudioContent() {
     const loadHistory = async () => {
         try {
             const data = await fetchContentGenerations();
-            setRecentCreations(data);
+            setRecentCreations((prev) => {
+                const incomingIds = new Set(data.map((item) => item.id));
+                const preservedPosted = prev.filter(
+                    (item) =>
+                        item.is_posted &&
+                        !incomingIds.has(item.id) &&
+                        !deletedContentIds.has(item.id)
+                );
+                return [...data, ...preservedPosted];
+            });
             const persistedPostedIds = data.filter((item) => item.is_posted).map((item) => item.id);
             setPostedContentIds(new Set(persistedPostedIds));
         } catch (error) {
@@ -277,7 +308,7 @@ ${prompt}
                 });
 
                 const sharedImageUrl = baseResult.image_url || null;
-                for (const platform of selectedPlatforms) {
+                const adaptedResponses = await Promise.all(selectedPlatforms.map(async (platform) => {
                     const platformTitle = withPlatformSuffix(title, platform);
                     const adapted = await generateContent({
                         title: platformTitle,
@@ -292,7 +323,7 @@ ${prompt}
                         brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
                     });
 
-                    setCurrentResponses(prev => [...prev, {
+                    return {
                         contentId: null,
                         platform,
                         result: adapted.result || baseResult.result || "",
@@ -301,10 +332,11 @@ ${prompt}
                         generateWithImage: generateWithImage,
                         title: withPlatformSuffix(adapted.title || platformTitle, platform),
                         outputType: "text",
-                    }]);
-                }
+                    } as GeneratedResponse;
+                }));
+                setCurrentResponses(adaptedResponses);
             } else {
-                for (const platform of selectedPlatforms) {
+                const generatedResponses = await Promise.all(selectedPlatforms.map(async (platform) => {
                     const platformTitle = withPlatformSuffix(title, platform);
                     const richPrompt = `
 Context: Creating ${contentType} for ${platform}.
@@ -326,13 +358,13 @@ ${prompt}
                             model: selectedModel,
                         });
 
-                        setCurrentResponses(prev => [...prev, {
+                        return {
                             contentId: null,
                             platform: platform,
                             result: result.image_url || "",
                             title: withPlatformSuffix(result.title || platformTitle, platform),
                             outputType: "image",
-                        }]);
+                        } as GeneratedResponse;
                     } else {
                         const result = await generateContent({
                             title: platformTitle,
@@ -344,7 +376,7 @@ ${prompt}
                             brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
                         });
 
-                        setCurrentResponses(prev => [...prev, {
+                        return {
                             contentId: null,
                             platform: platform,
                             result: result.result || "",
@@ -353,9 +385,10 @@ ${prompt}
                             generateWithImage: Boolean(result.generate_with_image),
                             title: withPlatformSuffix(result.title || platformTitle, platform),
                             outputType: "text",
-                        }]);
+                        } as GeneratedResponse;
                     }
-                }
+                }));
+                setCurrentResponses(generatedResponses);
             }
 
             await loadHistory();
@@ -424,6 +457,25 @@ ${prompt}
 
     const normalizeHexColor = (value?: string | null) =>
         toHexColorOrNull(value) || "#7c3aed";
+
+    const toDateTimeLocalValue = (date: Date) => {
+        const tzOffsetMs = date.getTimezoneOffset() * 60_000;
+        return new Date(date.getTime() - tzOffsetMs).toISOString().slice(0, 16);
+    };
+
+    const openScheduleModal = (draft: {
+        title: string;
+        platform: string;
+        text: string;
+        imageUrl?: string;
+        contentId?: number | null;
+    }) => {
+        const defaultDate = new Date(Date.now() + 30 * 60 * 1000);
+        setScheduleDraft(draft);
+        setScheduleDateTime(toDateTimeLocalValue(defaultDate));
+        setScheduleCampaignId(campaignId);
+        setIsScheduleOpen(true);
+    };
 
     const markContentPostedLocally = (contentId: number | null | undefined, targetName?: string) => {
         if (!contentId) return;
@@ -620,6 +672,61 @@ ${prompt}
         } catch (error: any) {
             toast.error(error?.message || `Failed to post to ${platform}`, { id: toastId });
             return null;
+        }
+    };
+
+    const handleScheduleSubmit = async () => {
+        if (!scheduleDraft) return;
+        if (!scheduleDateTime) {
+            toast.error("Select date and time");
+            return;
+        }
+
+        const scheduleDate = new Date(scheduleDateTime);
+        if (Number.isNaN(scheduleDate.getTime())) {
+            toast.error("Invalid date and time");
+            return;
+        }
+
+        const platformKey = scheduleDraft.platform.toLowerCase();
+        if (!["linkedin", "facebook", "instagram"].includes(platformKey)) {
+            toast.error(`Scheduling currently supports LinkedIn, Facebook, and Instagram only. "${scheduleDraft.platform}" is not supported yet.`);
+            return;
+        }
+        if (platformKey === "instagram" && !scheduleDraft.imageUrl) {
+            toast.error("Instagram scheduling requires an image URL");
+            return;
+        }
+        if (platformKey === "instagram" && scheduleDraft.imageUrl && !/^https?:\/\//i.test(scheduleDraft.imageUrl)) {
+            toast.error("Instagram needs a public image URL for scheduled posts.");
+            return;
+        }
+
+        const status = await getConnectionStatus(platformKey);
+        if (!status.connected) {
+            toast.error(`Connect ${scheduleDraft.platform} in Onboarding or Settings before scheduling`);
+            return;
+        }
+
+        setScheduling(true);
+        const toastId = toast.loading(`Scheduling ${scheduleDraft.platform} post...`);
+        try {
+            await scheduleSocialPost({
+                title: scheduleDraft.title,
+                platform: platformKey,
+                message: scheduleDraft.text,
+                image_url: scheduleDraft.imageUrl || undefined,
+                content_id: scheduleDraft.contentId ?? undefined,
+                campaign_id: scheduleCampaignId ?? undefined,
+                scheduled_at: scheduleDate.toISOString(),
+            });
+            toast.success(`Post scheduled for ${scheduleDate.toLocaleString()}`, { id: toastId });
+            setIsScheduleOpen(false);
+            setScheduleDraft(null);
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to schedule post", { id: toastId });
+        } finally {
+            setScheduling(false);
         }
     };
 
@@ -861,6 +968,22 @@ ${prompt}
                                                 : `Post to ${previewContent.platform}`}
                                     </button>
                                     <button
+                                        onClick={() =>
+                                            openScheduleModal({
+                                                title: previewContent.title,
+                                                platform: previewContent.platform,
+                                                text: previewContent.result || "",
+                                                imageUrl: previewContent.image_url || undefined,
+                                                contentId: previewContent.id,
+                                            })
+                                        }
+                                        disabled={previewContent.is_posted}
+                                        className="w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-60"
+                                    >
+                                        <Calendar className="w-4 h-4" />
+                                        Schedule {previewContent.platform}
+                                    </button>
+                                    <button
                                         onClick={() => {
                                             navigator.clipboard.writeText(previewContent.result || "");
                                             // Optional: Show toast or feedback? For now just copy.
@@ -872,6 +995,74 @@ ${prompt}
                                         Copy Text
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {isScheduleOpen && scheduleDraft && (
+                    <div
+                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+                        onClick={() => {
+                            if (!scheduling) {
+                                setIsScheduleOpen(false);
+                                setScheduleDraft(null);
+                            }
+                        }}
+                    >
+                        <div
+                            className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <h3 className="text-lg font-bold text-slate-900 mb-1">Schedule Post</h3>
+                            <p className="text-sm text-slate-500 mb-5">
+                                {scheduleDraft.title} ({scheduleDraft.platform})
+                            </p>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Date and Time</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={scheduleDateTime}
+                                        onChange={(e) => setScheduleDateTime(e.target.value)}
+                                        min={toDateTimeLocalValue(new Date())}
+                                        className="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Campaign</label>
+                                    <select
+                                        value={scheduleCampaignId ?? ""}
+                                        onChange={(e) => setScheduleCampaignId(e.target.value ? Number(e.target.value) : null)}
+                                        className="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                    >
+                                        <option value="">No Campaign</option>
+                                        {availableCampaigns.map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.title}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="mt-6 flex justify-end gap-2">
+                                <button
+                                    onClick={() => {
+                                        setIsScheduleOpen(false);
+                                        setScheduleDraft(null);
+                                    }}
+                                    disabled={scheduling}
+                                    className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-60"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleScheduleSubmit}
+                                    disabled={scheduling}
+                                    className="px-4 py-2 text-sm font-bold bg-violet-600 hover:bg-violet-700 text-white rounded-lg disabled:opacity-60"
+                                >
+                                    {scheduling ? "Scheduling..." : "Schedule Post"}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -912,6 +1103,14 @@ ${prompt}
                                     : "text-slate-500 hover:text-slate-700"}`}
                             >
                                 Content Library
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("calendar")}
+                                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "calendar"
+                                    ? "bg-white text-slate-900 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700"}`}
+                            >
+                                Calendar
                             </button>
                         </div>
                     </div>
@@ -1137,6 +1336,37 @@ ${prompt}
                                                                     return;
                                                                 }
                                                                 try {
+                                                                    let contentIdForSchedule = response.contentId ?? null;
+                                                                    if (!contentIdForSchedule && response.outputType !== "image") {
+                                                                        contentIdForSchedule = await ensureContentIdForPosting(response, idx);
+                                                                    }
+                                                                    openScheduleModal({
+                                                                        title: response.title,
+                                                                        platform: response.platform,
+                                                                        text: response.result,
+                                                                        imageUrl: response.outputType === "image"
+                                                                            ? response.result
+                                                                            : response.imageUrl || undefined,
+                                                                        contentId: contentIdForSchedule,
+                                                                    });
+                                                                } catch (error: any) {
+                                                                    toast.error(error?.message || "Failed to prepare scheduled post");
+                                                                }
+                                                            }}
+                                                            disabled={isResponsePosted(response, idx)}
+                                                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-md shadow-amber-200 transition-all disabled:opacity-50"
+                                                        >
+                                                            <Calendar className="w-3 h-3" />
+                                                            Schedule
+                                                        </button>
+
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (isResponsePosted(response, idx)) {
+                                                                    toast.info("This content is already posted and is view-only.");
+                                                                    return;
+                                                                }
+                                                                try {
                                                                     setPostingIndex(idx);
                                                                     let contentIdForPost = response.contentId ?? null;
                                                                     if (!contentIdForPost && response.outputType !== "image") {
@@ -1346,6 +1576,12 @@ ${prompt}
 
                                                         try {
                                                             await deleteContent(item.id);
+                                                            setDeletedContentIds((prev) => {
+                                                                const next = new Set(prev);
+                                                                next.add(item.id);
+                                                                return next;
+                                                            });
+                                                            setRecentCreations((prev) => prev.filter((entry) => entry.id !== item.id));
                                                             await loadHistory();
                                                             toast.success("Content deleted successfully", { id: toastId });
                                                         } catch (error) {
@@ -1371,6 +1607,16 @@ ${prompt}
                                     )}
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {activeTab === "calendar" && (
+                        <div className="h-full p-6 sm:p-8">
+                            <ScheduledPostsCalendar
+                                scope="content"
+                                title="Content Calendar"
+                                subtitle="Shows only scheduled posts from Content Studio, including upcoming and already posted items."
+                            />
                         </div>
                     )}
                 </div>

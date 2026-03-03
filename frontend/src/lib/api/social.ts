@@ -45,6 +45,37 @@ export interface PublishPostResponse {
     published: boolean;
 }
 
+export interface SchedulePostPayload {
+    platform: string;
+    message: string;
+    scheduled_at: string;
+    title?: string;
+    image_url?: string;
+    content_id?: number;
+    design_asset_id?: number;
+    campaign_id?: number;
+}
+
+export interface ScheduledPost {
+    id: number;
+    user_id: number;
+    content_id?: number | null;
+    design_asset_id?: number | null;
+    campaign_id?: number | null;
+    title?: string | null;
+    platform: string;
+    message: string;
+    image_url?: string | null;
+    status: string;
+    scheduled_at: string;
+    published_at?: string | null;
+    post_id?: string | null;
+    target_name?: string | null;
+    error_message?: string | null;
+    created_at: string;
+    updated_at?: string | null;
+}
+
 export async function getConnectionUrl(
     platform: string,
     redirectTo?: string,
@@ -113,10 +144,11 @@ export async function publishSocialPost(
     message: string,
     image_url?: string,
     content_id?: number,
+    design_asset_id?: number,
 ): Promise<PublishPostResponse> {
     const res = await authenticatedFetch(`${API_BASE_URL}/social/publish/${platform}`, {
         method: "POST",
-        body: JSON.stringify({ message, image_url, content_id }),
+        body: JSON.stringify({ message, image_url, content_id, design_asset_id }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -144,4 +176,61 @@ export async function publishSocialPost(
         target_name: String(data.target_name || platform),
         published,
     };
+}
+
+export async function scheduleSocialPost(payload: SchedulePostPayload): Promise<ScheduledPost> {
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/scheduled-posts`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to schedule post");
+    }
+    return res.json();
+}
+
+export async function fetchScheduledPosts(params?: {
+    status?: string;
+    from_date?: string;
+    to_date?: string;
+}): Promise<ScheduledPost[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set("status", params.status);
+    if (params?.from_date) query.set("from_date", params.from_date);
+    if (params?.to_date) query.set("to_date", params.to_date);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/scheduled-posts${suffix}`);
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to fetch scheduled posts");
+    }
+    return res.json();
+}
+
+export async function cancelScheduledPost(scheduledPostId: number): Promise<ScheduledPost> {
+    // Try multiple endpoint shapes for backward compatibility across deployments/proxies.
+    const attempts: Array<{ url: string; method: "POST" | "DELETE" }> = [
+        { url: `${API_BASE_URL}/social/scheduled-posts/${scheduledPostId}/cancel`, method: "POST" },
+        { url: `${API_BASE_URL}/social/scheduled-posts/${scheduledPostId}/cancel/`, method: "POST" },
+        { url: `${API_BASE_URL}/social/scheduled-posts/cancel/${scheduledPostId}`, method: "POST" },
+        { url: `${API_BASE_URL}/social/scheduled-posts/${scheduledPostId}`, method: "DELETE" },
+    ];
+
+    let lastError = "Failed to cancel scheduled post";
+    for (const attempt of attempts) {
+        const res = await authenticatedFetch(attempt.url, { method: attempt.method });
+        if (res.ok) {
+            return res.json();
+        }
+        const data = await res.json().catch(() => ({}));
+        // If route is missing, try next shape; otherwise surface concrete backend error.
+        const detail = String(data.detail || "");
+        if (res.status !== 404) {
+            throw new Error(detail || "Failed to cancel scheduled post");
+        }
+        lastError = detail || lastError;
+    }
+    throw new Error(lastError || "Failed to cancel scheduled post");
 }

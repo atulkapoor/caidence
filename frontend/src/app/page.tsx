@@ -61,7 +61,7 @@ function LandingPageContent() {
                             Log In
                         </Link>
                         <Link href="/register" className="px-5 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-800 transition-all hover:scale-105 shadow-xl shadow-slate-900/20 flex items-center gap-2">
-                            Start Free Trial <ArrowRight className="w-4 h-4" />
+                            Join the Waitlist <ArrowRight className="w-4 h-4" />
                         </Link>
                     </div>
                 </div>
@@ -93,7 +93,7 @@ function LandingPageContent() {
 
                         <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
                             <Link href="/register" className="w-full sm:w-auto px-8 py-4 bg-indigo-600 text-white font-bold rounded-2xl text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2">
-                                Start 7-Day Free Trial
+                                Join The Waitlist
                             </Link>
                             <button
                                 onClick={() => {

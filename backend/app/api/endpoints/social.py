@@ -11,13 +11,13 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_authenticated_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.models import ContentGeneration, DesignAsset, User
+from app.models.models import Campaign, ContentGeneration, DesignAsset, ScheduledPost, User
 from app.models.social import SocialConnection
 from app.services.auth_service import is_super_admin
 from app.services.social_auth_service import SocialAuthService, VALID_PLATFORMS
@@ -61,6 +61,7 @@ class PublishPostRequest(BaseModel):
     message: str
     image_url: Optional[str] = None
     content_id: Optional[int] = None
+    design_asset_id: Optional[int] = None
 
 
 class PublishPostResponse(BaseModel):
@@ -90,6 +91,37 @@ class LinkedInPublishRequest(BaseModel):
     image_data_url: Optional[str] = None
     design_asset_id: Optional[int] = None
     content_id: Optional[int] = None
+
+
+class SchedulePostRequest(BaseModel):
+    platform: str
+    message: str
+    scheduled_at: datetime
+    title: Optional[str] = None
+    image_url: Optional[str] = None
+    content_id: Optional[int] = None
+    design_asset_id: Optional[int] = None
+    campaign_id: Optional[int] = None
+
+
+class ScheduledPostResponse(BaseModel):
+    id: int
+    user_id: int
+    content_id: Optional[int] = None
+    design_asset_id: Optional[int] = None
+    campaign_id: Optional[int] = None
+    title: Optional[str] = None
+    platform: str
+    message: str
+    image_url: Optional[str] = None
+    status: str
+    scheduled_at: datetime
+    published_at: Optional[datetime] = None
+    post_id: Optional[str] = None
+    target_name: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 @router.post("/connect/{platform}")
@@ -378,6 +410,12 @@ async def publish_linkedin(
                 target_name=str(normalized.get("target_name") or ""),
                 db=db,
             )
+            await _mark_design_as_posted(
+                design_asset_id=payload.design_asset_id,
+                user_id=current_user.id,
+                target_name=str(normalized.get("target_name") or ""),
+                db=db,
+            )
         return {**data, **normalized}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -393,62 +431,16 @@ async def publish_post(
     db: AsyncSession = Depends(get_db),
 ):
     """Publish text post to supported social platforms."""
-    platform = platform.lower()
-    publish_response: dict | None = None
-
-    if platform == "linkedin":
-        try:
-            image_bytes: Optional[bytes] = None
-            if payload.image_url:
-                image_bytes = await _resolve_linkedin_image_bytes(payload.image_url)
-            data = await SocialAuthService.publish_linkedin_post(
-                user_id=current_user.id,
-                text=payload.message,
-                db=db,
-                image_bytes=image_bytes,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-
-        publish_response = _normalize_publish_response(
-            platform="linkedin",
-            data=data,
-            fallback_target_name="LinkedIn",
+    try:
+        publish_response = await _publish_for_platform(
+            platform=platform,
+            message=payload.message,
+            image_url=payload.image_url,
+            user_id=current_user.id,
+            db=db,
         )
-
-    elif platform == "facebook":
-        try:
-            data = await SocialAuthService.publish_facebook_post(
-                user_id=current_user.id,
-                message=payload.message,
-                db=db,
-                image_url=(payload.image_url or "").strip() or None,
-            )
-            publish_response = _normalize_publish_response(
-                platform="facebook",
-                data=data,
-                fallback_target_name="Facebook",
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-
-    elif platform == "instagram":
-        try:
-            data = await SocialAuthService.publish_instagram_post(
-                user_id=current_user.id,
-                caption=payload.message,
-                image_url=(payload.image_url or "").strip(),
-                db=db,
-            )
-            publish_response = _normalize_publish_response(
-                platform="instagram",
-                data=data,
-                fallback_target_name="Instagram",
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-    else:
-        raise HTTPException(status_code=400, detail=f"Publishing not supported for platform: {platform}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     if publish_response and publish_response.get("published"):
         await _mark_content_as_posted(
@@ -457,8 +449,252 @@ async def publish_post(
             target_name=str(publish_response.get("target_name") or ""),
             db=db,
         )
+        await _mark_design_as_posted(
+            design_asset_id=payload.design_asset_id,
+            user_id=current_user.id,
+            target_name=str(publish_response.get("target_name") or ""),
+            db=db,
+        )
 
     return publish_response
+
+
+@router.post("/scheduled-posts", response_model=ScheduledPostResponse)
+async def create_scheduled_post(
+    payload: SchedulePostRequest,
+    current_user: User = Depends(get_current_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+):
+    platform = (payload.platform or "").strip().lower()
+    if platform not in {"linkedin", "facebook", "instagram"}:
+        raise HTTPException(status_code=400, detail=f"Scheduling is not supported for platform: {payload.platform}")
+
+    message = (payload.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Post message is required")
+
+    if platform == "instagram":
+        image_url = (payload.image_url or "").strip()
+        if not image_url:
+            raise HTTPException(status_code=400, detail="Instagram scheduling requires image_url")
+        if not image_url.startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="Instagram requires a public image URL")
+
+    scheduled_at = payload.scheduled_at
+    if scheduled_at.tzinfo is None:
+        scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
+    else:
+        scheduled_at = scheduled_at.astimezone(timezone.utc)
+
+    if scheduled_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Scheduled Time must be future")
+
+    connection_result = await db.execute(
+        select(SocialConnection).where(
+            SocialConnection.user_id == current_user.id,
+            SocialConnection.platform == platform,
+            SocialConnection.is_active == True,  # noqa: E712
+        )
+    )
+    connection = connection_result.scalar_one_or_none()
+    if not connection or not connection.access_token:
+        raise HTTPException(status_code=400, detail=f"Connect {platform} before scheduling a post")
+
+    validated_content_id: Optional[int] = None
+    validated_design_asset_id: Optional[int] = None
+    if payload.content_id:
+        if is_super_admin(current_user.role):
+            content_result = await db.execute(
+                select(ContentGeneration).where(ContentGeneration.id == payload.content_id)
+            )
+        else:
+            content_result = await db.execute(
+                select(ContentGeneration).where(
+                    ContentGeneration.id == payload.content_id,
+                    ContentGeneration.user_id == current_user.id,
+                )
+            )
+        content_obj = content_result.scalar_one_or_none()
+        # Do not block scheduling when content reference is stale/unavailable.
+        # Scheduling should still work with raw message payload.
+        if content_obj:
+            validated_content_id = payload.content_id
+
+    if payload.design_asset_id:
+        design_result = await db.execute(
+            select(DesignAsset).where(
+                DesignAsset.id == payload.design_asset_id,
+                DesignAsset.user_id == current_user.id,
+            )
+        )
+        design_obj = design_result.scalar_one_or_none()
+        if design_obj:
+            validated_design_asset_id = payload.design_asset_id
+
+    if payload.campaign_id:
+        campaign_result = await db.execute(
+            select(Campaign).where(
+                Campaign.id == payload.campaign_id,
+            )
+        )
+        if not campaign_result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Prevent duplicate scheduling of the same content/design item.
+    # Re-scheduling is allowed only if previous attempts failed/cancelled.
+    blocking_statuses = {"scheduled", "processing", "published", "posted", "success", "completed"}
+    retryable_statuses = {"failed", "error", "cancelled", "canceled"}
+    raw_content_id = payload.content_id
+    raw_design_asset_id = payload.design_asset_id
+    normalized_title = (payload.title or "").strip() or None
+    normalized_image_url = (payload.image_url or "").strip() or None
+
+    reference_clauses = []
+    effective_content_id = validated_content_id or raw_content_id
+    effective_design_asset_id = validated_design_asset_id or raw_design_asset_id
+    if effective_content_id:
+        reference_clauses.append(ScheduledPost.content_id == effective_content_id)
+    if effective_design_asset_id:
+        reference_clauses.append(ScheduledPost.design_asset_id == effective_design_asset_id)
+
+    # Fallback duplicate detection for cases where IDs are missing/stale:
+    # treat same platform + same message + same title + same image as the same post.
+    signature_clause = and_(
+        ScheduledPost.message == message,
+        ScheduledPost.title == normalized_title,
+        ScheduledPost.image_url == normalized_image_url,
+    )
+    message_only_signature_clause = ScheduledPost.message == message
+
+    conflict_filters = [signature_clause, message_only_signature_clause]
+    if reference_clauses:
+        conflict_filters.append(or_(*reference_clauses))
+
+    conflict_query = select(ScheduledPost).where(
+        ScheduledPost.user_id == current_user.id,
+        ScheduledPost.platform == platform,
+        or_(*conflict_filters),
+    )
+    existing_for_reference = (await db.execute(conflict_query)).scalars().all()
+
+    has_blocking_schedule = any(
+        (post.status or "").strip().lower() in blocking_statuses for post in existing_for_reference
+    )
+    has_retryable_only = existing_for_reference and all(
+        (post.status or "").strip().lower() in retryable_statuses for post in existing_for_reference
+    )
+
+    if has_blocking_schedule and not has_retryable_only:
+        raise HTTPException(
+            status_code=409,
+            detail="This post is already scheduled or has already been posted. You can re-schedule only after a failed scheduling attempt.",
+        )
+
+    scheduled = ScheduledPost(
+        user_id=current_user.id,
+        content_id=validated_content_id,
+        design_asset_id=validated_design_asset_id,
+        campaign_id=payload.campaign_id,
+        title=normalized_title,
+        platform=platform,
+        message=message,
+        image_url=normalized_image_url,
+        status="scheduled",
+        scheduled_at=scheduled_at,
+    )
+    db.add(scheduled)
+    await db.commit()
+    await db.refresh(scheduled)
+    return _to_scheduled_post_response(scheduled)
+
+
+@router.get("/scheduled-posts", response_model=list[ScheduledPostResponse])
+async def list_scheduled_posts(
+    status: Optional[str] = Query(default=None),
+    from_date: Optional[datetime] = Query(default=None),
+    to_date: Optional[datetime] = Query(default=None),
+    current_user: User = Depends(get_current_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+):
+    query = (
+        select(ScheduledPost)
+        .where(ScheduledPost.user_id == current_user.id)
+        .order_by(ScheduledPost.scheduled_at.asc())
+    )
+
+    if status:
+        query = query.where(ScheduledPost.status == status.lower())
+    if from_date:
+        normalized_from = from_date if from_date.tzinfo else from_date.replace(tzinfo=timezone.utc)
+        query = query.where(ScheduledPost.scheduled_at >= normalized_from)
+    if to_date:
+        normalized_to = to_date if to_date.tzinfo else to_date.replace(tzinfo=timezone.utc)
+        query = query.where(ScheduledPost.scheduled_at <= normalized_to)
+
+    rows = (await db.execute(query)).scalars().all()
+    return [_to_scheduled_post_response(row) for row in rows]
+
+
+@router.post("/scheduled-posts/{scheduled_post_id}/cancel", response_model=ScheduledPostResponse)
+async def cancel_scheduled_post(
+    scheduled_post_id: int,
+    current_user: User = Depends(get_current_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+):
+    row_result = await db.execute(
+        select(ScheduledPost).where(
+            ScheduledPost.id == scheduled_post_id,
+            ScheduledPost.user_id == current_user.id,
+        )
+    )
+    scheduled = row_result.scalar_one_or_none()
+    if not scheduled:
+        raise HTTPException(status_code=404, detail="Scheduled post not found")
+
+    status = (scheduled.status or "").strip().lower()
+    if status in {"published", "posted", "success", "completed"}:
+        raise HTTPException(status_code=409, detail="Posted schedules cannot be canceled")
+    if status in {"failed", "error", "cancelled", "canceled"}:
+        return _to_scheduled_post_response(scheduled)
+
+    if status not in {"scheduled", "processing", "queued", "pending"}:
+        raise HTTPException(status_code=409, detail=f"Cannot cancel schedule with status: {scheduled.status}")
+
+    scheduled.status = "canceled"
+    scheduled.error_message = "Canceled by user"
+    await db.commit()
+    await db.refresh(scheduled)
+    return _to_scheduled_post_response(scheduled)
+
+
+@router.delete("/scheduled-posts/{scheduled_post_id}", response_model=ScheduledPostResponse)
+async def cancel_scheduled_post_delete(
+    scheduled_post_id: int,
+    current_user: User = Depends(get_current_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Compatibility route: some clients use DELETE /scheduled-posts/{id}
+    return await cancel_scheduled_post(scheduled_post_id=scheduled_post_id, current_user=current_user, db=db)
+
+
+@router.post("/scheduled-posts/{scheduled_post_id}/cancel/", response_model=ScheduledPostResponse)
+async def cancel_scheduled_post_with_trailing_slash(
+    scheduled_post_id: int,
+    current_user: User = Depends(get_current_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Compatibility route: handles proxy/client trailing slash behavior.
+    return await cancel_scheduled_post(scheduled_post_id=scheduled_post_id, current_user=current_user, db=db)
+
+
+@router.post("/scheduled-posts/cancel/{scheduled_post_id}", response_model=ScheduledPostResponse)
+async def cancel_scheduled_post_alt_path(
+    scheduled_post_id: int,
+    current_user: User = Depends(get_current_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Compatibility route: handles alternate REST path used by some clients.
+    return await cancel_scheduled_post(scheduled_post_id=scheduled_post_id, current_user=current_user, db=db)
 
 
 @router.get("/status/{platform}")
@@ -500,6 +736,145 @@ def _decode_base64_data(value: str) -> bytes:
         return base64.b64decode(encoded, validate=True)
     except Exception as exc:  # noqa: BLE001
         raise ValueError("Expected base64-encoded image") from exc
+
+
+async def _publish_for_platform(
+    platform: str,
+    message: str,
+    image_url: Optional[str],
+    user_id: int,
+    db: AsyncSession,
+) -> dict:
+    normalized_platform = (platform or "").strip().lower()
+    if normalized_platform == "linkedin":
+        image_bytes: Optional[bytes] = None
+        if image_url:
+            image_bytes = await _resolve_linkedin_image_bytes(image_url)
+        data = await SocialAuthService.publish_linkedin_post(
+            user_id=user_id,
+            text=message,
+            db=db,
+            image_bytes=image_bytes,
+        )
+        return _normalize_publish_response(
+            platform="linkedin",
+            data=data,
+            fallback_target_name="LinkedIn",
+        )
+
+    if normalized_platform == "facebook":
+        data = await SocialAuthService.publish_facebook_post(
+            user_id=user_id,
+            message=message,
+            db=db,
+            image_url=(image_url or "").strip() or None,
+        )
+        return _normalize_publish_response(
+            platform="facebook",
+            data=data,
+            fallback_target_name="Facebook",
+        )
+
+    if normalized_platform == "instagram":
+        data = await SocialAuthService.publish_instagram_post(
+            user_id=user_id,
+            caption=message,
+            image_url=(image_url or "").strip(),
+            db=db,
+        )
+        return _normalize_publish_response(
+            platform="instagram",
+            data=data,
+            fallback_target_name="Instagram",
+        )
+
+    raise ValueError(f"Publishing not supported for platform: {platform}")
+
+
+def _to_scheduled_post_response(post: ScheduledPost) -> ScheduledPostResponse:
+    return ScheduledPostResponse(
+        id=post.id,
+        user_id=post.user_id,
+        content_id=post.content_id,
+        design_asset_id=post.design_asset_id,
+        campaign_id=post.campaign_id,
+        title=post.title,
+        platform=post.platform,
+        message=post.message,
+        image_url=post.image_url,
+        status=post.status,
+        scheduled_at=post.scheduled_at,
+        published_at=post.published_at,
+        post_id=post.post_id,
+        target_name=post.target_name,
+        error_message=post.error_message,
+        created_at=post.created_at,
+        updated_at=post.updated_at,
+    )
+
+
+async def process_due_scheduled_posts(
+    db: AsyncSession,
+    limit: int = 20,
+) -> int:
+    now = datetime.now(timezone.utc)
+    due_result = await db.execute(
+        select(ScheduledPost)
+        .where(
+            ScheduledPost.status == "scheduled",
+            ScheduledPost.scheduled_at <= now,
+        )
+        .order_by(ScheduledPost.scheduled_at.asc())
+        .limit(limit)
+    )
+    due_posts = due_result.scalars().all()
+    published_count = 0
+
+    for post in due_posts:
+        post.status = "processing"
+        post.error_message = None
+        await db.commit()
+        await db.refresh(post)
+
+        try:
+            publish_response = await _publish_for_platform(
+                platform=post.platform,
+                message=post.message,
+                image_url=post.image_url,
+                user_id=post.user_id,
+                db=db,
+            )
+            if not publish_response.get("published"):
+                raise ValueError(f"Unexpected publish response for {post.platform}")
+
+            post.status = "published"
+            post.post_id = (
+                str(publish_response.get("post_id"))
+                if publish_response.get("post_id") is not None
+                else None
+            )
+            post.target_name = str(publish_response.get("target_name") or "").strip() or None
+            post.published_at = datetime.now(timezone.utc)
+            await _mark_content_as_posted(
+                content_id=post.content_id,
+                user_id=post.user_id,
+                target_name=post.target_name or post.platform,
+                db=db,
+            )
+            await _mark_design_as_posted(
+                design_asset_id=post.design_asset_id,
+                user_id=post.user_id,
+                target_name=post.target_name or post.platform,
+                db=db,
+            )
+            published_count += 1
+        except Exception as exc:  # noqa: BLE001
+            post.status = "failed"
+            post.error_message = str(exc)[:2000]
+        finally:
+            await db.commit()
+
+    return published_count
 
 
 async def _resolve_linkedin_image_bytes(image_url: str) -> bytes:
@@ -571,4 +946,32 @@ async def _mark_content_as_posted(
     content.is_posted = True
     content.posted_at = datetime.now(timezone.utc)
     content.posted_target_name = target_name or None
+    await db.commit()
+
+
+async def _mark_design_as_posted(
+    design_asset_id: Optional[int],
+    user_id: int,
+    target_name: str,
+    db: AsyncSession,
+) -> None:
+    if not design_asset_id:
+        return
+
+    result = await db.execute(
+        select(DesignAsset).where(
+            DesignAsset.id == design_asset_id,
+            DesignAsset.user_id == user_id,
+        )
+    )
+    asset = result.scalar_one_or_none()
+    if not asset:
+        return
+
+    if asset.is_posted:
+        return
+
+    asset.is_posted = True
+    asset.posted_at = datetime.now(timezone.utc)
+    asset.posted_target_name = target_name or None
     await db.commit()

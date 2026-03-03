@@ -10,6 +10,9 @@ export interface DesignAsset {
     created_at: string;
     brand_colors?: string;
     reference_image?: string;
+    is_posted?: boolean;
+    posted_at?: string | null;
+    posted_target_name?: string | null;
 }
 
 export interface GenerateDesignRequest {

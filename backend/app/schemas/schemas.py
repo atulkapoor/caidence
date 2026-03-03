@@ -182,6 +182,36 @@ class ContentGeneration(ContentGenerationBase):
     class Config:
         from_attributes = True
 
+
+class ScheduledPostBase(BaseModel):
+    platform: str
+    message: str
+    scheduled_at: datetime
+    title: Optional[str] = None
+    image_url: Optional[str] = None
+    content_id: Optional[int] = None
+    design_asset_id: Optional[int] = None
+    campaign_id: Optional[int] = None
+
+
+class ScheduledPostCreate(ScheduledPostBase):
+    pass
+
+
+class ScheduledPost(ScheduledPostBase):
+    id: int
+    user_id: int
+    status: str
+    published_at: Optional[datetime] = None
+    post_id: Optional[str] = None
+    target_name: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
 # --- Design Studio Schemas ---
 class DesignAssetBase(BaseModel):
     title: str
@@ -205,6 +235,9 @@ class DesignAssetCreate(DesignAssetBase):
 class DesignAsset(DesignAssetBase):
     id: int
     image_url: Optional[str] = None
+    is_posted: bool = False
+    posted_at: Optional[datetime] = None
+    posted_target_name: Optional[str] = None
     created_at: datetime
     user_id: int
 
