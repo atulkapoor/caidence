@@ -29,25 +29,35 @@ export const API_BASE_URL = buildApiBaseUrl();
 
 // --- Auth Helper ---
 // --- Auth Helper ---
-export async function getAuthHeaders(): Promise<HeadersInit> {
-    const token = typeof localStorage !== 'undefined' ? localStorage.getItem("token") : null;
-    return token ? {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-    } : { "Content-Type": "application/json" };
+export async function getAuthHeaders(options: { includeJsonContentType?: boolean } = {}): Promise<HeadersInit> {
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+    const includeJsonContentType = options.includeJsonContentType ?? true;
+
+    const headers: Record<string, string> = {};
+    if (includeJsonContentType) headers["Content-Type"] = "application/json";
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    return headers;
 }
 
 export async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
-    const headers = await getAuthHeaders();
-    const config = {
-        ...options,
-        headers: {
-            ...headers,
-            ...options.headers,
-        },
-    };
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+    const mergedHeaders = new Headers(options.headers);
 
-    const response = await fetch(url, config);
+    if (token && !mergedHeaders.has("Authorization")) {
+        mergedHeaders.set("Authorization", `Bearer ${token}`);
+    }
+
+    const hasBody = options.body !== undefined && options.body !== null;
+    const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+    if (hasBody && !isFormData && !mergedHeaders.has("Content-Type")) {
+        mergedHeaders.set("Content-Type", "application/json");
+    }
+
+    const response = await apiFetch(url, {
+        ...options,
+        headers: mergedHeaders,
+    });
 
     if (response.status === 401) {
         if (typeof window !== "undefined") {
