@@ -64,7 +64,7 @@ function DesignStudioContent() {
     const [isLibraryLoading, setIsLibraryLoading] = useState(false);
     const [libraryPage, setLibraryPage] = useState(1);
     useModalScroll(!!previewDesign || isScheduleOpen);
-    const LIBRARY_PAGE_SIZE = 20;
+    const LIBRARY_PAGE_SIZE = 10;
 
     const filteredDesigns = recentDesigns.filter(d => {
         const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase()) || d.prompt.toLowerCase().includes(searchQuery.toLowerCase());

@@ -76,7 +76,7 @@ function ContentStudioContent() {
     const [isLibraryLoading, setIsLibraryLoading] = useState(false);
     const [libraryPage, setLibraryPage] = useState(1);
     useModalScroll(!!previewContent || isScheduleOpen);
-    const LIBRARY_PAGE_SIZE = 20;
+    const LIBRARY_PAGE_SIZE = 10;
 
     // Lists
     const platforms = [
