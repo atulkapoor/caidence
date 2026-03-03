@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { CreditCard, Download, Check, Loader2 } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE_URL, authenticatedFetch } from "@/lib/api/core";
 
 export default function BillingSettings() {
     const [currentPlan, setCurrentPlan] = useState("Pro Agency");
@@ -13,13 +12,8 @@ export default function BillingSettings() {
     const handleUpgrade = async (plan: string) => {
         setSwitching(plan);
         try {
-            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-
-            const res = await fetch(`${API_BASE}/api/v1/admin/organization/plan`, {
+            const res = await authenticatedFetch(`${API_BASE_URL}/admin/organization/plan`, {
                 method: 'PUT',
-                headers,
                 body: JSON.stringify({ plan_name: plan.toLowerCase(), plan_tier: plan }),
             });
 

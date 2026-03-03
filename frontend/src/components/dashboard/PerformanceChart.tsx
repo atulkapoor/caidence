@@ -72,8 +72,8 @@ export function PerformanceChart({ data, currentRange, onRangeChange }: Performa
             </div>
 
             {/* Chart */}
-            <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[300px] w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                     <BarChart
                         data={data}
                         margin={{ top: 10, right: 10, left: -20, bottom: 0 }}

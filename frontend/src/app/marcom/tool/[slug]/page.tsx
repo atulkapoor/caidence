@@ -8,8 +8,7 @@ import { ArrowLeft, Sparkles, Copy, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
-
-const API_Base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "@/lib/api/core";
 
 // Map Tailwind color strings to actual CSS gradients
 const gradientMap: Record<string, string> = {
@@ -70,7 +69,7 @@ export default function ToolRunnerPage() {
             const headers: any = { "Content-Type": "application/json" };
             if (token) headers["Authorization"] = `Bearer ${token}`;
 
-            const res = await fetch(`${API_Base}/api/v1/marcom/generate`, {
+            const res = await fetch(`${API_BASE_URL}/marcom/generate`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify({

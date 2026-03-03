@@ -5,6 +5,7 @@ import { AuthLayout } from "@/components/layout/AuthLayout";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api/core";
 
 function ForgotPasswordContent() {
     const [email, setEmail] = useState("");
@@ -21,7 +22,7 @@ function ForgotPasswordContent() {
         setIsLoading(true);
         try {
             // Call backend API for password reset
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/auth/password-reset-request`, {
+            const response = await fetch(`${API_BASE_URL}/auth/password-reset-request`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email })

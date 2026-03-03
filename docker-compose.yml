@@ -47,7 +47,7 @@ services:
       - .env
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
       - INTERNAL_API_URL=http://backend:8000
     volumes:
       - /app/node_modules

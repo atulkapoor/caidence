@@ -70,7 +70,7 @@ Set in `docker-compose.prod.yml` or a `.env.local` file at the Next.js root:
 
 | Variable | Development | Production |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000/api` | `https://your-domain.com/api` |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000/api/v1` | `https://your-domain.com/api/v1` |
 | `INTERNAL_API_URL` | `http://backend:8000` | `http://backend:8000` (internal Docker network) |
 | `NODE_ENV` | `development` | `production` |
 
