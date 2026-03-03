@@ -1,4 +1,4 @@
-import { API_BASE_URL, getAuthHeaders } from "./core";
+import { API_BASE_URL, authenticatedFetch } from "./core";
 
 export interface ContentGeneration {
     id: number;
@@ -38,21 +38,20 @@ let mockGenerations: ContentGeneration[] = [
 ];
 
 export async function generateContent(data: GenerateContentRequest): Promise<ContentGeneration> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/content/generate`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/content/generate`, {
         method: "POST",
-        headers,
         body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error("Failed to generate content");
+    if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.detail || "Failed to generate content");
+    }
     return res.json();
 }
 
 export async function saveContent(data: any): Promise<ContentGeneration> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/content/save`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/content/save`, {
         method: "POST",
-        headers,
         body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error("Failed to save content");
@@ -60,24 +59,20 @@ export async function saveContent(data: any): Promise<ContentGeneration> {
 }
 
 export async function fetchContentGenerations(): Promise<ContentGeneration[]> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/content`, { headers });
+    const res = await authenticatedFetch(`${API_BASE_URL}/content`);
     if (!res.ok) throw new Error("Failed to fetch content history");
     return res.json();
 }
 
 export async function fetchContentGenerationById(id: number): Promise<ContentGeneration> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/content/${id}`, { headers });
+    const res = await authenticatedFetch(`${API_BASE_URL}/content/${id}`);
     if (!res.ok) throw new Error("Failed to fetch content details");
     return res.json();
 }
 
 export async function deleteContent(id: number): Promise<void> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/content/${id}`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/content/${id}`, {
         method: "DELETE",
-        headers
     });
     if (!res.ok) throw new Error("Failed to delete content");
 }

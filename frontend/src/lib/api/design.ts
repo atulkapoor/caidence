@@ -1,4 +1,4 @@
-import { API_BASE_URL, getAuthHeaders } from "./core";
+import { API_BASE_URL, authenticatedFetch } from "./core";
 
 export interface DesignAsset {
     id: number;
@@ -31,17 +31,21 @@ function normalizeDesignImageUrl(imageUrl?: string | null): string {
         return imageUrl;
     }
     if (imageUrl.startsWith("/")) {
-        const apiOrigin = new URL(API_BASE_URL).origin;
-        return `${apiOrigin}${imageUrl}`;
+        try {
+            const apiOrigin = API_BASE_URL.startsWith("http")
+                ? new URL(API_BASE_URL).origin
+                : (typeof window !== "undefined" ? window.location.origin : "");
+            return apiOrigin ? `${apiOrigin}${imageUrl}` : imageUrl;
+        } catch {
+            return imageUrl;
+        }
     }
     return imageUrl;
 }
 
 export async function generateDesign(data: GenerateDesignRequest): Promise<DesignAsset> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/design/generate`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/design/generate`, {
         method: "POST",
-        headers,
         body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error("Failed to generate design");
@@ -59,10 +63,8 @@ export async function saveDesign(data: {
     brand_colors?: string;
     reference_image?: string;
 }): Promise<DesignAsset> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/design/save`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/design/save`, {
         method: "POST",
-        headers,
         body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error("Failed to save design");
@@ -74,10 +76,25 @@ export async function saveDesign(data: {
 }
 
 export async function fetchDesignAssets(): Promise<DesignAsset[]> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/design/`, { headers });
-    if (!res.ok) throw new Error("Failed to fetch design assets");
-    const assets = await res.json();
+    let res = await authenticatedFetch(`${API_BASE_URL}/design`);
+    if (!res.ok) {
+        // Fallback for backends configured with trailing slash routing.
+        res = await authenticatedFetch(`${API_BASE_URL}/design/`);
+    }
+    if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.detail || "Failed to fetch design assets");
+    }
+
+    const payload = await res.json();
+    const assets = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.items)
+            ? payload.items
+            : Array.isArray(payload?.data)
+                ? payload.data
+                : [];
+
     return assets.map((asset: DesignAsset) => ({
         ...asset,
         image_url: normalizeDesignImageUrl(asset.image_url),
@@ -85,8 +102,7 @@ export async function fetchDesignAssets(): Promise<DesignAsset[]> {
 }
 
 export async function fetchDesignAssetById(id: number): Promise<DesignAsset> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/design/${id}`, { headers });
+    const res = await authenticatedFetch(`${API_BASE_URL}/design/${id}`);
     if (!res.ok) throw new Error(`Failed to fetch design asset with id ${id}`);
     const asset = await res.json();
     return {
@@ -96,10 +112,8 @@ export async function fetchDesignAssetById(id: number): Promise<DesignAsset> {
 }
 
 export async function deleteDesign(id: number): Promise<void> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/design/${id}`, {
+    const res = await authenticatedFetch(`${API_BASE_URL}/design/${id}`, {
         method: "DELETE",
-        headers,
     });
     if (!res.ok) throw new Error(`Failed to delete design asset with id ${id}`);
 }
