@@ -31,6 +31,7 @@ class CampaignDraft(BaseModel):
 
 class EnhanceInput(BaseModel):
     text: str
+    model: Optional[str] = None
 
 class StrategyInput(BaseModel):
     role: str
@@ -46,11 +47,8 @@ class StrategyResponse(BaseModel):
 
 @router.post("/enhance_description")
 async def enhance_description(input: EnhanceInput):
-    prompt = f"Rewrite the following campaign description to be more engaging, professional, and persuasive, but keep it concise: '{input.text}'"
     try:
-        # Use _call_llm instead of non-existent _call_ollama
-        response = await AIService._call_llm(prompt)
-        enhanced = response.strip().strip('"').strip("'")
+        enhanced = await AIService.enhance_text(input.text, input.model)
         return {"enhanced_text": enhanced}
     except Exception as e:
         print(f"Enhance Error: {e}")

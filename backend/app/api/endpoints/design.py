@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 from app.core.database import get_db
 from app.models import models
 from app.schemas import schemas
@@ -50,24 +50,40 @@ async def get_design_image(
 async def get_design_assets(
     skip: int = 0,
     limit: int = 100,
+    q: str | None = Query(default=None),
+    style: str | None = Query(default=None),
+    response: Response = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_design_read)
 ):
-    if current_user.role == "super_admin":
-        result = await db.execute(
-            select(models.DesignAsset)
-            .order_by(models.DesignAsset.created_at.desc())
-            .offset(skip)
-            .limit(limit)
+    filters = []
+    if current_user.role != "super_admin":
+        filters.append(models.DesignAsset.user_id == current_user.id)
+    if q:
+        search = f"%{q.strip()}%"
+        filters.append(
+            (models.DesignAsset.title.ilike(search))
+            | (models.DesignAsset.prompt.ilike(search))
         )
-    else:
-        result = await db.execute(
-            select(models.DesignAsset)
-            .where(models.DesignAsset.user_id == current_user.id)
-            .order_by(models.DesignAsset.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+    if style and style != "All Types":
+        filters.append(models.DesignAsset.style == style)
+
+    total_query = select(func.count(models.DesignAsset.id))
+    if filters:
+        total_query = total_query.where(*filters)
+    total = (await db.execute(total_query)).scalar() or 0
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+
+    list_query = (
+        select(models.DesignAsset)
+        .order_by(models.DesignAsset.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    if filters:
+        list_query = list_query.where(*filters)
+    result = await db.execute(list_query)
     
     assets = result.scalars().all()
     response_data = []
@@ -109,7 +125,7 @@ async def generate_design(
     current_user: User = Depends(require_design_write)
 ):
     try:
-        image_url = await AIService.generate_image(
+        image_payload = await AIService.generate_image(
             title=request.title,
             style=request.style,
             prompt=request.prompt,
@@ -117,7 +133,9 @@ async def generate_design(
             brand_colors=request.brand_colors,
             reference_image=request.reference_image,
             model=request.model,
+            return_meta=True,
         )
+        image_url = image_payload.get("image_url") if isinstance(image_payload, dict) else image_payload
 
         # Return only generated image
         return {
@@ -128,6 +146,8 @@ async def generate_design(
             "image_url": image_url,
             "brand_colors": request.brand_colors,
             "reference_image": request.reference_image,
+            "image_model_used": image_payload.get("image_model_used") if isinstance(image_payload, dict) else None,
+            "image_fallback_used": bool(image_payload.get("image_fallback_used")) if isinstance(image_payload, dict) else False,
         }
 
     except Exception as e:

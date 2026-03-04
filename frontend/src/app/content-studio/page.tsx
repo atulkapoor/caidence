@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
 import { toast } from "sonner";
-import { generateContent, generateDesign, fetchContentGenerations, ContentGeneration, saveContent, deleteContent, enhanceDescription } from "@/lib/api";
+import { generateContent, fetchContentGenerations, fetchContentGenerationsPage, ContentGeneration, saveContent, deleteContent, enhanceDescription } from "@/lib/api";
 import { getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost, type PublishPostResponse } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useState, Suspense } from "react";
@@ -75,8 +75,9 @@ function ContentStudioContent() {
     const [previewContent, setPreviewContent] = useState<ContentGeneration | null>(null);
     const [isLibraryLoading, setIsLibraryLoading] = useState(false);
     const [libraryPage, setLibraryPage] = useState(1);
+    const [totalLibraryItems, setTotalLibraryItems] = useState(0);
     useModalScroll(!!previewContent || isScheduleOpen);
-    const LIBRARY_PAGE_SIZE = 10;
+    const LIBRARY_PAGE_SIZE = 12;
 
     // Lists
     const platforms = [
@@ -183,14 +184,14 @@ function ContentStudioContent() {
     }, []);
 
     useEffect(() => {
-        if (activeTab === "library") {
-            loadHistory();
-        }
-    }, [activeTab]);
-
-    useEffect(() => {
         setLibraryPage(1);
     }, [searchQuery, filterPlatform]);
+
+    useEffect(() => {
+        if (activeTab === "library") {
+            loadHistory(true);
+        }
+    }, [activeTab, libraryPage, searchQuery, filterPlatform]);
 
     useEffect(() => {
         if (!pendingCampaignTitle || campaignId !== null || availableCampaigns.length === 0) {
@@ -231,7 +232,21 @@ function ContentStudioContent() {
             setIsLibraryLoading(true);
         }
         try {
-            const data = await fetchContentGenerations();
+            if (activeTab === "library") {
+                const { items, total } = await fetchContentGenerationsPage({
+                    skip: (libraryPage - 1) * LIBRARY_PAGE_SIZE,
+                    limit: LIBRARY_PAGE_SIZE,
+                    q: searchQuery || undefined,
+                    platform: filterPlatform,
+                });
+                setRecentCreations(items);
+                setTotalLibraryItems(total);
+                const persistedPostedIds = items.filter((item) => item.is_posted).map((item) => item.id);
+                setPostedContentIds(new Set(persistedPostedIds));
+                return;
+            }
+
+            const data = await fetchContentGenerations({ skip: 0, limit: 30 });
             setRecentCreations((prev) => {
                 const incomingIds = new Set(data.map((item) => item.id));
                 const preservedPosted = prev.filter(
@@ -244,6 +259,7 @@ function ContentStudioContent() {
             });
             const persistedPostedIds = data.filter((item) => item.is_posted).map((item) => item.id);
             setPostedContentIds(new Set(persistedPostedIds));
+            setTotalLibraryItems(data.length);
         } catch (error) {
             console.error("Failed to load history", error);
         } finally {
@@ -296,7 +312,6 @@ function ContentStudioContent() {
         setPostedIndices({});
 
         try {
-            const isImageMode = selectedModel.toLowerCase().includes("nano");
             const selectedCampaign = availableCampaigns.find(c => c.id === campaignId);
             const baseRichPrompt = `
 Context: Creating ${contentType} for Social Media.
@@ -309,7 +324,7 @@ Content Brief:
 ${prompt}
             `.trim();
 
-            if (!isImageMode && selectedPlatforms.length > 1) {
+            if (selectedPlatforms.length > 1) {
                 const baseTitle = stripPlatformSuffixes(title);
                 const baseResult = await generateContent({
                     title: baseTitle,
@@ -363,50 +378,32 @@ Content Brief:
 ${prompt}
                     `.trim();
 
-                    if (isImageMode) {
-                        const result = await generateDesign({
-                            title: platformTitle,
-                            style: "Minimalist",
-                            aspect_ratio: "1:1",
-                            prompt: richPrompt,
-                            model: selectedModel,
-                        });
+                    const result = await generateContent({
+                        title: platformTitle,
+                        platform: platform,
+                        content_type: contentType,
+                        prompt: richPrompt,
+                        model: selectedModel,
+                        generate_with_image: generateWithImage,
+                        brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
+                    });
 
-                        return {
-                            contentId: null,
-                            platform: platform,
-                            result: result.image_url || "",
-                            title: withPlatformSuffix(result.title || platformTitle, platform),
-                            outputType: "image",
-                        } as GeneratedResponse;
-                    } else {
-                        const result = await generateContent({
-                            title: platformTitle,
-                            platform: platform,
-                            content_type: contentType,
-                            prompt: richPrompt,
-                            model: selectedModel,
-                            generate_with_image: generateWithImage,
-                            brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
-                        });
-
-                        return {
-                            contentId: null,
-                            platform: platform,
-                            result: result.result || "",
-                            imageUrl: result.image_url || null,
-                            brandColors: result.brand_colors || null,
-                            generateWithImage: Boolean(result.generate_with_image),
-                            title: withPlatformSuffix(result.title || platformTitle, platform),
-                            outputType: "text",
-                        } as GeneratedResponse;
-                    }
+                    return {
+                        contentId: null,
+                        platform: platform,
+                        result: result.result || "",
+                        imageUrl: result.image_url || null,
+                        brandColors: result.brand_colors || null,
+                        generateWithImage: Boolean(result.generate_with_image),
+                        title: withPlatformSuffix(result.title || platformTitle, platform),
+                        outputType: "text",
+                    } as GeneratedResponse;
                 }));
                 setCurrentResponses(generatedResponses);
             }
 
             await loadHistory();
-            toast.success(isImageMode ? "Image generated successfully!" : "Content generated successfully!");
+            toast.success("Content generated successfully!");
         } catch (error: any) {
             console.error("Generation failed", error);
             toast.error(`Generation failed: ${error.message || "Unknown error"}`);
@@ -845,18 +842,7 @@ ${prompt}
         setPostedIndices({});
     };
 
-    // Filtered Creations
-    const filteredCreations = recentCreations.filter(item => {
-        const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.result?.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesFilter = filterPlatform === "All Platforms" || item.platform === filterPlatform;
-        return matchesSearch && matchesFilter;
-    });
-    const totalLibraryPages = Math.max(1, Math.ceil(filteredCreations.length / LIBRARY_PAGE_SIZE));
-    const paginatedCreations = filteredCreations.slice(
-        (libraryPage - 1) * LIBRARY_PAGE_SIZE,
-        libraryPage * LIBRARY_PAGE_SIZE
-    );
+    const totalLibraryPages = Math.max(1, Math.ceil(totalLibraryItems / LIBRARY_PAGE_SIZE));
 
     useEffect(() => {
         if (libraryPage > totalLibraryPages) {
@@ -865,8 +851,8 @@ ${prompt}
     }, [libraryPage, totalLibraryPages]);
 
     const models = [
-        // { id: "NanoBanana", label: "Nano Banana (Image)" },
         { id: "Gemini", label: "Gemini (Content)" },
+        { id: "qwen2.5:0.5b", label: "Qwen 2.5 (Content)" },
     ];
 
     return (
@@ -1240,44 +1226,42 @@ ${prompt}
                                                 ))}
                                             </div>
 
-                                            {!selectedModel.toLowerCase().includes("nano") && (
-                                                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={generateWithImage}
+                                                        onChange={(e) => setGenerateWithImage(e.target.checked)}
+                                                        className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                                                    />
+                                                    Generate with image
+                                                </label>
+                                                {generateWithImage && (
+                                                    <div className="flex items-center gap-3">
                                                         <input
-                                                            type="checkbox"
-                                                            checked={generateWithImage}
-                                                            onChange={(e) => setGenerateWithImage(e.target.checked)}
-                                                            className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                                                            type="color"
+                                                            value={normalizeHexColor(brandColors)}
+                                                            onChange={(e) => setBrandColors(e.target.value)}
+                                                            className="h-10 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white p-1"
+                                                            title="Pick brand color"
                                                         />
-                                                        Generate with image
-                                                    </label>
-                                                    {generateWithImage && (
-                                                        <div className="flex items-center gap-3">
-                                                            <input
-                                                                type="color"
-                                                                value={normalizeHexColor(brandColors)}
-                                                                onChange={(e) => setBrandColors(e.target.value)}
-                                                                className="h-10 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white p-1"
-                                                                title="Pick brand color"
-                                                            />
-                                                            <input
-                                                                type="text"
-                                                                value={brandColors}
-                                                                onChange={(e) => setBrandColors(e.target.value)}
-                                                                onBlur={() => {
-                                                                    const normalized = toHexColorOrNull(brandColors);
-                                                                    if (normalized) setBrandColors(normalized);
-                                                                }}
-                                                                placeholder="#7c3aed or 7c3aed"
-                                                                className={`w-full p-3 bg-white border rounded-xl text-sm font-medium focus:ring-2 outline-none ${brandColors && !isValidHexColor(brandColors)
-                                                                    ? "border-rose-300 focus:ring-rose-400"
-                                                                    : "border-slate-200 focus:ring-violet-500"
-                                                                    }`}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
+                                                        <input
+                                                            type="text"
+                                                            value={brandColors}
+                                                            onChange={(e) => setBrandColors(e.target.value)}
+                                                            onBlur={() => {
+                                                                const normalized = toHexColorOrNull(brandColors);
+                                                                if (normalized) setBrandColors(normalized);
+                                                            }}
+                                                            placeholder="#7c3aed or 7c3aed"
+                                                            className={`w-full p-3 bg-white border rounded-xl text-sm font-medium focus:ring-2 outline-none ${brandColors && !isValidHexColor(brandColors)
+                                                                ? "border-rose-300 focus:ring-rose-400"
+                                                                : "border-slate-200 focus:ring-violet-500"
+                                                                }`}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </section>
 
@@ -1535,7 +1519,7 @@ ${prompt}
                                             <p className="text-slate-500 font-medium">Loading content...</p>
                                         </div>
                                     )}
-                                    {!isLibraryLoading && paginatedCreations.map((item) => (
+                                    {!isLibraryLoading && recentCreations.map((item) => (
                                         <div
                                             key={item.id}
                                             onClick={() => setPreviewContent(item)}
@@ -1625,7 +1609,7 @@ ${prompt}
                                             </div>
                                         </div>
                                     ))}
-                                    {!isLibraryLoading && filteredCreations.length === 0 && (
+                                    {!isLibraryLoading && recentCreations.length === 0 && (
                                         <div className="col-span-full py-20 text-center">
                                             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                                 <History className="w-6 h-6 text-slate-400" />
@@ -1634,10 +1618,10 @@ ${prompt}
                                         </div>
                                     )}
                                 </div>
-                                {!isLibraryLoading && filteredCreations.length > 0 && (
+                                {!isLibraryLoading && totalLibraryItems > 0 && (
                                     <div className="mt-6 flex items-center justify-between bg-white border border-slate-200 rounded-xl px-4 py-3">
                                         <p className="text-sm text-slate-500">
-                                            Showing {(libraryPage - 1) * LIBRARY_PAGE_SIZE + 1}-{Math.min(libraryPage * LIBRARY_PAGE_SIZE, filteredCreations.length)} of {filteredCreations.length}
+                                            Showing {(libraryPage - 1) * LIBRARY_PAGE_SIZE + 1}-{Math.min((libraryPage - 1) * LIBRARY_PAGE_SIZE + recentCreations.length, totalLibraryItems)} of {totalLibraryItems}
                                         </p>
                                         <div className="flex items-center gap-2">
                                             <button

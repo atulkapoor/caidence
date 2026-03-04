@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
-import { generateDesign, generateContent, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
+import { generateDesign, fetchDesignAssetsPage, DesignAsset, enhanceDescription } from "@/lib/api";
 import { saveDesign } from "@/lib/api/design";
 import { fetchScheduledPosts, getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost } from "@/lib/api/social";
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -64,20 +64,12 @@ function DesignStudioContent() {
     const [previewDesign, setPreviewDesign] = useState<DesignAsset | null>(null);
     const [isLibraryLoading, setIsLibraryLoading] = useState(false);
     const [libraryPage, setLibraryPage] = useState(1);
+    const [totalLibraryItems, setTotalLibraryItems] = useState(0);
     const scheduleInputRef = useRef<HTMLInputElement | null>(null);
     useModalScroll(!!previewDesign || isScheduleOpen);
-    const LIBRARY_PAGE_SIZE = 10;
+    const LIBRARY_PAGE_SIZE = 12;
 
-    const filteredDesigns = recentDesigns.filter(d => {
-        const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase()) || d.prompt.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesType = typeFilter === "All Types" || d.style === typeFilter; // Assuming style maps roughly to type for now, or just filtering by style
-        return matchesSearch && matchesType;
-    });
-    const totalLibraryPages = Math.max(1, Math.ceil(filteredDesigns.length / LIBRARY_PAGE_SIZE));
-    const paginatedDesigns = filteredDesigns.slice(
-        (libraryPage - 1) * LIBRARY_PAGE_SIZE,
-        libraryPage * LIBRARY_PAGE_SIZE
-    );
+    const totalLibraryPages = Math.max(1, Math.ceil(totalLibraryItems / LIBRARY_PAGE_SIZE));
 
     useEffect(() => {
         // Check for edit mode
@@ -87,14 +79,14 @@ function DesignStudioContent() {
     }, []);
 
     useEffect(() => {
+        setLibraryPage(1);
+    }, [searchQuery, typeFilter]);
+
+    useEffect(() => {
         if (activeTab === "library") {
             loadDesigns();
         }
-    }, [activeTab]);
-
-    useEffect(() => {
-        setLibraryPage(1);
-    }, [searchQuery, typeFilter]);
+    }, [activeTab, libraryPage, searchQuery, typeFilter]);
 
     useEffect(() => {
         if (libraryPage > totalLibraryPages) {
@@ -139,7 +131,11 @@ function DesignStudioContent() {
             const asset = await fetchDesignAssetById(id);
             if (asset) {
                 const activeScheduledStatuses = new Set(["scheduled", "processing", "queued", "pending"]);
-                const scheduledPosts = await fetchScheduledPosts().catch(() => []);
+                const scheduledPosts = await fetchScheduledPosts({
+                    scope: "design",
+                    status_in: "scheduled,processing,queued,pending",
+                    limit: 500,
+                }).catch(() => []);
                 const isScheduled = scheduledPosts.some(
                     (post) => post.design_asset_id === asset.id && activeScheduledStatuses.has(String(post.status || "").toLowerCase()),
                 );
@@ -161,11 +157,22 @@ function DesignStudioContent() {
     const loadDesigns = async () => {
         setIsLibraryLoading(true);
         try {
-            const [data, scheduledPosts] = await Promise.all([
-                fetchDesignAssets(),
-                fetchScheduledPosts().catch(() => []),
+            const [paged, scheduledPosts] = await Promise.all([
+                fetchDesignAssetsPage({
+                    skip: (libraryPage - 1) * LIBRARY_PAGE_SIZE,
+                    limit: LIBRARY_PAGE_SIZE,
+                    q: searchQuery || undefined,
+                    style: typeFilter,
+                }),
+                fetchScheduledPosts({
+                    scope: "design",
+                    status_in: "scheduled,processing,queued,pending",
+                    limit: 500,
+                }).catch(() => []),
             ]);
+            const data = paged.items;
             setRecentDesigns(data);
+            setTotalLibraryItems(paged.total);
             const persistedPostedIds = data.filter((item) => item.is_posted).map((item) => item.id);
             setPostedDesignIds(new Set(persistedPostedIds));
             const activeScheduledStatuses = new Set(["scheduled", "processing", "queued", "pending"]);
@@ -242,46 +249,31 @@ function DesignStudioContent() {
         setIsGenerating(true);
 
         try {
-            const isContentMode = selectedModel.toLowerCase().includes("gemini");
-            if (isContentMode) {
-                const content = await generateContent({
-                    title: title || "Untitled Content",
-                    platform: "General",
-                    content_type: "Post",
-                    prompt: prompt,
-                    model: selectedModel,
-                });
-                setGeneratedContent(content.result || "");
-                setGeneratedTextPosted(false);
-                setActiveTab("generate");
-                toast.success("Content generated successfully!");
-            } else {
-                const generated = await generateDesign({
-                    title: title || "Untitled Design",
-                    style: selectedStyle,
-                    aspect_ratio: aspectRatio,
-                    prompt: prompt,
-                    model: selectedModel,
-                    brand_colors: brandColors,
-                    reference_image: referenceImage
-                });
-                setGeneratedDesignPreview({
-                    title: generated.title || title || "Untitled Design",
-                    style: generated.style || selectedStyle,
-                    aspect_ratio: generated.aspect_ratio || aspectRatio,
-                    prompt: generated.prompt || prompt,
-                    image_url: generated.image_url,
-                    brand_colors: generated.brand_colors || brandColors || undefined,
-                    reference_image: generated.reference_image || referenceImage || undefined,
-                });
-                setGeneratedContent("");
-                setActiveTab("generate");
-                toast.success(
-                    editingDesignId
-                        ? "Design regenerated. Review preview and save changes."
-                        : "Design generated. Review preview and save to library.",
-                );
-            }
+            const generated = await generateDesign({
+                title: title || "Untitled Design",
+                style: selectedStyle,
+                aspect_ratio: aspectRatio,
+                prompt: prompt,
+                model: selectedModel,
+                brand_colors: brandColors,
+                reference_image: referenceImage
+            });
+            setGeneratedDesignPreview({
+                title: generated.title || title || "Untitled Design",
+                style: generated.style || selectedStyle,
+                aspect_ratio: generated.aspect_ratio || aspectRatio,
+                prompt: generated.prompt || prompt,
+                image_url: generated.image_url,
+                brand_colors: generated.brand_colors || brandColors || undefined,
+                reference_image: generated.reference_image || referenceImage || undefined,
+            });
+            setGeneratedContent("");
+            setActiveTab("generate");
+            toast.success(
+                editingDesignId
+                    ? "Design regenerated. Review preview and save changes."
+                    : "Design generated. Review preview and save to library.",
+            );
         } catch (error) {
             console.error("Failed to generate design", error);
             toast.error("Generation failed. Please try again.");
@@ -394,8 +386,8 @@ function DesignStudioContent() {
     const styles = ["Photorealistic", "3D Render", "Minimalist", "Cyberpunk", "Watercolor", "Sketch", "Abstract", "Corporate"];
     const ratios = ["16:9", "1:1", "9:16", "4:3"];
     const models = [
-        { id: "NanoBanana", label: "Nano Banana (Image)" },
-        // { id: "Gemini", label: "Gemini (Content)" },
+        { id: "NanoBanana", label: "Nano Banana" },
+        { id: "IDKiro/sdxs-512-0.9", label: "IDKiro/sdxs-512-0.9" },
     ];
 
 
@@ -1090,8 +1082,8 @@ function DesignStudioContent() {
                                         <div className="w-10 h-10 mx-auto border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin mb-4"></div>
                                         <p className="text-slate-500 font-medium">Loading designs...</p>
                                     </div>
-                                ) : filteredDesigns.length > 0 ? (
-                                    paginatedDesigns.map((asset) => (
+                                ) : recentDesigns.length > 0 ? (
+                                    recentDesigns.map((asset) => (
                                         <div key={asset.id} className="group flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
                                             {/* Image Preview */}
                                             <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden cursor-pointer" onClick={() => setPreviewDesign(asset)}>
@@ -1243,10 +1235,10 @@ function DesignStudioContent() {
                                     </div>
                                 )}
                             </div>
-                            {!isLibraryLoading && filteredDesigns.length > 0 && (
+                            {!isLibraryLoading && totalLibraryItems > 0 && (
                                 <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-4 py-3">
                                     <p className="text-sm text-slate-500">
-                                        Showing {(libraryPage - 1) * LIBRARY_PAGE_SIZE + 1}-{Math.min(libraryPage * LIBRARY_PAGE_SIZE, filteredDesigns.length)} of {filteredDesigns.length}
+                                        Showing {(libraryPage - 1) * LIBRARY_PAGE_SIZE + 1}-{Math.min((libraryPage - 1) * LIBRARY_PAGE_SIZE + recentDesigns.length, totalLibraryItems)} of {totalLibraryItems}
                                     </p>
                                     <div className="flex items-center gap-2">
                                         <button

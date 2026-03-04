@@ -2,8 +2,8 @@ import re
 import asyncio
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_content_read, require_content_write
@@ -33,24 +33,41 @@ def _normalize_platform_title(title: str, platform: str) -> str:
 async def get_content_generations(
     skip: int = 0,
     limit: int = 100,
+    q: str | None = Query(default=None),
+    platform: str | None = Query(default=None),
+    response: Response = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_content_read),
 ):
-    if current_user.role == "super_admin":
-        result = await db.execute(
-            select(models.ContentGeneration)
-            .order_by(models.ContentGeneration.created_at.desc())
-            .offset(skip)
-            .limit(limit)
+    filters = []
+    if current_user.role != "super_admin":
+        filters.append(models.ContentGeneration.user_id == current_user.id)
+    if q:
+        search = f"%{q.strip()}%"
+        filters.append(
+            (models.ContentGeneration.title.ilike(search))
+            | (models.ContentGeneration.result.ilike(search))
         )
-    else:
-        result = await db.execute(
-            select(models.ContentGeneration)
-            .where(models.ContentGeneration.user_id == current_user.id)
-            .order_by(models.ContentGeneration.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+    if platform and platform != "All Platforms":
+        filters.append(models.ContentGeneration.platform == platform)
+
+    total_query = select(func.count(models.ContentGeneration.id))
+    if filters:
+        total_query = total_query.where(*filters)
+    total = (await db.execute(total_query)).scalar() or 0
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+
+    list_query = (
+        select(models.ContentGeneration)
+        .order_by(models.ContentGeneration.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    if filters:
+        list_query = list_query.where(*filters)
+
+    result = await db.execute(list_query)
     return result.scalars().all()
 
 
@@ -95,8 +112,10 @@ async def generate_content(
                 model=request.model,
             )
             generated_image = request.image_url
+            image_model_used = "provided"
+            image_fallback_used = False
         else:
-            generated_text, generated_image = await asyncio.gather(
+            generated_text, generated_image_payload = await asyncio.gather(
                 AIService.generate_content(
                     normalized_title,
                     request.platform,
@@ -111,8 +130,22 @@ async def generate_content(
                     aspect_ratio="1:1",
                     brand_colors=request.brand_colors,
                     model="NanoBanana",
+                    return_meta=True,
                 ) if generate_with_image else asyncio.sleep(0, result=None),
             )
+            generated_image = (
+                generated_image_payload.get("image_url")
+                if isinstance(generated_image_payload, dict)
+                else None
+            )
+            image_model_used = (
+                generated_image_payload.get("image_model_used")
+                if isinstance(generated_image_payload, dict)
+                else None
+            )
+            image_fallback_used = bool(
+                generated_image_payload.get("image_fallback_used")
+            ) if isinstance(generated_image_payload, dict) else False
         return {
             "title": normalized_title,
             "platform": request.platform,
@@ -122,6 +155,9 @@ async def generate_content(
             "image_url": generated_image,
             "brand_colors": request.brand_colors,
             "generate_with_image": generate_with_image,
+            "text_model_used": AIService.get_effective_content_model_name(request.model),
+            "image_model_used": image_model_used if generate_with_image else None,
+            "image_fallback_used": image_fallback_used if generate_with_image else False,
         }
     except HTTPException:
         raise

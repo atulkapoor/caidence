@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -611,8 +611,12 @@ async def create_scheduled_post(
 @router.get("/scheduled-posts", response_model=list[ScheduledPostResponse])
 async def list_scheduled_posts(
     status: Optional[str] = Query(default=None),
+    status_in: Optional[str] = Query(default=None, description="Comma-separated statuses"),
+    scope: Optional[Literal["content", "design"]] = Query(default=None),
     from_date: Optional[datetime] = Query(default=None),
     to_date: Optional[datetime] = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=1000),
     current_user: User = Depends(get_current_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -624,14 +628,27 @@ async def list_scheduled_posts(
 
     if status:
         query = query.where(ScheduledPost.status == status.lower())
+    elif status_in:
+        statuses = [item.strip().lower() for item in status_in.split(",") if item.strip()]
+        if statuses:
+            query = query.where(ScheduledPost.status.in_(statuses))
     if from_date:
         normalized_from = from_date if from_date.tzinfo else from_date.replace(tzinfo=timezone.utc)
         query = query.where(ScheduledPost.scheduled_at >= normalized_from)
     if to_date:
         normalized_to = to_date if to_date.tzinfo else to_date.replace(tzinfo=timezone.utc)
         query = query.where(ScheduledPost.scheduled_at <= normalized_to)
+    if scope == "content":
+        query = query.where(ScheduledPost.content_id.is_not(None), ScheduledPost.design_asset_id.is_(None))
+    elif scope == "design":
+        query = query.where(
+            or_(
+                ScheduledPost.design_asset_id.is_not(None),
+                ScheduledPost.content_id.is_(None),
+            )
+        )
 
-    rows = (await db.execute(query)).scalars().all()
+    rows = (await db.execute(query.offset(skip).limit(limit))).scalars().all()
     return [_to_scheduled_post_response(row) for row in rows]
 
 

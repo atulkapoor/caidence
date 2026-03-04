@@ -31,6 +31,11 @@ export interface GenerateContentRequest {
     [key: string]: unknown;
 }
 
+export interface ContentGenerationsPage {
+    items: ContentGeneration[];
+    total: number;
+}
+
 // Mock Data
 let mockGenerations: ContentGeneration[] = [
     { id: 1, title: "LinkedIn Thought Leadership", platform: "LinkedIn", content_type: "Post", result: "AI puts the 'Art' in Artificial Intelligence...", created_at: new Date().toISOString(), prompt: "Write about AI" },
@@ -58,10 +63,35 @@ export async function saveContent(data: any): Promise<ContentGeneration> {
     return res.json();
 }
 
-export async function fetchContentGenerations(): Promise<ContentGeneration[]> {
-    const res = await authenticatedFetch(`${API_BASE_URL}/content`);
+export async function fetchContentGenerations(params?: { skip?: number; limit?: number }): Promise<ContentGeneration[]> {
+    const query = new URLSearchParams();
+    if (typeof params?.skip === "number") query.set("skip", String(params.skip));
+    if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+
+    const res = await authenticatedFetch(`${API_BASE_URL}/content${suffix}`);
     if (!res.ok) throw new Error("Failed to fetch content history");
     return res.json();
+}
+
+export async function fetchContentGenerationsPage(params?: {
+    skip?: number;
+    limit?: number;
+    q?: string;
+    platform?: string;
+}): Promise<ContentGenerationsPage> {
+    const query = new URLSearchParams();
+    if (typeof params?.skip === "number") query.set("skip", String(params.skip));
+    if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+    if (params?.q) query.set("q", params.q);
+    if (params?.platform && params.platform !== "All Platforms") query.set("platform", params.platform);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+
+    const res = await authenticatedFetch(`${API_BASE_URL}/content${suffix}`);
+    if (!res.ok) throw new Error("Failed to fetch content history");
+    const total = Number(res.headers.get("X-Total-Count") || "0");
+    const items = await res.json();
+    return { items, total: Number.isNaN(total) ? 0 : total };
 }
 
 export async function fetchContentGenerationById(id: number): Promise<ContentGeneration> {
