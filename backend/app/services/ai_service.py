@@ -423,13 +423,10 @@ Text:
 
         # 🎯 Structured marketing prompt
         final_prompt = f"""
-        Create a professional {style} marketing design.
-
-        Headline / Title:
-        {title}
-
-        Description:
-        {prompt}
+        Create a professional {style} marketing visual for social media.
+        Use the campaign details only for visual direction, not as literal text:
+        - Campaign context: {title}
+        - Brief: {prompt}
 
         Design Requirements:
         - Eye-catching and scroll-stopping
@@ -440,7 +437,8 @@ Text:
         - Clean layout
         - Social media ready
         - Aspect ratio: {aspect_ratio}
-        - Do not include platform words like LinkedIn, Twitter, Instagram, Facebook in on-image text unless explicitly requested.
+        - No on-image text Until unless explicitly requested/tell to put text on Image.
+        - No logos, watermarks, UI chrome, or platform labels
 
         Brand Guidelines:
         - Use these brand colors: {brand_colors if brand_colors else "modern vibrant palette"}

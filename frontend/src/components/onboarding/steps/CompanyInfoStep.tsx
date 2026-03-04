@@ -40,6 +40,17 @@ export function CompanyInfoStep({ onNext, loading, stepData }: StepProps) {
     const [companySize, setCompanySize] = useState("");
     const [websiteUrl, setWebsiteUrl] = useState("");
     const [phone, setPhone] = useState("");
+    const [websiteError, setWebsiteError] = useState("");
+
+    const isValidWebsiteUrl = (value: string) => {
+        if (!value.trim()) return true;
+        try {
+            const parsed = new URL(value);
+            return (parsed.protocol === "http:" || parsed.protocol === "https:") && Boolean(parsed.hostname);
+        } catch {
+            return false;
+        }
+    };
 
     useEffect(() => {
         setCompanyName(String(stepData.company_name ?? ""));
@@ -52,6 +63,13 @@ export function CompanyInfoStep({ onNext, loading, stepData }: StepProps) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!isValidWebsiteUrl(websiteUrl)) {
+            setWebsiteError("Enter a valid URL like https://yourcompany.com");
+            return;
+        }
+
+        setWebsiteError("");
         onNext({
             company_name: companyName,
             legal_entity_name: legalEntityName,
@@ -137,10 +155,24 @@ export function CompanyInfoStep({ onNext, loading, stepData }: StepProps) {
                 <input
                     type="url"
                     value={websiteUrl}
-                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                    onChange={(e) => {
+                        setWebsiteUrl(e.target.value);
+                        if (websiteError) setWebsiteError("");
+                    }}
+                    onBlur={() => {
+                        if (!isValidWebsiteUrl(websiteUrl)) {
+                            setWebsiteError("Enter a valid URL like https://yourcompany.com");
+                        } else {
+                            setWebsiteError("");
+                        }
+                    }}
                     placeholder="https://yourcompany.com"
+                    aria-invalid={websiteError ? "true" : "false"}
                     className={inputClass}
                 />
+                {websiteError && (
+                    <p className="mt-1 text-xs font-medium text-red-500">{websiteError}</p>
+                )}
             </div>
 
             <div>
@@ -150,8 +182,10 @@ export function CompanyInfoStep({ onNext, loading, stepData }: StepProps) {
                 <input
                     type="tel"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
                     placeholder="+1 (555) 000-0000"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     className={inputClass}
                 />
             </div>

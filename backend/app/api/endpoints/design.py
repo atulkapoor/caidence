@@ -267,6 +267,14 @@ async def delete_design_asset(
     asset = result.scalar_one_or_none()
     if not asset:
         raise HTTPException(status_code=404, detail="Design asset not found")
+
+    # Keep scheduled-post history while allowing design deletion.
+    scheduled_refs = await db.execute(
+        select(models.ScheduledPost).where(models.ScheduledPost.design_asset_id == asset.id)
+    )
+    for scheduled_post in scheduled_refs.scalars().all():
+        scheduled_post.design_asset_id = None
+
     await db.delete(asset)
     await db.commit()
     return {"message": "Design asset deleted successfully"}

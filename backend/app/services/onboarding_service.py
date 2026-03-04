@@ -6,9 +6,13 @@ Supports three onboarding paths:
 - Brand (5 steps): Profile Type → Brand Identity → Target Audience → Connect Socials → Brand Guidelines
 - Creator (5 steps): Profile Type → Personal Info → Connect Socials (min 1 required) → Portfolio → Rate Card
 """
+import base64
+import binascii
 import json
+import re
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -49,6 +53,9 @@ ONBOARDING_STEPS = {
 
 class OnboardingService:
     """Manages onboarding progress for users."""
+    HEX_COLOR_REGEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
+    LOGO_DATA_URL_REGEX = re.compile(r"^data:(image/(?:png|jpeg|svg\+xml));base64,(.+)$", re.IGNORECASE)
+    MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024
 
     @staticmethod
     async def get_or_create_progress(user_id: int, db: AsyncSession) -> OnboardingProgress:
@@ -90,14 +97,27 @@ class OnboardingService:
                 raise ValueError(f"Invalid profile type: {profile_type}")
             progress.profile_type = profile_type
 
-        # Update step data
-        current_data = json.loads(progress.step_data or "{}")
-        current_data[f"step_{step_index}"] = step_data
-        progress.step_data = json.dumps(current_data)
-
         # Creator-specific guard: social connection is required at connect_socials step.
         steps = OnboardingService.get_steps(progress.profile_type)
         step = next((s for s in steps if s["index"] == step_index), None)
+
+        validated_step_data = dict(step_data)
+        if step and step["name"] == "company_info":
+            validated_step_data = OnboardingService._validate_company_info(validated_step_data)
+        elif step and step["name"] == "branding":
+            validated_step_data = OnboardingService._validate_branding(validated_step_data)
+        elif step and step["name"] == "create_brand":
+            validated_step_data = OnboardingService._validate_create_brand(validated_step_data)
+        elif step and step["name"] == "brand_identity":
+            validated_step_data = OnboardingService._validate_brand_identity(validated_step_data)
+        elif step and step["name"] == "portfolio":
+            validated_step_data = OnboardingService._validate_portfolio(validated_step_data)
+
+        # Update step data
+        current_data = json.loads(progress.step_data or "{}")
+        current_data[f"step_{step_index}"] = validated_step_data
+        progress.step_data = json.dumps(current_data)
+
         if (
             progress.profile_type == "creator"
             and step
@@ -193,3 +213,98 @@ class OnboardingService:
             "profile_type": progress.profile_type,
             "completed_at": progress.completed_at.isoformat() if progress.completed_at else None,
         }
+
+    @staticmethod
+    def _validate_company_info(step_data: dict) -> dict:
+        website_url = str(step_data.get("website_url", "")).strip()
+        phone = str(step_data.get("phone", "")).strip()
+
+        if website_url:
+            parsed = urlparse(website_url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("Website URL must be a valid http/https URL")
+            step_data["website_url"] = website_url
+
+        if phone and not phone.isdigit():
+            raise ValueError("Phone must contain digits only")
+
+        step_data["phone"] = phone
+        return step_data
+
+    @staticmethod
+    def _validate_create_brand(step_data: dict) -> dict:
+        brand_url = str(step_data.get("brand_url", "")).strip()
+        if brand_url:
+            parsed = urlparse(brand_url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("Brand URL must be a valid http/https URL")
+            step_data["brand_url"] = brand_url
+        return step_data
+
+    @staticmethod
+    def _validate_brand_identity(step_data: dict) -> dict:
+        primary_color = str(step_data.get("primary_color", "")).strip()
+        logo_url = str(step_data.get("logo_url", "")).strip()
+
+        if primary_color:
+            normalized = primary_color if primary_color.startswith("#") else f"#{primary_color}"
+            if not OnboardingService.HEX_COLOR_REGEX.match(normalized):
+                raise ValueError("Primary color must be a valid 6-digit hex color")
+            step_data["primary_color"] = normalized.upper()
+
+        if logo_url:
+            parsed = urlparse(logo_url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("Logo URL must be a valid http/https URL")
+            step_data["logo_url"] = logo_url
+
+        return step_data
+
+    @staticmethod
+    def _validate_portfolio(step_data: dict) -> dict:
+        media_kit_url = str(step_data.get("media_kit_url", "")).strip()
+        portfolio_url = str(step_data.get("portfolio_url", "")).strip()
+
+        if media_kit_url:
+            parsed = urlparse(media_kit_url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("Media Kit URL must be a valid http/https URL")
+            step_data["media_kit_url"] = media_kit_url
+
+        if portfolio_url:
+            parsed = urlparse(portfolio_url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("Portfolio URL must be a valid http/https URL")
+            step_data["portfolio_url"] = portfolio_url
+
+        return step_data
+
+    @staticmethod
+    def _validate_branding(step_data: dict) -> dict:
+        for field_name in ("primary_color", "secondary_color"):
+            color_value = str(step_data.get(field_name, "")).strip()
+            if color_value:
+                normalized = color_value if color_value.startswith("#") else f"#{color_value}"
+                if not OnboardingService.HEX_COLOR_REGEX.match(normalized):
+                    raise ValueError(f"{field_name} must be a valid 6-digit hex color")
+                step_data[field_name] = normalized.upper()
+
+        logo_data_url = step_data.get("logo_data_url")
+        if logo_data_url:
+            if not isinstance(logo_data_url, str):
+                raise ValueError("logo_data_url must be a valid image data URL")
+
+            match = OnboardingService.LOGO_DATA_URL_REGEX.match(logo_data_url)
+            if not match:
+                raise ValueError("Logo must be PNG, JPG, or SVG image")
+
+            encoded_payload = match.group(2)
+            try:
+                decoded_payload = base64.b64decode(encoded_payload, validate=True)
+            except (binascii.Error, ValueError):
+                raise ValueError("Logo image data is invalid") from None
+
+            if len(decoded_payload) > OnboardingService.MAX_LOGO_SIZE_BYTES:
+                raise ValueError("Logo file must be 5MB or smaller")
+
+        return step_data

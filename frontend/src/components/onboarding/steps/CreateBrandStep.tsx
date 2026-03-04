@@ -32,6 +32,17 @@ export function CreateBrandStep({ onNext, loading, stepData }: StepProps) {
     const [brandUrl, setBrandUrl] = useState("");
     const [targetAudience, setTargetAudience] = useState("");
     const [brandCategory, setBrandCategory] = useState("");
+    const [brandUrlError, setBrandUrlError] = useState("");
+
+    const isValidBrandUrl = (value: string) => {
+        if (!value.trim()) return true;
+        try {
+            const parsed = new URL(value);
+            return (parsed.protocol === "http:" || parsed.protocol === "https:") && Boolean(parsed.hostname);
+        } catch {
+            return false;
+        }
+    };
 
     useEffect(() => {
         setBrandName(String(stepData.brand_name ?? ""));
@@ -42,6 +53,12 @@ export function CreateBrandStep({ onNext, loading, stepData }: StepProps) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isValidBrandUrl(brandUrl)) {
+            setBrandUrlError("Enter a valid URL like https://yourbrand.com");
+            return;
+        }
+
+        setBrandUrlError("");
         onNext({
             brand_name: brandName,
             brand_url: brandUrl,
@@ -73,10 +90,24 @@ export function CreateBrandStep({ onNext, loading, stepData }: StepProps) {
                 <input
                     type="url"
                     value={brandUrl}
-                    onChange={(e) => setBrandUrl(e.target.value)}
+                    onChange={(e) => {
+                        setBrandUrl(e.target.value);
+                        if (brandUrlError) setBrandUrlError("");
+                    }}
+                    onBlur={() => {
+                        if (!isValidBrandUrl(brandUrl)) {
+                            setBrandUrlError("Enter a valid URL like https://yourbrand.com");
+                        } else {
+                            setBrandUrlError("");
+                        }
+                    }}
                     placeholder="https://yourbrand.com"
+                    aria-invalid={brandUrlError ? "true" : "false"}
                     className={inputClass}
                 />
+                {brandUrlError && (
+                    <p className="mt-1 text-xs font-medium text-red-500">{brandUrlError}</p>
+                )}
             </div>
 
             <div>
