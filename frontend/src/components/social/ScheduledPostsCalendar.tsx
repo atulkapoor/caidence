@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Calendar, momentLocalizer, Views } from "react-big-calendar";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Calendar, momentLocalizer, Views, type View } from "react-big-calendar";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { CalendarClock, CheckCircle2, Clock3, X } from "lucide-react";
@@ -38,43 +38,51 @@ const platformColors: Record<string, { bg: string; color: string; border: string
 const toLocalDateTime = (iso: string) => new Date(iso).toLocaleString();
 
 const hasValue = (value: number | null | undefined) => value !== null && value !== undefined;
+const getVisibleRange = (date: Date, view: View) => {
+    const base = moment(date);
+    if (view === Views.DAY) {
+        return {
+            start: base.clone().startOf("day").toDate(),
+            end: base.clone().endOf("day").toDate(),
+        };
+    }
+    if (view === Views.WEEK) {
+        return {
+            start: base.clone().startOf("week").toDate(),
+            end: base.clone().endOf("week").toDate(),
+        };
+    }
+    return {
+        start: base.clone().startOf("month").startOf("week").toDate(),
+        end: base.clone().endOf("month").endOf("week").toDate(),
+    };
+};
 
 export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPostsCalendarProps) {
     const [allPosts, setAllPosts] = useState<ScheduledPost[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [currentDate, setCurrentDate] = useState<Date>(new Date());
+    const [currentView, setCurrentView] = useState<View>(Views.MONTH);
+    const hasLoadedOnce = useRef(false);
 
     useEffect(() => {
-        const loadPosts = async () => {
-            setIsLoading(true);
+        const loadPosts = async (initialLoad = false) => {
+            if (initialLoad) {
+                setIsLoading(true);
+            }
             try {
-                const allPostsResponse = await fetchScheduledPosts().catch(() => [] as ScheduledPost[]);
-                const statusesToFetch = [
-                    "scheduled",
-                    "queued",
-                    "pending",
-                    "processing",
-                    "published",
-                    "posted",
-                    "success",
-                    "completed",
-                ];
+                const visibleRange = getVisibleRange(currentDate, currentView);
+                const rows = await fetchScheduledPosts({
+                    scope,
+                    status_in: "scheduled,queued,pending,processing,published,posted,success,completed",
+                    from_date: visibleRange.start.toISOString(),
+                    to_date: visibleRange.end.toISOString(),
+                    limit: 500,
+                }).catch(() => [] as ScheduledPost[]);
 
-                const responses = await Promise.all(
-                    statusesToFetch.map((status) =>
-                        fetchScheduledPosts({ status }).catch(() => [] as ScheduledPost[])
-                    )
-                );
-
-                const merged = [...allPostsResponse, ...responses.flat()];
-                const byId = new Map<number, ScheduledPost>();
-                for (const post of merged) {
-                    byId.set(post.id, post);
-                }
-
-                // Keep newest first for predictable rendering/order.
-                const deduped = Array.from(byId.values()).sort(
+                const deduped = rows.sort(
                     (a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()
                 );
                 setAllPosts(deduped);
@@ -82,19 +90,30 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
                 console.error("Failed to load scheduled posts", error);
                 setAllPosts([]);
             } finally {
-                setIsLoading(false);
+                if (initialLoad) {
+                    setIsLoading(false);
+                }
             }
         };
 
-        loadPosts();
-        const intervalId = window.setInterval(loadPosts, 15000);
-        return () => window.clearInterval(intervalId);
-    }, []);
+        const initialLoad = !hasLoadedOnce.current;
+        loadPosts(initialLoad);
+        if (!hasLoadedOnce.current) {
+            hasLoadedOnce.current = true;
+        }
+    }, [currentDate, currentView, scope]);
 
     const posts = useMemo(() => {
+        const visibleRange = getVisibleRange(currentDate, currentView);
+        const startMs = visibleRange.start.getTime();
+        const endMs = visibleRange.end.getTime();
+
         return allPosts.filter((post) => {
             const status = String(post.status || "").toLowerCase();
             if (excludedStatuses.has(status)) return false;
+            const scheduledMs = new Date(post.scheduled_at).getTime();
+            if (Number.isFinite(startMs) && scheduledMs < startMs) return false;
+            if (Number.isFinite(endMs) && scheduledMs > endMs) return false;
 
             const hasContentRef = hasValue(post.content_id);
             const hasDesignRef = hasValue(post.design_asset_id);
@@ -109,7 +128,7 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
             // 2) fallback posts with no content_id (common for some design schedules)
             return hasDesignRef || !hasContentRef;
         });
-    }, [allPosts, scope]);
+    }, [allPosts, scope, currentDate, currentView]);
 
     const events = useMemo<ScheduledEvent[]>(
         () =>
@@ -179,10 +198,14 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
                         startAccessor="start"
                         endAccessor="end"
                         style={{ height: "100%" }}
+                        date={currentDate}
+                        view={currentView}
                         views={[Views.MONTH, Views.WEEK, Views.DAY]}
                         defaultView={Views.MONTH}
                         popup
                         doShowMoreDrillDown={false}
+                        onNavigate={(date) => setCurrentDate(date)}
+                        onView={(view) => setCurrentView(view)}
                         onSelectEvent={(event: ScheduledEvent) => setSelectedPost(event.post)}
                         eventPropGetter={(event: ScheduledEvent) => {
                             const key = String(event.post.platform || "").toLowerCase();

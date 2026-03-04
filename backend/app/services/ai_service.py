@@ -15,17 +15,14 @@ Configuration via environment variables:
 
 import asyncio
 import base64
-from http.client import HTTPException
 import os
 import json
 import random
 import logging
-from urllib import response
-from click import style
 import google.generativeai as genai
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
-import asyncio
+from fastapi import HTTPException
 
 
 import httpx
@@ -45,6 +42,7 @@ logger = logging.getLogger(__name__)
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()
 LLM_MODEL = os.getenv("LLM_MODEL", "")  # Empty = auto-detect
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+AI_WORKER_URL = os.getenv("AI_WORKER_URL", "http://ai_worker:8001")
 
 # Set Ollama API base for LiteLLM
 if LLM_PROVIDER == "ollama":
@@ -77,7 +75,27 @@ class AIService:
             return "nanobanana"
         if "gemini" in compact:
             return "gemini"
+        if "qwen" in compact:
+            return "qwen"
+        if "sdxs" in compact or "diffusion" in compact or "idkiro" in compact:
+            return "diffusion"
         return "unknown"
+
+    @staticmethod
+    def _resolve_ollama_model(model: Optional[str]) -> str:
+        normalized = (model or "").strip()
+        if not normalized:
+            return "qwen2.5:0.5b"
+        model_key = AIService._normalize_model_name(normalized)
+        if model_key == "qwen" and normalized.lower() in {"qwen", "qwen2.5"}:
+            return "qwen2.5:0.5b"
+        return normalized
+
+    @staticmethod
+    def get_effective_content_model_name(model: Optional[str]) -> str:
+        if AIService._normalize_model_name(model) == "qwen":
+            return AIService._resolve_ollama_model(model)
+        return "Gemini"
 
     @staticmethod
     def _get_google_model(model: Optional[str], task: str = "content"):
@@ -211,6 +229,32 @@ class AIService:
             return f"Error from AI: {e}"
 
     @staticmethod
+    async def _call_ollama_model(
+        prompt: str,
+        model: str,
+        *,
+        system_prompt: Optional[str] = None,
+        json_mode: bool = False,
+    ) -> str:
+        final_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                payload = {
+                    "model": model,
+                    "prompt": final_prompt,
+                    "stream": False,
+                }
+                if json_mode:
+                    payload["format"] = "json"
+                response = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+                response.raise_for_status()
+                result = response.json()
+                return result.get("response", "")
+        except Exception as e:
+            logger.error(f"Ollama model '{model}' error: {e}")
+            raise
+
+    @staticmethod
     def _clean_text_output(text: str) -> str:
         # Keep formatting but remove common wrapper noise from model outputs.
         cleaned = (text or "").strip()
@@ -247,10 +291,8 @@ class AIService:
         platform = platform or "General"
         content_type = content_type or "Post"
         prompt = prompt or ""
-        selected_model, selected_model_name = AIService._get_google_model(
-            model,
-            task="content",
-        )
+        requested_model_name = (model or "").strip()
+        model_key = AIService._normalize_model_name(model)
 
         full_prompt = f"""
 You are a senior social media copywriter.
@@ -272,8 +314,18 @@ Quality requirements:
 - Return only final post text. No explanations, no markdown fences.
 """
 
-        response = await asyncio.to_thread(selected_model.generate_content, full_prompt)
-        draft_text = AIService._clean_text_output(response.text or "")
+        if model_key == "qwen":
+            qwen_model = AIService._resolve_ollama_model(requested_model_name)
+            draft_text = AIService._clean_text_output(
+                await AIService._call_ollama_model(full_prompt, qwen_model)
+            )
+        else:
+            selected_model, _ = AIService._get_google_model(
+                model,
+                task="content",
+            )
+            response = await asyncio.to_thread(selected_model.generate_content, full_prompt)
+            draft_text = AIService._clean_text_output(response.text or "")
 
         # Second pass proofreading to reduce spelling/grammar errors.
         proof_prompt = f"""
@@ -287,6 +339,17 @@ Rules:
 Post:
 {draft_text}
 """
+        if model_key == "qwen":
+            qwen_model = AIService._resolve_ollama_model(requested_model_name)
+            proofed_text = AIService._clean_text_output(
+                await AIService._call_ollama_model(proof_prompt, qwen_model)
+            )
+            final_text = proofed_text or draft_text
+            return final_text or "[Qwen2.5] No response generated."
+        selected_model, selected_model_name = AIService._get_google_model(
+            model,
+            task="content",
+        )
         proofed = await asyncio.to_thread(selected_model.generate_content, proof_prompt)
         final_text = AIService._clean_text_output(proofed.text or draft_text)
         return final_text or f"[{selected_model_name}] No response generated."
@@ -300,10 +363,7 @@ Post:
     ) -> str:
         platform = platform or "General"
         content_type = content_type or "Post"
-        selected_model, selected_model_name = AIService._get_google_model(
-            model,
-            task="content",
-        )
+        model_key = AIService._normalize_model_name(model)
 
         adapt_prompt = f"""
 You are a senior social copy editor.
@@ -319,6 +379,17 @@ Rules:
 Base Post:
 {base_text}
 """
+        if model_key == "qwen":
+            qwen_model = AIService._resolve_ollama_model(model)
+            text = AIService._clean_text_output(
+                await AIService._call_ollama_model(adapt_prompt, qwen_model)
+            )
+            return text or "[Qwen2.5] No response generated."
+
+        selected_model, selected_model_name = AIService._get_google_model(
+            model,
+            task="content",
+        )
         response = await asyncio.to_thread(selected_model.generate_content, adapt_prompt)
         text = AIService._clean_text_output(response.text or "")
         return text or f"[{selected_model_name}] No response generated."
@@ -328,10 +399,7 @@ Base Post:
         text: str,
         model: Optional[str] = None,
     ) -> str:
-        selected_model, selected_model_name = AIService._get_google_model(
-            model,
-            task="content",
-        )
+        model_key = AIService._normalize_model_name(model)
         enhance_prompt = f"""
 You are an expert marketing copy editor.
 
@@ -345,6 +413,17 @@ Rules:
 Text:
 {text}
 """
+        if model_key == "qwen":
+            qwen_model = AIService._resolve_ollama_model(model)
+            rewritten = AIService._clean_text_output(
+                await AIService._call_ollama_model(enhance_prompt, qwen_model)
+            )
+            return rewritten or "[Qwen2.5] No response generated."
+
+        selected_model, selected_model_name = AIService._get_google_model(
+            model,
+            task="content",
+        )
         response = await asyncio.to_thread(selected_model.generate_content, enhance_prompt)
         rewritten = AIService._clean_text_output(response.text or "")
         return rewritten or f"[{selected_model_name}] No response generated."
@@ -403,7 +482,8 @@ Text:
         brand_colors: str | None = None,
         reference_image: str | None = None,
         model: Optional[str] = None,
-    ) -> str:
+        return_meta: bool = False,
+    ) -> str | Dict[str, object]:
         # Backward compatibility for older call pattern:
         # generate_image(style, prompt)
         if prompt is None and style is not None:
@@ -453,6 +533,41 @@ Text:
         - Suitable for ads and marketing
         """
 
+        async def _generate_via_diffusion_worker() -> Dict[str, object]:
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    res = await client.post(
+                        f"{AI_WORKER_URL}/generate",
+                        json={
+                            "prompt": final_prompt,
+                            "negative_prompt": "low quality, blur, distorted",
+                            "steps": 1,
+                            "guidance_scale": 0.0,
+                        },
+                    )
+                    res.raise_for_status()
+                    payload = res.json()
+                    image_base64 = payload.get("image_base64")
+                    if not image_base64:
+                        raise RuntimeError("Diffusion worker returned no image")
+                    return {
+                        "image_url": f"data:image/png;base64,{image_base64}",
+                        "image_model_used": "IDKiro/sdxs-512-0.9",
+                        "image_fallback_used": True,
+                    }
+            except Exception as worker_error:
+                logger.error(f"Diffusion worker error: {worker_error}")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Image generation failed on diffusion worker.",
+                )
+
+        requested_model_key = AIService._normalize_model_name(model)
+        if requested_model_key == "diffusion":
+            diffusion_payload = await _generate_via_diffusion_worker()
+            diffusion_payload["image_fallback_used"] = False
+            return diffusion_payload if return_meta else str(diffusion_payload["image_url"])
+
         try:
             content = []
 
@@ -472,7 +587,7 @@ Text:
 
             content.append({"text": final_prompt})
 
-            selected_model, selected_model_name = AIService._get_google_model(
+            selected_model, _ = AIService._get_google_model(
                 model,
                 task="image",
             )
@@ -486,19 +601,21 @@ Text:
                             part.inline_data.data
                         ).decode("utf-8")
 
-                        return f"data:image/png;base64,{img_base64}"
+                        payload = {
+                            "image_url": f"data:image/png;base64,{img_base64}",
+                            "image_model_used": "NanoBanana",
+                            "image_fallback_used": False,
+                        }
+                        return payload if return_meta else str(payload["image_url"])
 
-            raise HTTPException(
-                status_code=500,
-                detail=f"Image generation failed. No image returned from {selected_model_name}."
-            )
+            logger.error("Nano banana returned no image payload.")
+            fallback_payload = await _generate_via_diffusion_worker()
+            return fallback_payload if return_meta else str(fallback_payload["image_url"])
 
         except Exception as e:
-            logger.error(f"Nano banana error: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="Image generation failed. Please try again."
-            )
+            logger.error(f"Nano banana error: {e}. Falling back to diffusion worker.")
+            fallback_payload = await _generate_via_diffusion_worker()
+            return fallback_payload if return_meta else str(fallback_payload["image_url"])
             
     @staticmethod
     async def generate_presentation_slides(source_type: str, title: str) -> str:

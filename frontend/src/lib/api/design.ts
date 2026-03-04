@@ -25,6 +25,11 @@ export interface GenerateDesignRequest {
     reference_image?: string;
 }
 
+export interface DesignAssetsPage {
+    items: DesignAsset[];
+    total: number;
+}
+
 function normalizeDesignImageUrl(imageUrl?: string | null): string {
     if (!imageUrl) return "";
     if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://") || imageUrl.startsWith("data:")) {
@@ -75,11 +80,16 @@ export async function saveDesign(data: {
     };
 }
 
-export async function fetchDesignAssets(): Promise<DesignAsset[]> {
-    let res = await authenticatedFetch(`${API_BASE_URL}/design`);
+export async function fetchDesignAssets(params?: { skip?: number; limit?: number }): Promise<DesignAsset[]> {
+    const query = new URLSearchParams();
+    if (typeof params?.skip === "number") query.set("skip", String(params.skip));
+    if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+
+    let res = await authenticatedFetch(`${API_BASE_URL}/design${suffix}`);
     if (!res.ok) {
         // Fallback for backends configured with trailing slash routing.
-        res = await authenticatedFetch(`${API_BASE_URL}/design/`);
+        res = await authenticatedFetch(`${API_BASE_URL}/design/${suffix ? `?${query.toString()}` : ""}`);
     }
     if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
@@ -99,6 +109,45 @@ export async function fetchDesignAssets(): Promise<DesignAsset[]> {
         ...asset,
         image_url: normalizeDesignImageUrl(asset.image_url),
     }));
+}
+
+export async function fetchDesignAssetsPage(params?: {
+    skip?: number;
+    limit?: number;
+    q?: string;
+    style?: string;
+}): Promise<DesignAssetsPage> {
+    const query = new URLSearchParams();
+    if (typeof params?.skip === "number") query.set("skip", String(params.skip));
+    if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+    if (params?.q) query.set("q", params.q);
+    if (params?.style && params.style !== "All Types") query.set("style", params.style);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+
+    let res = await authenticatedFetch(`${API_BASE_URL}/design${suffix}`);
+    if (!res.ok) {
+        res = await authenticatedFetch(`${API_BASE_URL}/design/${suffix ? `?${query.toString()}` : ""}`);
+    }
+    if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.detail || "Failed to fetch design assets");
+    }
+    const total = Number(res.headers.get("X-Total-Count") || "0");
+    const payload = await res.json();
+    const assets = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.items)
+            ? payload.items
+            : Array.isArray(payload?.data)
+                ? payload.data
+                : [];
+    return {
+        total: Number.isNaN(total) ? 0 : total,
+        items: assets.map((asset: DesignAsset) => ({
+            ...asset,
+            image_url: normalizeDesignImageUrl(asset.image_url),
+        })),
+    };
 }
 
 export async function fetchDesignAssetById(id: number): Promise<DesignAsset> {
