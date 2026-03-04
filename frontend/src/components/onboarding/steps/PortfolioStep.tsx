@@ -21,6 +21,18 @@ export function PortfolioStep({ onNext, loading, stepData }: StepProps) {
     const [mediaKitUrl, setMediaKitUrl] = useState("");
     const [portfolioUrl, setPortfolioUrl] = useState("");
     const [items, setItems] = useState<PortfolioItem[]>([{ title: "", url: "" }]);
+    const [mediaKitUrlError, setMediaKitUrlError] = useState("");
+    const [portfolioUrlError, setPortfolioUrlError] = useState("");
+
+    const isValidHttpUrl = (value: string) => {
+        if (!value.trim()) return true;
+        try {
+            const parsed = new URL(value);
+            return (parsed.protocol === "http:" || parsed.protocol === "https:") && Boolean(parsed.hostname);
+        } catch {
+            return false;
+        }
+    };
 
     useEffect(() => {
         setMediaKitUrl(String(stepData.media_kit_url ?? ""));
@@ -55,6 +67,17 @@ export function PortfolioStep({ onNext, loading, stepData }: StepProps) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const hasMediaKitError = !isValidHttpUrl(mediaKitUrl);
+        const hasPortfolioError = !isValidHttpUrl(portfolioUrl);
+
+        if (hasMediaKitError || hasPortfolioError) {
+            setMediaKitUrlError(hasMediaKitError ? "Enter a valid URL like https://drive.google.com/..." : "");
+            setPortfolioUrlError(hasPortfolioError ? "Enter a valid URL like https://yourportfolio.com" : "");
+            return;
+        }
+
+        setMediaKitUrlError("");
+        setPortfolioUrlError("");
         const validItems = items.filter((item) => item.title.trim() || item.url.trim());
         onNext({
             media_kit_url: mediaKitUrl,
@@ -72,10 +95,24 @@ export function PortfolioStep({ onNext, loading, stepData }: StepProps) {
                 <input
                     type="url"
                     value={mediaKitUrl}
-                    onChange={(e) => setMediaKitUrl(e.target.value)}
+                    onChange={(e) => {
+                        setMediaKitUrl(e.target.value);
+                        if (mediaKitUrlError) setMediaKitUrlError("");
+                    }}
+                    onBlur={() => {
+                        if (!isValidHttpUrl(mediaKitUrl)) {
+                            setMediaKitUrlError("Enter a valid URL like https://drive.google.com/...");
+                        } else {
+                            setMediaKitUrlError("");
+                        }
+                    }}
                     placeholder="https://drive.google.com/your-media-kit"
+                    aria-invalid={mediaKitUrlError ? "true" : "false"}
                     className={inputClass}
                 />
+                {mediaKitUrlError && (
+                    <p className="mt-1 text-xs font-medium text-red-500">{mediaKitUrlError}</p>
+                )}
             </div>
 
             <div>
@@ -85,10 +122,24 @@ export function PortfolioStep({ onNext, loading, stepData }: StepProps) {
                 <input
                     type="url"
                     value={portfolioUrl}
-                    onChange={(e) => setPortfolioUrl(e.target.value)}
+                    onChange={(e) => {
+                        setPortfolioUrl(e.target.value);
+                        if (portfolioUrlError) setPortfolioUrlError("");
+                    }}
+                    onBlur={() => {
+                        if (!isValidHttpUrl(portfolioUrl)) {
+                            setPortfolioUrlError("Enter a valid URL like https://yourportfolio.com");
+                        } else {
+                            setPortfolioUrlError("");
+                        }
+                    }}
                     placeholder="https://yourportfolio.com"
+                    aria-invalid={portfolioUrlError ? "true" : "false"}
                     className={inputClass}
                 />
+                {portfolioUrlError && (
+                    <p className="mt-1 text-xs font-medium text-red-500">{portfolioUrlError}</p>
+                )}
             </div>
 
             <div>

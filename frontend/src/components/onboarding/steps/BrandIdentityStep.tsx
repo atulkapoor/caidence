@@ -20,25 +20,60 @@ export function BrandIdentityStep({ onNext, loading, stepData }: StepProps) {
     const [brandDescription, setBrandDescription] = useState("");
     const [brandVoice, setBrandVoice] = useState("");
     const [primaryColor, setPrimaryColor] = useState("#0f172a");
+    const [primaryColorText, setPrimaryColorText] = useState("#0F172A");
     const [logoUrl, setLogoUrl] = useState("");
+    const [logoUrlError, setLogoUrlError] = useState("");
+    const [colorError, setColorError] = useState("");
+
+    const normalizeHexColor = (value: string): string | null => {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        const normalized = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+        return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toUpperCase() : null;
+    };
+
+    const isValidHttpUrl = (value: string) => {
+        if (!value.trim()) return true;
+        try {
+            const parsed = new URL(value);
+            return (parsed.protocol === "http:" || parsed.protocol === "https:") && Boolean(parsed.hostname);
+        } catch {
+            return false;
+        }
+    };
 
     useEffect(() => {
         setBrandName(String(stepData.brand_name ?? ""));
         setTagline(String(stepData.tagline ?? ""));
         setBrandDescription(String(stepData.brand_description ?? ""));
         setBrandVoice(String(stepData.brand_voice ?? ""));
-        setPrimaryColor(String(stepData.primary_color ?? "#0f172a"));
+        const normalizedPrimary = normalizeHexColor(String(stepData.primary_color ?? "#0f172a")) ?? "#0F172A";
+        setPrimaryColor(normalizedPrimary.toLowerCase());
+        setPrimaryColorText(normalizedPrimary);
         setLogoUrl(String(stepData.logo_url ?? ""));
     }, [stepData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const normalizedPrimary = normalizeHexColor(primaryColorText);
+        if (!normalizedPrimary) {
+            setColorError("Use a valid 6-digit hex color, e.g. #0F172A.");
+            return;
+        }
+
+        if (!isValidHttpUrl(logoUrl)) {
+            setLogoUrlError("Enter a valid URL like https://example.com/logo.png");
+            return;
+        }
+
+        setColorError("");
+        setLogoUrlError("");
         onNext({
             brand_name: brandName,
             tagline,
             brand_description: brandDescription,
             brand_voice: brandVoice,
-            primary_color: primaryColor,
+            primary_color: normalizedPrimary,
             logo_url: logoUrl,
         });
     };
@@ -116,13 +151,31 @@ export function BrandIdentityStep({ onNext, loading, stepData }: StepProps) {
                     <input
                         type="color"
                         value={primaryColor}
-                        onChange={(e) => setPrimaryColor(e.target.value)}
+                        onChange={(e) => {
+                            const value = e.target.value.toUpperCase();
+                            setPrimaryColor(value.toLowerCase());
+                            setPrimaryColorText(value);
+                            if (colorError) setColorError("");
+                        }}
                         className="h-8 w-8 rounded-lg cursor-pointer border-0 bg-transparent p-0"
                     />
-                    <span className="font-medium text-slate-700 text-sm uppercase tracking-wide">
-                        {primaryColor}
-                    </span>
+                    <input
+                        type="text"
+                        value={primaryColorText}
+                        onChange={(e) => setPrimaryColorText(e.target.value)}
+                        onBlur={() => {
+                            const normalized = normalizeHexColor(primaryColorText);
+                            if (normalized) {
+                                setPrimaryColor(normalized.toLowerCase());
+                                setPrimaryColorText(normalized);
+                                setColorError("");
+                            }
+                        }}
+                        placeholder="#0F172A"
+                        className="w-full bg-transparent text-sm font-medium text-slate-700 focus:outline-none"
+                    />
                 </div>
+                {colorError && <p className="mt-1 text-xs font-medium text-red-500">{colorError}</p>}
             </div>
 
             <div>
@@ -132,10 +185,24 @@ export function BrandIdentityStep({ onNext, loading, stepData }: StepProps) {
                 <input
                     type="url"
                     value={logoUrl}
-                    onChange={(e) => setLogoUrl(e.target.value)}
+                    onChange={(e) => {
+                        setLogoUrl(e.target.value);
+                        if (logoUrlError) setLogoUrlError("");
+                    }}
+                    onBlur={() => {
+                        if (!isValidHttpUrl(logoUrl)) {
+                            setLogoUrlError("Enter a valid URL like https://example.com/logo.png");
+                        } else {
+                            setLogoUrlError("");
+                        }
+                    }}
                     placeholder="https://example.com/logo.png"
+                    aria-invalid={logoUrlError ? "true" : "false"}
                     className={inputClass}
                 />
+                {logoUrlError && (
+                    <p className="mt-1 text-xs font-medium text-red-500">{logoUrlError}</p>
+                )}
             </div>
 
             <button

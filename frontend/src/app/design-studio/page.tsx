@@ -5,8 +5,8 @@ import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { generateDesign, generateContent, fetchDesignAssets, DesignAsset, enhanceDescription } from "@/lib/api";
 import { saveDesign } from "@/lib/api/design";
-import { getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost } from "@/lib/api/social";
-import { useEffect, useState, Suspense } from "react";
+import { fetchScheduledPosts, getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost } from "@/lib/api/social";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
 import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalendar";
@@ -48,6 +48,7 @@ function DesignStudioContent() {
     const [postingGeneratedText, setPostingGeneratedText] = useState(false);
     const [generatedTextPosted, setGeneratedTextPosted] = useState(false);
     const [postedDesignIds, setPostedDesignIds] = useState<Set<number>>(new Set());
+    const [scheduledDesignIds, setScheduledDesignIds] = useState<Set<number>>(new Set());
     const [isScheduleOpen, setIsScheduleOpen] = useState(false);
     const [scheduleDateTime, setScheduleDateTime] = useState("");
     const [isScheduling, setIsScheduling] = useState(false);
@@ -63,6 +64,7 @@ function DesignStudioContent() {
     const [previewDesign, setPreviewDesign] = useState<DesignAsset | null>(null);
     const [isLibraryLoading, setIsLibraryLoading] = useState(false);
     const [libraryPage, setLibraryPage] = useState(1);
+    const scheduleInputRef = useRef<HTMLInputElement | null>(null);
     useModalScroll(!!previewDesign || isScheduleOpen);
     const LIBRARY_PAGE_SIZE = 10;
 
@@ -100,7 +102,17 @@ function DesignStudioContent() {
         }
     }, [libraryPage, totalLibraryPages]);
 
+    const isDesignLocked = (asset?: Pick<DesignAsset, "id" | "is_posted"> | null) => {
+        const id = asset?.id;
+        if (!id) return false;
+        return Boolean(asset?.is_posted) || postedDesignIds.has(id) || scheduledDesignIds.has(id);
+    };
+
     const loadDesignIntoGenerator = (asset: DesignAsset) => {
+        if (isDesignLocked(asset)) {
+            toast.info("Posted or scheduled designs are read-only and cannot be edited.");
+            return;
+        }
         setPrompt(asset.prompt);
         setSelectedStyle(asset.style);
         setTitle(asset.title);
@@ -126,6 +138,16 @@ function DesignStudioContent() {
             const { fetchDesignAssetById } = await import("@/lib/api");
             const asset = await fetchDesignAssetById(id);
             if (asset) {
+                const activeScheduledStatuses = new Set(["scheduled", "processing", "queued", "pending"]);
+                const scheduledPosts = await fetchScheduledPosts().catch(() => []);
+                const isScheduled = scheduledPosts.some(
+                    (post) => post.design_asset_id === asset.id && activeScheduledStatuses.has(String(post.status || "").toLowerCase()),
+                );
+
+                if (isDesignLocked(asset) || isScheduled) {
+                    toast.info("Posted or scheduled designs are read-only and cannot be edited.");
+                    return;
+                }
                 loadDesignIntoGenerator(asset);
                 window.history.replaceState({}, '', '/design-studio');
                 toast.success("Design loaded for editing");
@@ -139,10 +161,18 @@ function DesignStudioContent() {
     const loadDesigns = async () => {
         setIsLibraryLoading(true);
         try {
-            const data = await fetchDesignAssets();
+            const [data, scheduledPosts] = await Promise.all([
+                fetchDesignAssets(),
+                fetchScheduledPosts().catch(() => []),
+            ]);
             setRecentDesigns(data);
             const persistedPostedIds = data.filter((item) => item.is_posted).map((item) => item.id);
             setPostedDesignIds(new Set(persistedPostedIds));
+            const activeScheduledStatuses = new Set(["scheduled", "processing", "queued", "pending"]);
+            const persistedScheduledIds = scheduledPosts
+                .filter((post) => post.design_asset_id && activeScheduledStatuses.has(String(post.status || "").toLowerCase()))
+                .map((post) => post.design_asset_id as number);
+            setScheduledDesignIds(new Set(persistedScheduledIds));
         } catch (error: any) {
             console.error("Failed to load designs", error);
             toast.error(error?.message || "Failed to load design library");
@@ -190,6 +220,13 @@ function DesignStudioContent() {
                 design_asset_id: scheduleDraft.designAssetId,
                 scheduled_at: new Date(scheduleDateTime).toISOString(),
             });
+            if (scheduleDraft.designAssetId) {
+                setScheduledDesignIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(scheduleDraft.designAssetId!);
+                    return next;
+                });
+            }
             toast.success("Design post scheduled", { id: toastId });
             setIsScheduleOpen(false);
             setScheduleDraft(null);
@@ -300,6 +337,57 @@ function DesignStudioContent() {
             toast.error("Failed to save design. Please try again.");
         } finally {
             setIsSavingDesign(false);
+        }
+    };
+
+    const ensureDesignAssetIdForPublishOrSchedule = async (existingId?: number) => {
+        if (existingId) return existingId;
+        if (!generatedDesignPreview?.image_url) {
+            toast.error("Generate a design preview before posting or scheduling.");
+            return null;
+        }
+
+        const toastId = toast.loading("Auto-saving design...");
+        try {
+            const saved = await saveDesign({
+                title: generatedDesignPreview.title || title || "Untitled Design",
+                style: generatedDesignPreview.style || selectedStyle,
+                aspect_ratio: generatedDesignPreview.aspect_ratio || aspectRatio,
+                prompt: generatedDesignPreview.prompt || prompt,
+                image_url: generatedDesignPreview.image_url,
+                model: selectedModel,
+                brand_colors: generatedDesignPreview.brand_colors || brandColors || undefined,
+                reference_image: generatedDesignPreview.reference_image || referenceImage || undefined,
+            });
+
+            setRecentDesigns((prev) => {
+                const existingIndex = prev.findIndex((item) => item.id === saved.id);
+                if (existingIndex >= 0) {
+                    return prev.map((item) => (item.id === saved.id ? saved : item));
+                }
+                return [saved, ...prev];
+            });
+            setEditingDesignId(saved.id);
+            setGeneratedDesignPreview((prev) => (
+                prev
+                    ? {
+                        ...prev,
+                        title: saved.title || prev.title,
+                        style: saved.style || prev.style,
+                        aspect_ratio: saved.aspect_ratio || prev.aspect_ratio,
+                        prompt: saved.prompt || prev.prompt,
+                        image_url: saved.image_url || prev.image_url,
+                        brand_colors: saved.brand_colors || prev.brand_colors,
+                        reference_image: saved.reference_image || prev.reference_image,
+                    }
+                    : prev
+            ));
+            toast.success("Design auto-saved.", { id: toastId });
+            return saved.id;
+        } catch (error) {
+            console.error("Failed to auto-save design", error);
+            toast.error("Failed to auto-save design before posting/scheduling.", { id: toastId });
+            return null;
         }
     };
 
@@ -458,10 +546,11 @@ function DesignStudioContent() {
                                             loadDesignIntoGenerator(previewDesign);
                                             setPreviewDesign(null);
                                         }}
-                                        className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-200 transition-all flex items-center justify-center gap-2"
+                                        disabled={isDesignLocked(previewDesign)}
+                                        className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-200 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                         <Palette className="w-4 h-4" />
-                                        Remix Design
+                                        {isDesignLocked(previewDesign) ? "Remix Disabled" : "Remix Design"}
                                     </button>
                                     <button
                                         onClick={() => handleDownload(previewDesign.image_url, previewDesign.title)}
@@ -545,9 +634,14 @@ function DesignStudioContent() {
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Date and Time</label>
                                     <input
+                                        ref={scheduleInputRef}
                                         type="datetime-local"
                                         value={scheduleDateTime}
                                         onChange={(e) => setScheduleDateTime(e.target.value)}
+                                        onClick={() => {
+                                            scheduleInputRef.current?.focus();
+                                            (scheduleInputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null)?.showPicker?.();
+                                        }}
                                         min={toDateTimeLocalValue(new Date())}
                                         className="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500"
                                     />
@@ -853,7 +947,7 @@ function DesignStudioContent() {
                                             <p className="text-xs text-slate-500 font-medium">LinkedIn</p>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <button
+                                            {/* <button
                                                 onClick={async () => {
                                                     if (!generatedDesignPreview?.image_url) return;
                                                     try {
@@ -867,16 +961,23 @@ function DesignStudioContent() {
                                                 className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-all disabled:opacity-50"
                                             >
                                                 <span className="inline-flex items-center gap-1"><Copy className="w-3.5 h-3.5" /> Copy</span>
-                                            </button>
+                                            </button> */}
                                             <button
                                                 onClick={async () => {
                                                     if (!generatedDesignPreview?.image_url) return;
                                                     try {
+                                                        const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(editingDesignId || undefined);
+                                                        if (!designAssetId) return;
                                                         setPostingPreviewDesign(true);
                                                         await postToLinkedIn({
                                                             text: generatedDesignPreview.title || title || "New design",
                                                             imageDataUrl: generatedDesignPreview.image_url.startsWith("data:") ? generatedDesignPreview.image_url : undefined,
-                                                            designAssetId: editingDesignId || undefined,
+                                                            designAssetId,
+                                                        });
+                                                        setPostedDesignIds((prev) => {
+                                                            const next = new Set(prev);
+                                                            next.add(designAssetId);
+                                                            return next;
                                                         });
                                                     } catch (error: any) {
                                                         toast.error(error?.message || "Failed to post to LinkedIn");
@@ -890,12 +991,14 @@ function DesignStudioContent() {
                                                 <span className="inline-flex items-center gap-1"><Send className="w-3.5 h-3.5" /> {postingPreviewDesign ? "Posting..." : "Post"}</span>
                                             </button>
                                             <button
-                                                onClick={() => {
+                                                onClick={async () => {
                                                     if (!generatedDesignPreview?.image_url) return;
+                                                    const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(editingDesignId || undefined);
+                                                    if (!designAssetId) return;
                                                     openDesignScheduleModal({
                                                         title: generatedDesignPreview.title || title || "New design",
                                                         imageUrl: generatedDesignPreview.image_url,
-                                                        designAssetId: editingDesignId || undefined,
+                                                        designAssetId,
                                                     });
                                                 }}
                                                 disabled={!generatedDesignPreview?.image_url}
@@ -1055,14 +1158,16 @@ function DesignStudioContent() {
                                                 <div className="w-full h-px bg-slate-100"></div>
 
                                                 <div className="flex items-center justify-between">
-                                                    <button
-                                                        onClick={() => {
-                                                            loadDesignIntoGenerator(asset);
-                                                        }}
-                                                        className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1"
-                                                    >
-                                                        <Wand2 className="w-3 h-3" /> Remix
-                                                    </button>
+                                                    {!isDesignLocked(asset) && (
+                                                        <button
+                                                            onClick={() => {
+                                                                loadDesignIntoGenerator(asset);
+                                                            }}
+                                                            className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1"
+                                                        >
+                                                            <Wand2 className="w-3 h-3" /> Remix
+                                                        </button>
+                                                    )}
 
                                                     {/* Pinned Action - View Details */}
                                                     <button

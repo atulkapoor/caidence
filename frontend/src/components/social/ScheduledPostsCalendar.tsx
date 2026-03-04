@@ -165,44 +165,53 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
             </div>
 
             <div className="flex-1 min-h-0">
-                <Calendar
-                    localizer={localizer}
-                    events={events}
-                    startAccessor="start"
-                    endAccessor="end"
-                    style={{ height: "100%" }}
-                    views={[Views.MONTH, Views.WEEK, Views.DAY]}
-                    defaultView={Views.MONTH}
-                    popup
-                    doShowMoreDrillDown={false}
-                    onSelectEvent={(event: ScheduledEvent) => setSelectedPost(event.post)}
-                    eventPropGetter={(event: ScheduledEvent) => {
-                        const key = String(event.post.platform || "").toLowerCase();
-                        const theme = platformColors[key] || platformColors.twitter;
-                        return {
-                            style: {
-                                backgroundColor: theme.bg,
-                                color: theme.color,
-                                borderColor: theme.border,
-                                borderWidth: "1px",
-                                borderStyle: "solid",
-                                borderRadius: "6px",
-                                fontSize: "12px",
-                                fontWeight: "bold",
-                                padding: "2px 4px",
-                                boxShadow: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
-                            },
-                        };
-                    }}
-                    components={{
-                        event: ({ event }: { event: ScheduledEvent }) => (
-                            <div className="flex items-center gap-1.5 p-1 truncate">
-                                <CalendarClock className="w-3.5 h-3.5" />
-                                <span className="truncate text-xs">{event.title}</span>
-                            </div>
-                        ),
-                    }}
-                />
+                {isLoading ? (
+                    <div className="h-full py-20 text-center bg-white rounded-2xl border border-slate-200 border-dashed flex flex-col items-center justify-center">
+                        <div className="w-10 h-10 mx-auto border-4 border-slate-200 border-t-violet-500 rounded-full animate-spin mb-4"></div>
+                        <p className="text-slate-500 font-medium">
+                            {scope === "content" ? "Loading content..." : "Loading designs..."}
+                        </p>
+                    </div>
+                ) : (
+                    <Calendar
+                        localizer={localizer}
+                        events={events}
+                        startAccessor="start"
+                        endAccessor="end"
+                        style={{ height: "100%" }}
+                        views={[Views.MONTH, Views.WEEK, Views.DAY]}
+                        defaultView={Views.MONTH}
+                        popup
+                        doShowMoreDrillDown={false}
+                        onSelectEvent={(event: ScheduledEvent) => setSelectedPost(event.post)}
+                        eventPropGetter={(event: ScheduledEvent) => {
+                            const key = String(event.post.platform || "").toLowerCase();
+                            const theme = platformColors[key] || platformColors.twitter;
+                            return {
+                                style: {
+                                    backgroundColor: theme.bg,
+                                    color: theme.color,
+                                    borderColor: theme.border,
+                                    borderWidth: "1px",
+                                    borderStyle: "solid",
+                                    borderRadius: "6px",
+                                    fontSize: "12px",
+                                    fontWeight: "bold",
+                                    padding: "2px 4px",
+                                    boxShadow: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+                                },
+                            };
+                        }}
+                        components={{
+                            event: ({ event }: { event: ScheduledEvent }) => (
+                                <div className="flex items-center gap-1.5 p-1 truncate">
+                                    <CalendarClock className="w-3.5 h-3.5" />
+                                    <span className="truncate text-xs">{event.title}</span>
+                                </div>
+                            ),
+                        }}
+                    />
+                )}
             </div>
 
             {selectedPost && (

@@ -272,11 +272,14 @@ async def delete_content_generation(
     content = result.scalar_one_or_none()
     if content is None:
         raise HTTPException(status_code=404, detail="Content generation not found")
-    if content.is_posted:
-        raise HTTPException(
-            status_code=409,
-            detail="Posted content cannot be deleted.",
-        )
+
+    # Keep scheduled-post history while allowing content deletion.
+    scheduled_refs = await db.execute(
+        select(models.ScheduledPost).where(models.ScheduledPost.content_id == content.id)
+    )
+    for scheduled_post in scheduled_refs.scalars().all():
+        scheduled_post.content_id = None
+
     await db.delete(content)
     await db.commit()
     return {"message": "Content deleted successfully"}
