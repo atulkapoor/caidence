@@ -7,14 +7,16 @@ Documentation: https://app.theneo.io/influencers-club/influencers-public-api
 """
 
 import logging
-import os
 from typing import Optional, List
+import re
+import json
 
 from fastapi import APIRouter, HTTPException, Depends, Query, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Database & Auth
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.models import User, CreatorSearch, CreditTransaction
 from app.api.deps import require_discovery_read
 
@@ -24,39 +26,432 @@ from app.services.credit_service import CreditService, CREDIT_COSTS
 # Influencers Club API Integration
 from app.integrations.influencers_club import get_influencers_client
 import httpx
-import asyncio
-from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Get API key from environment
-INFLUENCERS_CLUB_API_KEY = os.getenv("INFLUENCERS_CLUB_API_KEY")
 
-if not INFLUENCERS_CLUB_API_KEY:
-    logger.warning(
-        "INFLUENCERS_CLUB_API_KEY environment variable not set. "
-        "Discovery endpoints will not work without it. "
-        "Add to .env: INFLUENCERS_CLUB_API_KEY=your_api_key"
-    )
+def _extract_external_error_message(error_msg: str) -> str:
+    """
+    Parse nested JSON error payloads from upstream messages like:
+    Invalid request format: {"error":"..."}
+    """
+    if not error_msg:
+        return "Unknown discovery service error"
+
+    marker = "Invalid request format:"
+    if marker in error_msg:
+        raw_payload = error_msg.split(marker, 1)[1].strip()
+        try:
+            parsed = json.loads(raw_payload)
+            if isinstance(parsed, dict):
+                if parsed.get("error"):
+                    return str(parsed["error"])
+                if parsed.get("detail"):
+                    return str(parsed["detail"])
+        except Exception:
+            pass
+
+    # Generic embedded JSON payloads, e.g.
+    # Insufficient permissions: {"detail":"Your trial access has expired..."}
+    json_start = error_msg.find("{")
+    if json_start != -1:
+        raw_payload = error_msg[json_start:].strip()
+        try:
+            parsed = json.loads(raw_payload)
+            if isinstance(parsed, dict):
+                if parsed.get("detail"):
+                    return str(parsed["detail"])
+                if parsed.get("error"):
+                    return str(parsed["error"])
+        except Exception:
+            pass
+    return error_msg
+
+def _get_influencers_club_api_key() -> Optional[str]:
+    """Resolve API key from application settings loaded from .env."""
+    key = (settings.INFLUENCERS_CLUB_API_KEY or "").strip()
+    return key or None
 
 
 async def get_ic_client():
     """Dependency: Get or create Influencers Club API client"""
-    if not INFLUENCERS_CLUB_API_KEY:
+    api_key = _get_influencers_club_api_key()
+    if not api_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Discovery service not configured. Set INFLUENCERS_CLUB_API_KEY environment variable."
         )
     
     try:
-        return await get_influencers_client(INFLUENCERS_CLUB_API_KEY)
+        return await get_influencers_client(api_key)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"API client initialization error: {str(e)}"
         )
+
+
+def _normalize_frontend_filters(raw_filters: dict) -> dict:
+    """
+    Normalize frontend filter shape to Influencers Club API filter shape.
+    Frontend currently sends keys like: min_reach, engagement, geo, niche.
+    """
+    normalized = dict(raw_filters or {})
+
+    min_reach = normalized.pop("min_reach", None)
+    if min_reach is not None:
+        followers_filter = normalized.get("number_of_followers")
+        if not isinstance(followers_filter, dict):
+            followers_filter = {}
+        followers_filter["min"] = min_reach
+        normalized["number_of_followers"] = followers_filter
+
+    max_reach = normalized.pop("max_reach", None)
+    if max_reach is not None:
+        followers_filter = normalized.get("number_of_followers")
+        if not isinstance(followers_filter, dict):
+            followers_filter = {}
+        followers_filter["max"] = max_reach
+        normalized["number_of_followers"] = followers_filter
+
+    engagement = normalized.pop("engagement", None)
+    if engagement is not None:
+        engagement_filter = normalized.get("engagement_percent")
+        if not isinstance(engagement_filter, dict):
+            engagement_filter = {}
+        engagement_filter["min"] = engagement
+        normalized["engagement_percent"] = engagement_filter
+
+    geo = normalized.pop("geo", None)
+    if geo:
+        if isinstance(geo, list):
+            normalized["location"] = [str(code).strip() for code in geo if str(code).strip()]
+        else:
+            code = str(geo).strip()
+            if code:
+                normalized["location"] = [code]
+
+    niche = normalized.pop("niche", None)
+    if niche:
+        normalized["niche"] = niche
+
+    return normalized
+
+
+_COUNTRY_CODE_TO_NAME = {
+    "IN": "India",
+    "US": "United States",
+    "UK": "United Kingdom",
+    "GB": "United Kingdom",
+    "CA": "Canada",
+    "AU": "Australia",
+    "DE": "Germany",
+    "FR": "France",
+}
+
+
+def _normalize_location_entry(entry: object) -> List[str]:
+    """Extract searchable aliases from classifier location entries."""
+    values: List[str] = []
+    if isinstance(entry, str):
+        text = entry.strip()
+        if text:
+            values.append(text)
+        return values
+
+    if isinstance(entry, dict):
+        for key in ("value", "name", "label", "country", "country_name", "code", "country_code"):
+            val = entry.get(key)
+            if val:
+                values.append(str(val).strip())
+    return [v for v in values if v]
+
+
+async def _resolve_location_filter_for_platform(client, platform: str, filters: dict) -> dict:
+    """
+    Resolve frontend `location` values (often ISO codes) to provider-accepted
+    values for a specific platform. Invalid values are dropped instead of
+    failing the entire search.
+    """
+    locations = filters.get("location")
+    if not isinstance(locations, list) or not locations:
+        return filters
+
+    try:
+        available_raw = await client.get_locations(platform)
+    except Exception as e:
+        logger.warning("Failed loading location classifiers for %s: %s", platform, e)
+        return filters
+
+    available_alias_to_canonical = {}
+    for item in (available_raw or []):
+        aliases = _normalize_location_entry(item)
+        if not aliases:
+            continue
+        canonical = aliases[0]
+        for alias in aliases:
+            available_alias_to_canonical[alias.lower()] = canonical
+
+    resolved_locations: List[str] = []
+    for loc in locations:
+        raw = str(loc).strip()
+        if not raw:
+            continue
+        candidates = [raw]
+        mapped = _COUNTRY_CODE_TO_NAME.get(raw.upper())
+        if mapped:
+            candidates.append(mapped)
+
+        matched = None
+        for candidate in candidates:
+            matched = available_alias_to_canonical.get(candidate.lower())
+            if matched:
+                break
+        if matched:
+            resolved_locations.append(matched)
+
+    if resolved_locations:
+        # Preserve order while removing duplicates
+        filters["location"] = list(dict.fromkeys(resolved_locations))
+    else:
+        # Drop invalid location filter instead of returning provider 400
+        filters.pop("location", None)
+        logger.info(
+            "Removed invalid location filter for platform=%s. Incoming locations=%s",
+            platform,
+            locations,
+        )
+    return filters
+
+
+def _extract_username_candidate(search_text: Optional[str]) -> Optional[str]:
+    """
+    Treat plain handles/usernames as username filter candidates.
+    Examples: '@creator_name', 'creator_name'
+    """
+    if not search_text:
+        return None
+
+    candidate = search_text.strip()
+    if not candidate:
+        return None
+
+    if " " in candidate:
+        return None
+
+    candidate = candidate.lstrip("@")
+    if not candidate:
+        return None
+
+    if re.fullmatch(r"[A-Za-z0-9._-]{2,64}", candidate):
+        return candidate
+
+    return None
+
+
+def _extract_name_candidate(search_text: Optional[str]) -> Optional[str]:
+    """
+    Treat short person-name style queries as identity candidates.
+    Examples: 'john doe', 'Jane Smith'
+    """
+    if not search_text:
+        return None
+
+    candidate = re.sub(r"\s+", " ", search_text.strip())
+    if not candidate:
+        return None
+    if "@" in candidate:
+        return None
+
+    words = candidate.split(" ")
+    if len(words) < 2 or len(words) > 4:
+        return None
+
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9 .'\-]{1,80}", candidate):
+        return candidate
+
+    return None
+
+
+def _identity_matches_query(account: dict, query: str) -> bool:
+    profile = account.get("profile") if isinstance(account, dict) else {}
+    profile = profile if isinstance(profile, dict) else {}
+
+    identity_fields = [
+        account.get("username"),
+        account.get("user_id"),
+        account.get("name"),
+        profile.get("username"),
+        profile.get("full_name"),
+        profile.get("name"),
+    ]
+    normalized_query = query.strip().lstrip("@").lower()
+    if not normalized_query:
+        return False
+
+    for value in identity_fields:
+        if not value:
+            continue
+        normalized_value = str(value).strip().lstrip("@").lower()
+        if normalized_query in normalized_value:
+            return True
+    return False
+
+
+def _apply_identity_result_filter(result: dict, search_text: Optional[str]) -> dict:
+    """
+    If query looks like a direct username/name lookup, keep only matching accounts.
+    This runs after upstream filters so both identity + filters are respected.
+    """
+    if not isinstance(result, dict):
+        return result
+
+    accounts = result.get("accounts")
+    if not isinstance(accounts, list) or not accounts:
+        return result
+
+    query = (search_text or "").strip()
+    username_query = _extract_username_candidate(query)
+    name_query = _extract_name_candidate(query)
+    identity_query = username_query or name_query
+    if not identity_query:
+        return result
+
+    filtered_accounts = [
+        account for account in accounts
+        if _identity_matches_query(account, identity_query)
+    ]
+    result["accounts"] = filtered_accounts
+    result["total"] = len(filtered_accounts)
+    return result
+
+
+def _dedupe_accounts_in_result(result: dict) -> dict:
+    """
+    Remove duplicate accounts by (platform, username/user_id) so UI and credit usage
+    are based on unique creators.
+    """
+    if not isinstance(result, dict):
+        return result
+
+    accounts = result.get("accounts")
+    if not isinstance(accounts, list) or not accounts:
+        return result
+
+    seen = set()
+    deduped = []
+    for account in accounts:
+        if not isinstance(account, dict):
+            continue
+
+        profile = account.get("profile") if isinstance(account.get("profile"), dict) else {}
+        platform = str(
+            profile.get("platform") or account.get("platform") or ""
+        ).strip().lower()
+        username = str(
+            profile.get("username") or account.get("username") or account.get("user_id") or ""
+        ).strip().lstrip("@").lower()
+
+        if not username:
+            # Keep unknown identities but avoid exact duplicate objects
+            key = ("", str(account))
+        else:
+            key = (platform, username)
+
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(account)
+
+    result["accounts"] = deduped
+    result["total"] = len(deduped)
+    return result
+
+
+def _is_trial_expired_message(message: str) -> bool:
+    return "trial access has expired" in (message or "").lower()
+
+
+def _build_discovery_result_from_enrich(enriched: dict, platform: str) -> dict:
+    """
+    Normalize enrich response into discovery-like response shape so frontend can render it.
+    """
+    profile = {
+        "username": enriched.get("username") or enriched.get("handle"),
+        "full_name": enriched.get("full_name") or enriched.get("name"),
+        "followers": enriched.get("follower_count") or enriched.get("followers") or 0,
+        "engagement_percent": enriched.get("engagement_percent") or enriched.get("engagement_rate") or 0,
+        "picture": enriched.get("picture") or enriched.get("profile_picture") or enriched.get("avatar_url"),
+        "platform": (enriched.get("platform") or platform or "").lower(),
+        "city": enriched.get("city"),
+        "country": enriched.get("country"),
+        "name": enriched.get("name"),
+    }
+    account = {
+        "username": profile["username"],
+        "user_id": enriched.get("id") or profile["username"],
+        "name": profile["full_name"] or profile["name"],
+        "platform": profile["platform"],
+        "profile": profile,
+    }
+    return {"accounts": [account], "total": 1, "source": "enrich_fallback"}
+
+
+def _apply_basic_filter_constraints_to_accounts(result: dict, filters: dict) -> dict:
+    """
+    Apply basic constraints to fallback accounts so behavior stays aligned with discovery filters.
+    """
+    if not isinstance(result, dict):
+        return result
+    accounts = result.get("accounts")
+    if not isinstance(accounts, list):
+        return result
+
+    follower_filter = filters.get("number_of_followers") if isinstance(filters, dict) else None
+    engagement_filter = filters.get("engagement_percent") if isinstance(filters, dict) else None
+    location_filter = filters.get("location") if isinstance(filters, dict) else None
+    verified_filter = filters.get("is_verified") if isinstance(filters, dict) else None
+
+    def _match(account: dict) -> bool:
+        profile = account.get("profile") if isinstance(account.get("profile"), dict) else {}
+        followers = float(profile.get("followers") or profile.get("follower_count") or 0)
+        engagement = float(profile.get("engagement_percent") or profile.get("engagement_rate") or 0)
+        is_verified = bool(profile.get("is_verified") or account.get("is_verified"))
+        country = str(profile.get("country") or account.get("country") or "").strip().lower()
+        city = str(profile.get("city") or account.get("city") or "").strip().lower()
+
+        if isinstance(follower_filter, dict):
+            min_f = follower_filter.get("min")
+            max_f = follower_filter.get("max")
+            if min_f is not None and followers < float(min_f):
+                return False
+            if max_f is not None and followers > float(max_f):
+                return False
+
+        if isinstance(engagement_filter, dict):
+            min_e = engagement_filter.get("min")
+            max_e = engagement_filter.get("max")
+            if min_e is not None and engagement < float(min_e):
+                return False
+            if max_e is not None and engagement > float(max_e):
+                return False
+
+        if isinstance(location_filter, list) and location_filter:
+            normalized_targets = {str(v).strip().lower() for v in location_filter if str(v).strip()}
+            if normalized_targets and country not in normalized_targets and city not in normalized_targets:
+                return False
+
+        if verified_filter is not None and bool(verified_filter) != is_verified:
+            return False
+
+        return True
+
+    filtered = [acc for acc in accounts if isinstance(acc, dict) and _match(acc)]
+    result["accounts"] = filtered
+    result["total"] = len(filtered)
+    return result
 
 
 # ============================================================================
@@ -147,7 +542,21 @@ async def discover_creators(
         if isinstance(body_filters, dict):
             # Remove platform from filters (handled separately)
             body_filters.pop("platform", None)
-            filters.update(body_filters)
+            filters.update(_normalize_frontend_filters(body_filters))
+
+        # Convert "niche" into ai_search augmentation (broader API compatibility).
+        niche = filters.pop("niche", None)
+        if niche:
+            if filters.get("ai_search"):
+                filters["ai_search"] = f"{filters['ai_search']} {niche}"
+            else:
+                filters["ai_search"] = f"{niche} creators"
+
+        # If user typed a direct username/handle, apply exact username filter
+        # while still preserving broader ai_search context.
+        username = _extract_username_candidate(ai_search)
+        if username and "username" not in filters:
+            filters["username"] = username
 
         if not platform:
             raise HTTPException(status_code=400, detail="platform is required either as query param or in filters.platform")
@@ -170,14 +579,59 @@ async def discover_creators(
         
         if is_verified is not None:
             filters["is_verified"] = is_verified
+
+        if platform and filters.get("location"):
+            filters = await _resolve_location_filter_for_platform(client, platform, filters)
         
         # Call real API
-        result = await client.discover_creators(
-            platform=platform,
-            filters=filters,
-            limit=limit,
-            page=page
-        )
+        try:
+            result = await client.discover_creators(
+                platform=platform,
+                filters=filters,
+                limit=limit,
+                page=page
+            )
+        except (ValueError, PermissionError) as e:
+            external_msg = _extract_external_error_message(str(e))
+            # Fallback path: if discovery search trial is expired, still try direct handle enrich.
+            if _is_trial_expired_message(external_msg) and username:
+                logger.warning(
+                    "Discovery trial expired; attempting enrich fallback for username=%s platform=%s",
+                    username,
+                    platform,
+                )
+                enriched = await client.enrich_creator_handle(
+                    platform=platform,
+                    handle=username,
+                    enrichment_mode="raw",
+                )
+                result = _build_discovery_result_from_enrich(enriched, platform)
+            else:
+                raise
+
+        result = _apply_identity_result_filter(result, ai_search)
+        result = _dedupe_accounts_in_result(result)
+
+        # Discovery may miss exact handles on some platforms; enrich fallback improves exact-match reliability.
+        if username and len(result.get("accounts", []) or []) == 0:
+            try:
+                enriched = await client.enrich_creator_handle(
+                    platform=platform,
+                    handle=username,
+                    enrichment_mode="raw",
+                )
+                result = _build_discovery_result_from_enrich(enriched, platform)
+                result = _apply_basic_filter_constraints_to_accounts(result, filters)
+                result = _apply_identity_result_filter(result, ai_search)
+                result = _dedupe_accounts_in_result(result)
+                result["source"] = "enrich_zero_result_fallback"
+            except Exception as e:
+                logger.info(
+                    "Zero-result enrich fallback failed for username=%s platform=%s: %s",
+                    username,
+                    platform,
+                    e,
+                )
         
         # Get actual result count
         result_count = len(result.get('accounts', []))
@@ -222,13 +676,20 @@ async def discover_creators(
     except ValueError as e:
         error_msg = str(e)
         logger.warning(f"Validation error in discovery_creators: {error_msg}")
+        external_msg = _extract_external_error_message(error_msg)
+        if _is_trial_expired_message(external_msg):
+            raise HTTPException(status_code=402, detail=external_msg)
         # Return 400 for invalid request format, not 401
         if "Invalid" in error_msg or "format" in error_msg.lower():
-            raise HTTPException(status_code=400, detail=error_msg)
-        raise HTTPException(status_code=401, detail=error_msg)
+            raise HTTPException(status_code=400, detail=external_msg)
+        raise HTTPException(status_code=502, detail=external_msg)
     except PermissionError as e:
-        logger.warning(f"Permission error in discovery_creators: {e}")
-        raise HTTPException(status_code=403, detail=str(e))
+        error_msg = str(e)
+        external_msg = _extract_external_error_message(error_msg)
+        logger.warning(f"Permission error in discovery_creators: {external_msg}")
+        if _is_trial_expired_message(external_msg):
+            raise HTTPException(status_code=402, detail=external_msg)
+        raise HTTPException(status_code=403, detail=external_msg)
     except Exception as e:
         logger.error(f"Discovery API error: {type(e).__name__}: {e}", exc_info=True)
         # Default to 502 for external API errors
@@ -284,7 +745,13 @@ async def find_similar_creators(
         return result
     
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        error_msg = str(e)
+        external_msg = _extract_external_error_message(error_msg)
+        if "trial access has expired" in external_msg.lower():
+            raise HTTPException(status_code=402, detail=external_msg)
+        if "Invalid request format" in error_msg or "format" in error_msg.lower():
+            raise HTTPException(status_code=400, detail=external_msg)
+        raise HTTPException(status_code=502, detail=external_msg)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except httpx.HTTPStatusError as e:
@@ -338,7 +805,13 @@ async def enrich_creator(
         return result
     
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        error_msg = str(e)
+        external_msg = _extract_external_error_message(error_msg)
+        if "trial access has expired" in external_msg.lower():
+            raise HTTPException(status_code=402, detail=external_msg)
+        if "Invalid request format" in error_msg or "format" in error_msg.lower():
+            raise HTTPException(status_code=400, detail=external_msg)
+        raise HTTPException(status_code=502, detail=external_msg)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except httpx.HTTPStatusError as e:
@@ -386,7 +859,10 @@ async def get_post_engagement(
         return result
     
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        error_msg = str(e)
+        if "Invalid request format" in error_msg or "format" in error_msg.lower():
+            raise HTTPException(status_code=400, detail=error_msg)
+        raise HTTPException(status_code=502, detail=error_msg)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except httpx.HTTPStatusError as e:
@@ -484,7 +960,26 @@ async def discovery_smoke(
     
     Uses minimal filters and limit=1 for fastest execution.
     """
-    logger.info("Discovery smoke check initiated by user %s", getattr(current_user, 'email', 'anonymous'))
+    logger.info(
+        "Discovery smoke check initiated by user %s",
+        getattr(current_user, "email", "anonymous"),
+    )
+    try:
+        discovery_result = await client.discover_creators(
+            platform="instagram",
+            filters={},
+            limit=1,
+            page=1,
+        )
+        account_count = len(discovery_result.get("accounts", []) or [])
+        return {
+            "api_key_present": bool(_get_influencers_club_api_key()),
+            "remote_call_ok": True,
+            "message": f"Discovery smoke test passed with {account_count} account(s).",
+        }
+    except Exception as e:
+        logger.warning("Discovery smoke test failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Discovery smoke test failed: {str(e)}")
 
 
 # ============================================================================
@@ -550,6 +1045,44 @@ async def get_credits(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get(
+    "/credits/external",
+    summary="Get external Influencers Club credit balance",
+    tags=["credits"]
+)
+async def get_external_credits(
+    current_user: User = Depends(require_discovery_read),
+    client = Depends(get_ic_client)
+):
+    """
+    Get credit balance from Influencers Club API account associated with the configured API key.
+    This is separate from internal app credit tracking.
+    """
+    try:
+        credits = await client.get_credits()
+        available = float(credits.get("available_credits", 0) or 0)
+        used = float(credits.get("used_credits", 0) or 0)
+        return {
+            "provider": "influencers_club",
+            "available_credits": available,
+            "used_credits": used,
+            "total_credits": available + used,
+        }
+    except ValueError as e:
+        error_msg = str(e)
+        external_msg = _extract_external_error_message(error_msg)
+        if "Credits endpoint not available" in external_msg:
+            raise HTTPException(status_code=501, detail=external_msg)
+        if "trial access has expired" in external_msg.lower():
+            raise HTTPException(status_code=402, detail=external_msg)
+        raise HTTPException(status_code=502, detail=external_msg)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error getting external credits: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch external credit balance")
+
+
 @router.post(
     "/credits/initialize",
     summary="Initialize credit account for user",
@@ -582,53 +1115,4 @@ async def initialize_credits(
     except Exception as e:
         await db.rollback()
         logger.error(f"Error initializing credits for user {current_user.id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-    result = {
-        "api_key_present": bool(INFLUENCERS_CLUB_API_KEY),
-        "client_initialized": False,
-        "remote_call_ok": False,
-        "message": "",
-    }
-
-    try:
-        # Ensure client creation works
-        result["client_initialized"] = True
-
-        # Try a lightweight discovery search with minimal filters for fastest execution
-        try:
-            # Perform minimal discovery search with no filters, limit=1 for fast smoke test
-            discovery_result = await asyncio.wait_for(
-                client.discover_creators(
-                    platform="instagram",
-                    filters={},  # Empty filters = any creator
-                    limit=1,     # Minimal result set
-                    page=1
-                ),
-                timeout=15.0  # Reasonable timeout for lightweight query
-            )
-            result["remote_call_ok"] = True
-            total = discovery_result.get('total', 'unknown')
-            result["message"] = f"OK - Discovery search completed. Total creators: {total:,}"
-            logger.info("Discovery smoke test passed: %s", result["message"])
-        except asyncio.TimeoutError:
-            result["message"] = "Timed out contacting Influencers Club API (15s timeout)"
-            logger.warning("Discovery smoke test timed out")
-        except ValueError as e:
-            # Validation errors from client
-            result["message"] = f"Configuration error: {str(e)}"
-            logger.warning(f"Discovery smoke config error: {result['message']}")
-        except PermissionError as e:
-            # Permission/auth errors
-            result["message"] = f"Authentication error: {str(e)}"
-            logger.warning(f"Discovery smoke auth error: {result['message']}")
-        except Exception as e:
-            result["message"] = f"API error: {type(e).__name__}: {str(e)[:80]}"
-            logger.warning(f"Discovery smoke API error: {result['message']}")
-
-        status_code = 200 if result["remote_call_ok"] else 502
-        return JSONResponse(status_code=status_code, content=result)
-
-    except Exception as e:
-        logger.exception("Failure during discovery smoke check")
         raise HTTPException(status_code=500, detail=str(e))

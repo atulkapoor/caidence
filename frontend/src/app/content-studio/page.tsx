@@ -59,7 +59,6 @@ function ContentStudioContent() {
     const [postedContentIds, setPostedContentIds] = useState<Set<number>>(new Set());
     const [isScheduleOpen, setIsScheduleOpen] = useState(false);
     const [scheduleDateTime, setScheduleDateTime] = useState("");
-    const [scheduleCampaignId, setScheduleCampaignId] = useState<number | null>(null);
     const [scheduling, setScheduling] = useState(false);
     const [scheduleDraft, setScheduleDraft] = useState<{
         title: string;
@@ -484,7 +483,6 @@ ${prompt}
         const defaultDate = new Date(Date.now() + 30 * 60 * 1000);
         setScheduleDraft(draft);
         setScheduleDateTime(toDateTimeLocalValue(defaultDate));
-        setScheduleCampaignId(campaignId);
         setIsScheduleOpen(true);
     };
 
@@ -728,7 +726,6 @@ ${prompt}
                 message: scheduleDraft.text,
                 image_url: scheduleDraft.imageUrl || undefined,
                 content_id: scheduleDraft.contentId ?? undefined,
-                campaign_id: scheduleCampaignId ?? undefined,
                 scheduled_at: scheduleDate.toISOString(),
             });
             toast.success(`Post scheduled for ${scheduleDate.toLocaleString()}`, { id: toastId });
@@ -1024,7 +1021,9 @@ ${prompt}
                         >
                             <h3 className="text-lg font-bold text-slate-900 mb-1">Schedule Post</h3>
                             <p className="text-sm text-slate-500 mb-5">
-                                {scheduleDraft.title} ({scheduleDraft.platform})
+                                {new RegExp(`\\(${scheduleDraft.platform}\\)\\s*$`, "i").test(scheduleDraft.title)
+                                    ? scheduleDraft.title
+                                    : `${scheduleDraft.title} (${scheduleDraft.platform})`}
                             </p>
                             <div className="space-y-4">
                                 <div>
@@ -1036,21 +1035,6 @@ ${prompt}
                                         min={toDateTimeLocalValue(new Date())}
                                         className="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-violet-500"
                                     />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Campaign</label>
-                                    <select
-                                        value={scheduleCampaignId ?? ""}
-                                        onChange={(e) => setScheduleCampaignId(e.target.value ? Number(e.target.value) : null)}
-                                        className="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                    >
-                                        <option value="">No Campaign</option>
-                                        {availableCampaigns.map((c) => (
-                                            <option key={c.id} value={c.id}>
-                                                {c.title}
-                                            </option>
-                                        ))}
-                                    </select>
                                 </div>
                             </div>
                             <div className="mt-6 flex justify-end gap-2">

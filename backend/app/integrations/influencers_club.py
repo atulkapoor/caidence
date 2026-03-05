@@ -48,7 +48,8 @@ class InfluencersClubClient:
         self.client = httpx.AsyncClient(
             headers=self.headers,
             timeout=timeout,
-            verify=True
+            verify=True,
+            follow_redirects=True,
         )
         self.request_count = 0
         self.last_reset = datetime.now()
@@ -77,7 +78,8 @@ class InfluencersClubClient:
     
     @retry(
         stop=stop_after_attempt(2),
-        wait=wait_exponential(multiplier=1, min=1, max=5)
+        wait=wait_exponential(multiplier=1, min=1, max=5),
+        reraise=True,
     )
     async def _make_request(
         self,
@@ -133,6 +135,12 @@ class InfluencersClubClient:
                 # Likely a payload format issue
                 logger.error(f"Bad request (400). Payload: {json}")
                 raise ValueError(f"Invalid request format: {error_text}") from e
+            elif 300 <= e.response.status_code < 400:
+                location = e.response.headers.get("location", "")
+                raise ValueError(
+                    f"API redirect error {e.response.status_code}: {error_text or 'No response body'}"
+                    + (f" (location: {location})" if location else "")
+                ) from e
             else:
                 raise ValueError(f"API error {e.response.status_code}: {error_text}") from e
         
@@ -198,13 +206,15 @@ class InfluencersClubClient:
         Returns:
             Enriched creator profile data
         """
-        endpoint = "creators/enrich/handle/full" if enrichment_mode == "full" else "creators/enrich/handle/raw"
+        endpoint = "creators/enrich/handle/full/" if enrichment_mode == "full" else "creators/enrich/handle/raw/"
         
         payload = {
             "handle": handle,
             "platform": platform,
-            "email_required": email_required,
         }
+        # `email_required` is valid for handle-based full mode only.
+        if enrichment_mode == "full":
+            payload["email_required"] = email_required
         
         logger.info(f"Enriching handle {handle} on {platform} ({enrichment_mode} mode)")
         
@@ -216,9 +226,18 @@ class InfluencersClubClient:
         
         return response
 
-        # Backwards-compatible alias expected by API routes
-        async def enrich_creator_handle(self, platform: str, handle: str, enrichment_mode: str = "full") -> Dict[str, Any]:
-            return await self.enrich_handle(handle=handle, platform=platform, enrichment_mode=enrichment_mode)
+    # Backwards-compatible alias expected by API routes
+    async def enrich_creator_handle(
+        self,
+        platform: str,
+        handle: str,
+        enrichment_mode: str = "full",
+    ) -> Dict[str, Any]:
+        return await self.enrich_handle(
+            handle=handle,
+            platform=platform,
+            enrichment_mode=enrichment_mode,
+        )
     
     async def enrich_email(
         self,
@@ -239,7 +258,7 @@ class InfluencersClubClient:
         Returns:
             Enriched creator profile data
         """
-        endpoint = "creators/enrich/email/advanced" if enrichment_mode == "advanced" else "creators/enrich/email"
+        endpoint = "creators/enrich/email/advanced/" if enrichment_mode == "advanced" else "creators/enrich/email/"
         
         payload = {
             "email": email,
@@ -305,23 +324,43 @@ class InfluencersClubClient:
             Dictionary with available_credits and used_credits
         """
         logger.info("Fetching API credit balance")
-        
-        response = await self._make_request("GET", "")
 
-        # Extract credits from response, handling multiple possible field names
-        available = next(
-            (response.get(key) for key in ["credits_available", "available_credits", "balance"]),
-            0
-        )
-        used = next(
-            (response.get(key) for key in ["credits_used", "used_credits", "consumed"]),
-            0
-        )
-        
-        return {
-            "available_credits": available,
-            "used_credits": used,
-        }
+        # Influencers Club public API may not expose a credits endpoint for all plans/keys.
+        # Try known variants and raise a clear error if all return 404.
+        candidate_endpoints = [
+            "credits/",
+            "account/credits/",
+            "user/",
+            "",
+        ]
+        last_error: Optional[Exception] = None
+
+        for endpoint in candidate_endpoints:
+            try:
+                response = await self._make_request("GET", endpoint)
+                available = next(
+                    (response.get(key) for key in ["credits_available", "available_credits", "balance"]),
+                    0
+                )
+                used = next(
+                    (response.get(key) for key in ["credits_used", "used_credits", "consumed"]),
+                    0
+                )
+                return {
+                    "available_credits": available,
+                    "used_credits": used,
+                    "source_endpoint": endpoint or "/",
+                }
+            except ValueError as e:
+                last_error = e
+                if "API error 404" in str(e):
+                    continue
+                raise
+
+        raise ValueError(
+            "Credits endpoint not available on Influencers Club public API for this key/plan. "
+            "Please verify credits in the Influencers Club dashboard."
+        ) from last_error
     
     async def batch_enrich_handles(
         self,
