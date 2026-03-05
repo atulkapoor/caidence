@@ -106,9 +106,10 @@ function FilterSidebar({ isOpen, onClose, filters, onFiltersChange }: FilterSide
                                     key={range.label}
                                     onClick={() => setLocalFilters(prev => ({
                                         ...prev,
-                                        min_reach: prev.min_reach === range.min ? undefined : range.min
+                                        min_reach: prev.min_reach === range.min && prev.max_reach === range.max ? undefined : range.min,
+                                        max_reach: prev.min_reach === range.min && prev.max_reach === range.max ? undefined : range.max,
                                     }))}
-                                    className={`px-3 py-2.5 rounded-xl text-sm font-bold border transition-all ${localFilters.min_reach === range.min
+                                    className={`px-3 py-2.5 rounded-xl text-sm font-bold border transition-all ${localFilters.min_reach === range.min && localFilters.max_reach === range.max
                                         ? "bg-indigo-600 text-white border-indigo-600"
                                         : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                                         }`}
@@ -266,16 +267,27 @@ export function InfluencerSearch() {
     const [selectedProfile, setSelectedProfile] = useState<InfluencerProfile | null>(null);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isCampaignSelectorOpen, setIsCampaignSelectorOpen] = useState(false);
+    const [isProfileLoading, setIsProfileLoading] = useState(false);
+    const [loadingProfileId, setLoadingProfileId] = useState<string | null>(null);
 
     useModalScroll(isProfileOpen || isCampaignSelectorOpen);
 
-    const handleViewProfile = async (handle: string) => {
+    const handleViewProfile = async (profileSummary: InfluencerProfile) => {
+        setIsProfileLoading(true);
+        setLoadingProfileId(profileSummary.id);
         try {
-            const profile = await getInfluencerProfile(handle);
+            const platform = profileSummary.platform?.toLowerCase() || activeFilters.platform || "instagram";
+            const profile = await getInfluencerProfile(profileSummary.handle, platform);
             setSelectedProfile(profile);
             setIsProfileOpen(true);
         } catch (error) {
-            toast.error("Failed to load profile");
+            // Fallback to already-loaded card data if enrichment call fails
+            setSelectedProfile(profileSummary);
+            setIsProfileOpen(true);
+            toast.error("Live profile fetch failed. Showing available profile data.");
+        } finally {
+            setIsProfileLoading(false);
+            setLoadingProfileId(null);
         }
     };
 
@@ -296,14 +308,16 @@ export function InfluencerSearch() {
         }
     };
 
-    const handleSearch = async () => {
-        if (!query.trim() && Object.keys(activeFilters).length === 0) return;
+    const handleSearch = async (queryOverride?: string) => {
+        const resolvedQuery = typeof queryOverride === "string" ? queryOverride : query;
+        const effectiveQuery = resolvedQuery.trim();
+        if (!effectiveQuery && Object.keys(activeFilters).length === 0) return;
         setLoading(true);
         try {
             // Ensure a default platform is set so backend validation doesn't return 400
             const filtersWithDefault = { ...activeFilters } as any;
             if (!filtersWithDefault.platform) filtersWithDefault.platform = 'instagram';
-            const data = await searchInfluencers(query, filtersWithDefault);
+            const data = await searchInfluencers(effectiveQuery, filtersWithDefault);
             setResults(data || []);
             setHasSearched(true);
             if (!data || data.length === 0) {
@@ -389,7 +403,12 @@ export function InfluencerSearch() {
                             placeholder="Try 'Tech reviewers with energetic vibe'..."
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSearch();
+                                }
+                            }}
                         />
                         <div className="absolute right-3 flex gap-2 shrink-0">
                             {/* AI Input Buttons */}
@@ -466,7 +485,8 @@ export function InfluencerSearch() {
                             </button>
                             <div className="w-px h-8 bg-slate-200 my-auto mx-1"></div>
                             <button
-                                onClick={handleSearch}
+                                type="button"
+                                onClick={() => handleSearch()}
                                 className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-800 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
                             >
                                 <Sparkles className="w-4 h-4" />
@@ -480,10 +500,11 @@ export function InfluencerSearch() {
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wide self-center mr-2">Try:</span>
                         {AI_SEARCH_SUGGESTIONS.slice(0, 3).map((suggestion, i) => (
                             <button
+                                type="button"
                                 key={i}
                                 onClick={() => {
                                     setQuery(suggestion);
-                                    handleSearch();
+                                    handleSearch(suggestion);
                                 }}
                                 className="px-3 py-1.5 text-sm text-slate-500 bg-slate-50 hover:bg-slate-100 rounded-full border border-slate-200 hover:border-slate-300 transition-all truncate max-w-xs"
                             >
@@ -595,7 +616,7 @@ export function InfluencerSearch() {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {results.map((profile, i) => (
                                 <div
-                                    key={profile.handle}
+                                    key={profile.id}
                                     className={`bg-white rounded-3xl border overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col h-full relative ${selectedItems.has(profile.handle) ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-200'
                                         }`}
                                     style={{ animationDelay: `${i * 100}ms` }}
@@ -700,10 +721,11 @@ export function InfluencerSearch() {
 
                                         <div className="flex gap-2">
                                             <button
-                                                onClick={() => handleViewProfile(profile.handle)}
-                                                className="flex-1 py-3 bg-white border-2 border-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-all"
+                                                onClick={() => handleViewProfile(profile)}
+                                                disabled={loadingProfileId === profile.id}
+                                                className="flex-1 py-3 bg-white border-2 border-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                                             >
-                                                View Profile
+                                                {loadingProfileId === profile.id ? "Loading..." : "View Profile"}
                                             </button>
                                             <button
                                                 onClick={() => handleLookalikeSearch(profile.handle)}
@@ -748,6 +770,15 @@ export function InfluencerSearch() {
                 onClose={() => setIsProfileOpen(false)}
                 profile={selectedProfile}
             />
+
+            {isProfileLoading && (
+                <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[1px] flex items-center justify-center">
+                    <div className="bg-white border border-slate-200 rounded-2xl px-6 py-5 shadow-2xl min-w-[220px] text-center">
+                        <div className="w-10 h-10 mx-auto border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin mb-3"></div>
+                        <p className="text-slate-700 font-semibold">Loading profile...</p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

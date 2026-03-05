@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { X, Sparkles, User, Users, Activity, ExternalLink, Camera, Mic } from "lucide-react";
 import { InfluencerProfile } from "@/lib/api";
 import { useModalScroll } from "@/hooks/useModalScroll";
@@ -10,6 +11,14 @@ interface Props {
 
 export function InfluencerProfileModal({ isOpen, onClose, profile }: Props) {
     useModalScroll(isOpen);
+    const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({});
+    const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        setLoadedImages({});
+        setFailedImages({});
+    }, [profile?.id, isOpen]);
+
     if (!isOpen || !profile) return null;
 
     return (
@@ -38,7 +47,11 @@ export function InfluencerProfileModal({ isOpen, onClose, profile }: Props) {
                     <div className="flex justify-between items-end -mt-16 mb-8 relative z-10">
                         <div className="flex items-end gap-6">
                             <div className="w-32 h-32 rounded-3xl border-4 border-white shadow-xl bg-white flex items-center justify-center text-4xl font-black text-slate-300">
-                                {profile.handle.substring(1, 3).toUpperCase()}
+                                {profile.image_url ? (
+                                    <img src={profile.image_url} alt={profile.handle} className="w-full h-full object-cover rounded-3xl" />
+                                ) : (
+                                    profile.handle.substring(1, 3).toUpperCase()
+                                )}
                             </div>
                             <div className="mb-2">
                                 <h2 className="text-3xl font-black text-slate-900">{profile.handle}</h2>
@@ -119,12 +132,51 @@ export function InfluencerProfileModal({ isOpen, onClose, profile }: Props) {
                     <div>
                         <h3 className="font-bold text-slate-900 mb-4">Recent Content</h3>
                         <div className="grid grid-cols-4 gap-4">
-                            {[1, 2, 3, 4].map((i) => (
-                                <div key={i} className="aspect-[4/5] bg-slate-100 rounded-xl overflow-hidden relative group cursor-pointer">
-                                    <div className="absolute inset-0 flex items-center justify-center text-slate-300 font-black text-4xl group-hover:bg-black/5 transition-colors">
-                                        POST
+                            {(profile.recent_posts && profile.recent_posts.length > 0
+                                ? profile.recent_posts.slice(0, 4)
+                                : [{ post_id: "placeholder-1" }, { post_id: "placeholder-2" }, { post_id: "placeholder-3" }, { post_id: "placeholder-4" }]
+                            ).map((post) => (
+                                <a
+                                    key={post.post_id}
+                                    href={post.post_url || "#"}
+                                    target={post.post_url ? "_blank" : undefined}
+                                    rel={post.post_url ? "noopener noreferrer" : undefined}
+                                    className="aspect-[4/5] bg-slate-100 rounded-xl overflow-hidden relative group cursor-pointer block border border-slate-200"
+                                >
+                                    <div className="h-[62%] relative bg-slate-200">
+                                        {post.media_url && !failedImages[post.post_id] ? (
+                                            <>
+                                                {!loadedImages[post.post_id] && (
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-slate-200">
+                                                        <div className="w-7 h-7 border-4 border-slate-300 border-t-indigo-500 rounded-full animate-spin"></div>
+                                                    </div>
+                                                )}
+                                                <img
+                                                    src={post.media_url}
+                                                    alt={post.caption || "Post"}
+                                                    className={`w-full h-full object-cover ${loadedImages[post.post_id] ? "opacity-100" : "opacity-0"}`}
+                                                    onLoad={() => setLoadedImages((prev) => ({ ...prev, [post.post_id]: true }))}
+                                                    onError={() => setFailedImages((prev) => ({ ...prev, [post.post_id]: true }))}
+                                                />
+                                            </>
+                                        ) : profile.image_url ? (
+                                            <img src={profile.image_url} alt={profile.handle} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="absolute inset-0 flex items-center justify-center text-slate-300 font-black text-3xl">POST</div>
+                                        )}
                                     </div>
-                                </div>
+                                    <div className="h-[38%] p-2.5 bg-slate-100">
+                                        <p className="text-[12px] text-slate-700 line-clamp-3 leading-5">
+                                            {post.caption || "Open post"}
+                                        </p>
+                                    </div>
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors"></div>
+                                    {post.post_url && (
+                                        <div className="absolute top-2 right-2 bg-black/55 text-white p-1.5 rounded-full">
+                                            <ExternalLink className="w-3 h-3" />
+                                        </div>
+                                    )}
+                                </a>
                             ))}
                         </div>
                     </div>

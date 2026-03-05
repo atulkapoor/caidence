@@ -271,8 +271,8 @@ function DesignStudioContent() {
             setActiveTab("generate");
             toast.success(
                 editingDesignId
-                    ? "Design regenerated. Review preview and save changes."
-                    : "Design generated. Review preview and save to library.",
+                    ? "Design regenerated."
+                    : "Design generated.",
             );
         } catch (error) {
             console.error("Failed to generate design", error);
@@ -339,7 +339,7 @@ function DesignStudioContent() {
             return null;
         }
 
-        const toastId = toast.loading("Auto-saving design...");
+        const toastId = toast.loading("");
         try {
             const saved = await saveDesign({
                 title: generatedDesignPreview.title || title || "Untitled Design",
