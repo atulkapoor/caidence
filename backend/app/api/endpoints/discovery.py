@@ -7,16 +7,18 @@ Documentation: https://app.theneo.io/influencers-club/influencers-public-api
 """
 
 import logging
+import os
 from typing import Optional, List
 import re
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Depends, Query, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
+from dotenv import load_dotenv
 
 # Database & Auth
 from app.core.database import get_db
-from app.core.config import settings
 from app.models.models import User, CreatorSearch, CreditTransaction
 from app.api.deps import require_discovery_read
 
@@ -30,6 +32,10 @@ import httpx
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Load backend/.env directly for discovery API key resolution.
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+load_dotenv(_BACKEND_ROOT / ".env", override=False)
 
 
 def _extract_external_error_message(error_msg: str) -> str:
@@ -70,8 +76,11 @@ def _extract_external_error_message(error_msg: str) -> str:
     return error_msg
 
 def _get_influencers_club_api_key() -> Optional[str]:
-    """Resolve API key from application settings loaded from .env."""
-    key = (settings.INFLUENCERS_CLUB_API_KEY or "").strip()
+    """Resolve API key directly from environment/.env."""
+    key = (os.getenv("INFLUENCERS_CLUB_API_KEY") or "").strip()
+    key = key.strip("'").strip('"')
+    if key.lower().startswith("bearer "):
+        key = key[7:].strip()
     return key or None
 
 
