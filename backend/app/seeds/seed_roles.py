@@ -1,5 +1,5 @@
 """
-Seed the roles table with all 8 roles and their permissions_json.
+Seed the roles table with built-in roles and their permissions_json.
 
 Usage:
     python -m app.seeds.seed_roles
@@ -13,7 +13,7 @@ from sqlalchemy.future import select
 from app.core.database import AsyncSessionLocal
 from app.models.rbac import Role
 
-# All 8 roles with hierarchy levels and permissions
+# Built-in roles with hierarchy levels and permissions
 ROLE_DEFINITIONS = [
     {
         "name": "root",
@@ -67,6 +67,29 @@ ROLE_DEFINITIONS = [
         "name": "agency_admin",
         "display_name": "Agency Admin",
         "description": "Agency-level administrator managing brands, creators, and campaigns",
+        "hierarchy_level": 80,
+        "permissions_json": {
+            "agency": ["read", "write"],
+            "brand": ["read", "write"],
+            "creators": ["read", "write"],
+            "campaign": ["read", "write"],
+            "content": ["read", "write"],
+            "analytics": ["read"],
+            "discovery": ["read", "write"],
+            "crm": ["read", "write"],
+            "design_studio": ["read", "write"],
+            "marcom": ["read", "write"],
+            "workflow": ["read", "write"],
+            "ai_agent": ["read", "write"],
+            "ai_chat": ["read", "write"],
+            "content_studio": ["read", "write"],
+            "presentation_studio": ["read", "write"],
+        },
+    },
+    {
+        "name": "org_admin",
+        "display_name": "Org Admin",
+        "description": "Organization administrator with agency-level scope",
         "hierarchy_level": 80,
         "permissions_json": {
             "agency": ["read", "write"],
@@ -168,23 +191,18 @@ ROLE_DEFINITIONS = [
 
 
 async def seed_roles(db: AsyncSession) -> None:
-    """Insert or update all role definitions."""
+    """Insert missing built-in roles without overwriting existing role settings."""
     for role_def in ROLE_DEFINITIONS:
         result = await db.execute(
             select(Role).where(Role.name == role_def["name"])
         )
         existing = result.scalar_one_or_none()
 
-        if existing:
-            existing.display_name = role_def["display_name"]
-            existing.description = role_def["description"]
-            existing.hierarchy_level = role_def["hierarchy_level"]
-            existing.permissions_json = role_def["permissions_json"]
-        else:
+        if not existing:
             db.add(Role(**role_def))
 
     await db.commit()
-    print(f"Seeded {len(ROLE_DEFINITIONS)} roles")
+    print(f"Ensured {len(ROLE_DEFINITIONS)} built-in roles exist")
 
 
 async def main():

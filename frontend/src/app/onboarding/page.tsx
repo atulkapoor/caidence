@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getOnboardingProgress, type OnboardingProgress } from "@/lib/api/onboarding";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { Loader2, AlertCircle } from "lucide-react";
+import { clearAuthSession } from "@/lib/api/core";
 
 export default function OnboardingPage() {
     const router = useRouter();
@@ -30,7 +31,7 @@ export default function OnboardingPage() {
             .catch((err: any) => {
                 // Only redirect to login if truly unauthenticated (token invalid/expired)
                 if (err?.status === 401) {
-                    localStorage.removeItem("token");
+                    clearAuthSession("expired");
                     router.replace("/login");
                 } else {
                     setError(err?.message || "Failed to load onboarding. Please try again.");

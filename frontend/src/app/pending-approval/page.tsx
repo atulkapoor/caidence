@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Clock, LogOut, RefreshCw } from "lucide-react";
 import { fetchCurrentUser } from "@/lib/api";
 import { getOnboardingProgress } from "@/lib/api/onboarding";
+import { clearAuthSession } from "@/lib/api/core";
 
 export default function PendingApprovalPage() {
     const router = useRouter();
@@ -55,8 +56,7 @@ export default function PendingApprovalPage() {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        clearAuthSession();
         router.push("/login");
     };
 

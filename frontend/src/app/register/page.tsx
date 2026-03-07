@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { register, login, fetchCurrentUser } from "@/lib/api";
+import { storeAuthSession } from "@/lib/api/core";
 
 function RegisterContent() {
     const router = useRouter();
@@ -35,7 +36,7 @@ function RegisterContent() {
                     password: formData.password
                 });
                 if (loginData.access_token) {
-                    localStorage.setItem("token", loginData.access_token);
+                    storeAuthSession(loginData.access_token, loginData.refresh_token, loginData.access_expires_in_seconds);
 
                     let user = null;
                     // Store user details for RBAC
@@ -138,4 +139,3 @@ export default function RegisterPage() {
         </Suspense>
     );
 }
-

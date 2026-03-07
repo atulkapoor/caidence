@@ -106,7 +106,9 @@ class UserResponse(BaseModel):
     industry: Optional[str] = None
     role: str
     organization_id: Optional[int] = None
+    parent_user_id: Optional[int] = None
     is_active: bool
+    must_reset_password: bool = False
     
     class Config:
         from_attributes = True

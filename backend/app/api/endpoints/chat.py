@@ -6,27 +6,39 @@ from app.models.models import ChatMessage, User
 from app.services.ai_service import AIService
 from pydantic import BaseModel
 import uuid
+from typing import Optional
 
 router = APIRouter()
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: str = None  # Optional, generates new if None
+    session_id: Optional[str] = None  # Optional, generates new if None
+    model: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
     session_id: str
+    model_used: Optional[str] = None
 
 class MessageSchema(BaseModel):
     role: str
     content: str
     timestamp: str
+    model_used: Optional[str] = None
 
 @router.get("/history/{session_id}")
 async def get_chat_history(session_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.timestamp))
     messages = result.scalars().all()
-    return [{"role": m.role, "content": m.content, "timestamp": str(m.timestamp)} for m in messages]
+    return [
+        {
+            "role": m.role,
+            "content": m.content,
+            "timestamp": str(m.timestamp),
+            "model_used": m.model_used,
+        }
+        for m in messages
+    ]
 
 @router.get("/sessions")
 async def get_sessions(db: AsyncSession = Depends(get_db)):
@@ -72,14 +84,27 @@ async def chat_message(request: ChatRequest, db: AsyncSession = Depends(get_db))
         ollama_messages.append({"role": msg["role"], "content": msg["content"]})
     
     # 4. Call AI Service
-    ai_text = await AIService.chat_completion(ollama_messages)
+    ai_result = await AIService.chat_completion(
+        ollama_messages,
+        model=request.model,
+        return_meta=True,
+    )
+    ai_text = ai_result.get("text", "") if isinstance(ai_result, dict) else str(ai_result)
+    model_used = ai_result.get("model_used") if isinstance(ai_result, dict) else None
 
     # 4. Save AI Response
-    ai_msg = ChatMessage(session_id=session_id, role="assistant", content=ai_text, user_id=user_id)
+    ai_msg = ChatMessage(
+        session_id=session_id,
+        role="assistant",
+        content=ai_text,
+        model_used=model_used,
+        user_id=user_id,
+    )
     db.add(ai_msg)
     await db.commit()
 
     return {
         "response": ai_text,
-        "session_id": session_id
+        "session_id": session_id,
+        "model_used": model_used,
     }

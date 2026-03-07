@@ -59,7 +59,7 @@ class PermissionOverrideCreate(BaseModel):
     """Create a per-user permission override."""
     user_id: int
     resource: str = Field(..., description="Resource name, e.g. 'campaign', 'content'")
-    action: str = Field(..., description="Action: 'read', 'write', or 'none'")
+    action: str = Field(..., description="Action: 'create', 'read', 'update', 'delete', 'write' (legacy), or 'none'")
     scope_type: str = Field(default="global", description="'global', 'organization', 'brand', 'team'")
     scope_id: Optional[int] = Field(default=None, description="ID of the org/brand/team for scoped overrides")
     is_allowed: bool = Field(default=True, description="True=grant, False=explicit deny")
@@ -138,5 +138,5 @@ class RolePermissionsUpdate(BaseModel):
     """Update the permissions_json for a role."""
     permissions_json: Dict[str, List[str]] = Field(
         ...,
-        description="Map of resource to list of actions, e.g. {'campaign': ['read', 'write']}"
+        description="Map of resource to list of actions, e.g. {'campaign': ['create', 'read', 'update', 'delete']}"
     )

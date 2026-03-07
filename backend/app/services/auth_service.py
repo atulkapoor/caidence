@@ -12,6 +12,7 @@ from app.core.config import settings
 # --- Configuration ---
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
 # --- Password Hashing ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -33,6 +34,7 @@ class TokenData(BaseModel):
     email: str
     role: str
     organization_id: Optional[int] = None
+    token_type: str = "access"
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -42,15 +44,37 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "token_type": "access"})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """Create a JWT refresh token."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "token_type": "refresh"})
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_token_payload(token: str) -> Optional[dict]:
+    """Decode any JWT token payload."""
+    try:
+        return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
 
 
 def decode_access_token(token: str) -> Optional[TokenData]:
     """Decode and validate a JWT token."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        token_type = payload.get("token_type", "access")
+        if token_type != "access":
+            return None
         user_id: int = payload.get("user_id")
         email: str = payload.get("email")
         role: str = payload.get("role")
@@ -61,7 +85,8 @@ def decode_access_token(token: str) -> Optional[TokenData]:
             user_id=user_id,
             email=email,
             role=role,
-            organization_id=organization_id
+            organization_id=organization_id,
+            token_type=token_type,
         )
     except JWTError:
         return None
@@ -72,6 +97,7 @@ ROLE_HIERARCHY = {
     "root": 110,
     "super_admin": 100,
     "agency_admin": 80,
+    "org_admin": 80,
     "agency_member": 60,
     "brand_admin": 50,
     "brand_member": 40,
@@ -94,9 +120,16 @@ def is_super_admin(role: str) -> bool:
 
 def is_agency_level(role: str) -> bool:
     """Check if user has agency-level access."""
-    return role in ["super_admin", "agency_admin", "agency_member"]
+    return role in ["super_admin", "agency_admin", "org_admin", "agency_member"]
 
 
 def is_brand_level(role: str) -> bool:
     """Check if user has brand-level access."""
-    return role in ["super_admin", "agency_admin", "agency_member", "brand_admin", "brand_member"]
+    return role in [
+        "super_admin",
+        "agency_admin",
+        "org_admin",
+        "agency_member",
+        "brand_admin",
+        "brand_member",
+    ]

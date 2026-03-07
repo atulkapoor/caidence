@@ -12,7 +12,7 @@ import { AuditLogTab } from "@/components/admin/AuditLogTab";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { toast } from "sonner";
-import { fetchAdminUsers, fetchOrganizationUsers, approveUser, inviteUser, AdminUser, fetchPlatformOverview, fetchAdminOrganizations, PlatformOverview, AdminOrg } from "@/lib/api";
+import { fetchAdminUsers, fetchOrganizationUsers, approveUser, inviteUser, updateAdminUser, AdminUser, fetchPlatformOverview, fetchAdminOrganizations, PlatformOverview, AdminOrg } from "@/lib/api";
 
 // Types are now imported from @/lib/api
 
@@ -22,6 +22,29 @@ import { Suspense } from "react";
 
 function AdminContent() {
     const [activeTab, setActiveTab] = useTabState("overview");
+    const [userRole, setUserRole] = useState<string | null>(null);
+
+    useEffect(() => {
+        const raw = localStorage.getItem("user");
+        if (!raw) return;
+        try {
+            const parsed = JSON.parse(raw);
+            setUserRole(parsed?.role ?? null);
+        } catch {
+            setUserRole(null);
+        }
+    }, []);
+
+    const isPlatformAdmin = userRole === "root" || userRole === "super_admin";
+    const tabs = isPlatformAdmin
+        ? ["overview", "users", "access", "roles", "audit", "organizations", "billing"]
+        : ["overview", "users", "organizations", "billing"];
+
+    useEffect(() => {
+        if (!tabs.includes(activeTab)) {
+            setActiveTab("overview");
+        }
+    }, [activeTab, tabs.join("|"), setActiveTab]);
 
     return (
         <DashboardLayout>
@@ -36,7 +59,7 @@ function AdminContent() {
 
                     {/* Navigation Tabs */}
                     <div className="flex border-b border-slate-200">
-                        {["overview", "users", "access", "roles", "audit", "organizations", "billing"].map((tab) => (
+                        {tabs.map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -56,9 +79,9 @@ function AdminContent() {
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {activeTab === "overview" && <AdminOverview />}
                         {activeTab === "users" && <UserManagement />}
-                        {activeTab === "access" && <AccessControlTab />}
-                        {activeTab === "roles" && <RoleManagementTab />}
-                        {activeTab === "audit" && <AuditLogTab />}
+                        {activeTab === "access" && isPlatformAdmin && <AccessControlTab />}
+                        {activeTab === "roles" && isPlatformAdmin && <RoleManagementTab />}
+                        {activeTab === "audit" && isPlatformAdmin && <AuditLogTab />}
                         {activeTab === "organizations" && <OrganizationManagement />}
                         {activeTab === "billing" && <BillingOverview />}
                     </div>
@@ -179,6 +202,16 @@ function UserManagement() {
         }
     };
 
+    const handleActiveToggle = async (id: number, isActive: boolean) => {
+        try {
+            await updateAdminUser(id, { is_active: !isActive });
+            setUsers(users.map(u => u.id === id ? { ...u, is_active: !isActive } : u));
+            toast.success(!isActive ? "User activated" : "User deactivated");
+        } catch {
+            toast.error("Failed to update user status");
+        }
+    };
+
     return (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -232,7 +265,7 @@ function UserManagement() {
                                 <td className="px-6 py-4">
                                     {user.is_approved ? (
                                         <span className="inline-flex items-center gap-1.5 text-emerald-600 font-bold text-xs">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> {user.is_active ? "Active" : "Inactive"}
                                         </span>
                                     ) : (
                                         <span className="inline-flex items-center gap-1.5 text-orange-600 font-bold text-xs">
@@ -252,6 +285,17 @@ function UserManagement() {
                                             Approve
                                         </button>
                                     )}
+                                    <button
+                                        onClick={() => handleActiveToggle(user.id, user.is_active)}
+                                        className={cn(
+                                            "font-bold text-xs px-3 py-1.5 rounded-lg transition-colors mr-2",
+                                            user.is_active
+                                                ? "text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100"
+                                                : "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100"
+                                        )}
+                                    >
+                                        {user.is_active ? "Deactivate" : "Activate"}
+                                    </button>
                                     <button className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100">
                                         <MoreVertical size={16} />
                                     </button>
@@ -270,33 +314,130 @@ function UserManagement() {
 }
 
 function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+    const [currentUser, setCurrentUser] = useState<{ role: string; organization_id: number | null } | null>(null);
     const [formData, setFormData] = useState({
         email: "",
         full_name: "",
-        role: "super_admin",
+        role: "agency_admin",
         password: "TempPassword123!", // Default temp password
         organization_id: 0
     });
     const [loading, setLoading] = useState(false);
     const [organizations, setOrganizations] = useState<AdminOrg[]>([]);
+    const [orgLoading, setOrgLoading] = useState(false);
+
+    const getAssignableRoles = (role?: string): { value: string; label: string }[] => {
+        const allRoles = [
+            { value: "agency_admin", label: "Agency Admin" },
+            { value: "org_admin", label: "Org Admin" },
+            { value: "agency_member", label: "Agency Member" },
+            { value: "brand_admin", label: "Brand Admin" },
+            { value: "brand_member", label: "Brand Member" },
+            { value: "creator", label: "Creator" },
+            { value: "viewer", label: "Viewer" },
+        ];
+        if (role === "root") {
+            return [{ value: "super_admin", label: "Super Admin" }, ...allRoles];
+        }
+        if (role === "super_admin") {
+            return allRoles;
+        }
+        if (role === "agency_admin" || role === "org_admin") {
+            return [{ value: "agency_member", label: "Agency Member" }];
+        }
+        if (role === "brand_admin") {
+            return [{ value: "brand_member", label: "Brand Member" }];
+        }
+        return [];
+    };
+
+    const roleOptions = getAssignableRoles(currentUser?.role);
+    const isGlobalAdmin = currentUser?.role === "root" || currentUser?.role === "super_admin";
+    const missingOrgForDelegatedAdmin = !isGlobalAdmin && !currentUser?.organization_id;
 
     useEffect(() => {
+        const userJson = localStorage.getItem("user");
+        if (userJson) {
+            try {
+                const parsed = JSON.parse(userJson);
+                setCurrentUser({ role: parsed.role, organization_id: parsed.organization_id ?? null });
+            } catch {
+                setCurrentUser(null);
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (roleOptions.length > 0) {
+            setFormData((prev) => ({ ...prev, role: roleOptions[0].value }));
+        }
+    }, [currentUser?.role]);
+
+    useEffect(() => {
+        if (!currentUser) return;
+
         const loadOrgs = async () => {
+            setOrgLoading(true);
             try {
                 const orgs = await fetchAdminOrganizations();
                 setOrganizations(orgs);
-                if (orgs.length > 0) {
+                if (!isGlobalAdmin) {
+                    const ownOrgId = currentUser.organization_id ?? 0;
+                    const orgExists = orgs.some((org) => org.id === ownOrgId);
+                    setFormData((prev) => ({
+                        ...prev,
+                        organization_id: orgExists ? ownOrgId : (orgs[0]?.id ?? ownOrgId),
+                    }));
+                } else if (orgs.length > 0) {
                     setFormData(prev => ({ ...prev, organization_id: orgs[0].id }));
                 }
             } catch (e) {
                 console.error("Failed to load orgs", e);
+                toast.error("Failed to load organizations");
+                if (!isGlobalAdmin) {
+                    setFormData((prev) => ({ ...prev, organization_id: currentUser.organization_id ?? 0 }));
+                }
+            } finally {
+                setOrgLoading(false);
             }
         };
         loadOrgs();
-    }, []);
+    }, [currentUser?.role, currentUser?.organization_id, isGlobalAdmin]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (roleOptions.length === 0) {
+            toast.error("You are not allowed to create users");
+            return;
+        }
+        if (missingOrgForDelegatedAdmin) {
+            toast.error("You must belong to an organization to invite users");
+            return;
+        }
+
+        if (!formData.full_name.trim()) {
+            toast.error("Full name is required");
+            return;
+        }
+        if (!formData.email.trim()) {
+            toast.error("Email is required");
+            return;
+        }
+        if (!formData.role) {
+            toast.error("Role is required");
+            return;
+        }
+        if (!formData.password || formData.password.length < 8) {
+            toast.error("Temporary password must be at least 8 characters");
+            return;
+        }
+
+        const orgRequiredRoles = new Set(["agency_admin", "org_admin", "agency_member", "brand_admin", "brand_member", "creator", "viewer"]);
+        if (isGlobalAdmin && orgRequiredRoles.has(formData.role) && !formData.organization_id) {
+            toast.error("Organization is required for selected role");
+            return;
+        }
+
         setLoading(true);
         try {
             await inviteUser(formData);
@@ -340,28 +481,39 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Role</label>
                         <select
+                            required
                             className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                             value={formData.role}
                             onChange={e => setFormData({ ...formData, role: e.target.value })}
                         >
-                            <option value="super_admin">Super Admin</option>
-                            <option value="agency_admin">Admin</option>
-                            <option value="editor">Editor</option>
-                            <option value="viewer">Viewer</option>
+                            {roleOptions.map((role) => (
+                                <option key={role.value} value={role.value}>{role.label}</option>
+                            ))}
                         </select>
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Organization</label>
                         <select
+                            required
                             className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                             value={formData.organization_id}
                             onChange={e => setFormData({ ...formData, organization_id: Number(e.target.value) })}
+                            disabled={currentUser?.role !== "root" && currentUser?.role !== "super_admin"}
                         >
                             <option value={0} disabled>Select Organization</option>
                             {organizations.map(org => (
                                 <option key={org.id} value={org.id}>{org.name}</option>
                             ))}
+                            {organizations.length === 0 && formData.organization_id > 0 && (
+                                <option value={formData.organization_id}>{`Organization #${formData.organization_id}`}</option>
+                            )}
                         </select>
+                        {(currentUser?.role === "root" || currentUser?.role === "super_admin") && !orgLoading && organizations.length === 0 && (
+                            <p className="text-xs text-red-500 mt-1">No organizations found. Create organization first.</p>
+                        )}
+                        {missingOrgForDelegatedAdmin && (
+                            <p className="text-xs text-red-500 mt-1">Your account is not mapped to an organization. Contact super admin.</p>
+                        )}
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Temporary Password</label>
@@ -386,7 +538,7 @@ function InviteUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                         </button>
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || missingOrgForDelegatedAdmin}
                             className="px-4 py-2 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 disabled:opacity-50"
                         >
                             {loading ? "Adding..." : "Add User"}

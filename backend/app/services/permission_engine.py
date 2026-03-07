@@ -19,7 +19,10 @@ from sqlalchemy.orm import selectinload
 
 from app.models.models import User
 from app.models.rbac import Role, Permission
-from app.services.auth_service import ROLE_HIERARCHY, is_super_admin
+from app.services.auth_service import is_super_admin
+from app.services.rbac_scope import is_role_assignable
+
+MUTATION_ACTIONS = {"create", "update", "delete", "write"}
 
 # Profile type → allowed roles mapping
 PROFILE_TYPE_ROLE_CONSTRAINTS: Dict[str, Set[str]] = {
@@ -102,26 +105,28 @@ class PermissionEngine:
         if is_super_admin(self.user.role):
             return {"*:*"}  # Wildcard — frontend interprets as "all"
 
-        # Start with role defaults
-        effective = set(self._get_role_permissions())
+        # Start with normalized role defaults
+        effective = self._normalize_permission_set(set(self._get_role_permissions()))
 
         # Apply overrides
         if hasattr(self.user, "custom_permissions") and self.user.custom_permissions:
             for perm in self.user.custom_permissions:
-                perm_key = f"{perm.resource}:{perm.action}"
                 if perm.is_allowed is False:
-                    # Explicit deny — remove both read and write
-                    effective.discard(f"{perm.resource}:read")
-                    effective.discard(f"{perm.resource}:write")
-                elif perm.action == "write":
+                    self._remove_resource_permissions(effective, perm.resource)
+                    continue
+
+                if perm.action == "none":
+                    self._remove_resource_permissions(effective, perm.resource)
+                elif perm.action in MUTATION_ACTIONS:
+                    effective.add(f"{perm.resource}:read")
                     effective.add(f"{perm.resource}:write")
-                    effective.add(f"{perm.resource}:read")  # write implies read
+                    effective.add(f"{perm.resource}:create")
+                    effective.add(f"{perm.resource}:update")
+                    effective.add(f"{perm.resource}:delete")
                 elif perm.action == "read":
                     effective.add(f"{perm.resource}:read")
-                    effective.discard(f"{perm.resource}:write")
-                elif perm.action == "none":
-                    effective.discard(f"{perm.resource}:read")
-                    effective.discard(f"{perm.resource}:write")
+                else:
+                    effective.add(f"{perm.resource}:{perm.action}")
 
         return effective
 
@@ -131,14 +136,7 @@ class PermissionEngine:
 
     def can_assign_role(self, target_role_name: str, target_user: Optional[User] = None) -> bool:
         """Check if this user can assign the given role to a target user."""
-        # Root can assign anything
-        if self.user.role == "root":
-            return True
-
-        # Check hierarchy: cannot assign equal or higher
-        assigner_level = ROLE_HIERARCHY.get(self.user.role, 0)
-        target_level = ROLE_HIERARCHY.get(target_role_name, 0)
-        if target_level >= assigner_level:
+        if not is_role_assignable(self.user.role, target_role_name):
             return False
 
         # Cross-org check (non-super_admins can only assign within their org)
@@ -243,23 +241,79 @@ class PermissionEngine:
         for p in applicable:
             if p.action == "none":
                 return False
-            if p.action == action:
-                return True
-            if p.action == "write" and action == "read":
+            if self._action_grants(p.action, action):
                 return True  # write implies read
 
         return None
 
     def _check_role_default(self, resource: str, action: str) -> bool:
         """Check if the user's role grants this permission by default."""
-        perm_key = f"{resource}:{action}"
         role_perms = self._get_role_permissions()
-        if perm_key in role_perms:
+        granted_actions = set()
+        for perm in role_perms:
+            if ":" not in perm:
+                continue
+            res, granted_action = perm.split(":", 1)
+            if res == resource:
+                granted_actions.add(granted_action)
+        return any(self._action_grants(granted_action, action) for granted_action in granted_actions)
+
+    @staticmethod
+    def _action_grants(granted_action: str, requested_action: str) -> bool:
+        """Compatibility matrix for legacy write and CRUD actions."""
+        if granted_action == requested_action:
             return True
-        # write implies read
-        if action == "read" and f"{resource}:write" in role_perms:
+
+        # Mutation implies read
+        if requested_action == "read" and granted_action in MUTATION_ACTIONS:
             return True
+
+        # Legacy write should satisfy CRUD checks
+        if granted_action == "write" and requested_action in MUTATION_ACTIONS:
+            return True
+
+        # CRUD should satisfy legacy write checks
+        if requested_action == "write" and granted_action in {"create", "update", "delete"}:
+            return True
+
         return False
+
+    @staticmethod
+    def _remove_resource_permissions(effective: Set[str], resource: str) -> None:
+        to_remove = [p for p in effective if p.startswith(f"{resource}:")]
+        for p in to_remove:
+            effective.discard(p)
+
+    @staticmethod
+    def _normalize_permission_set(raw_perms: Set[str]) -> Set[str]:
+        """
+        Normalize role permissions so CRUD and legacy write both evaluate consistently.
+        """
+        by_resource: Dict[str, Set[str]] = {}
+        passthrough: Set[str] = set()
+        for perm in raw_perms:
+            if ":" not in perm:
+                passthrough.add(perm)
+                continue
+            resource, action = perm.split(":", 1)
+            by_resource.setdefault(resource, set()).add(action)
+
+        normalized: Set[str] = set(passthrough)
+        for resource, actions in by_resource.items():
+            if actions & MUTATION_ACTIONS:
+                normalized.add(f"{resource}:read")
+                normalized.add(f"{resource}:write")
+                normalized.add(f"{resource}:create")
+                normalized.add(f"{resource}:update")
+                normalized.add(f"{resource}:delete")
+            elif "read" in actions:
+                normalized.add(f"{resource}:read")
+
+            for action in actions:
+                if action not in {"read", "write", "create", "update", "delete"}:
+                    normalized.add(f"{resource}:{action}")
+
+        return normalized
 
     def _get_role_permissions(self) -> Set[str]:
         """Get the set of permission strings from the role definition."""
@@ -307,6 +361,23 @@ class PermissionEngine:
                 "presentation_studio:read", "presentation_studio:write",
             },
             "agency_admin": {
+                "agency:read", "agency:write",
+                "brand:read", "brand:write",
+                "creators:read", "creators:write",
+                "campaign:read", "campaign:write",
+                "content:read", "content:write",
+                "analytics:read",
+                "discovery:read", "discovery:write",
+                "crm:read", "crm:write",
+                "design_studio:read", "design_studio:write",
+                "marcom:read", "marcom:write",
+                "workflow:read", "workflow:write",
+                "ai_agent:read", "ai_agent:write",
+                "ai_chat:read", "ai_chat:write",
+                "content_studio:read", "content_studio:write",
+                "presentation_studio:read", "presentation_studio:write",
+            },
+            "org_admin": {
                 "agency:read", "agency:write",
                 "brand:read", "brand:write",
                 "creators:read", "creators:write",

@@ -4,9 +4,14 @@ export interface ChatMessage {
     role: "user" | "assistant";
     content: string;
     timestamp?: string;
+    model_used?: string;
 }
 
-export async function sendChatMessage(message: string, session_id?: string): Promise<{ response: string; session_id: string }> {
+export async function sendChatMessage(
+    message: string,
+    session_id?: string,
+    model?: string,
+): Promise<{ response: string; session_id: string; model_used?: string }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes timeout
 
@@ -15,7 +20,7 @@ export async function sendChatMessage(message: string, session_id?: string): Pro
         const res = await fetch(`${API_BASE_URL}/chat/message`, {
             method: "POST",
             headers: { ...headers, "Content-Type": "application/json" },
-            body: JSON.stringify({ message, session_id }),
+            body: JSON.stringify({ message, session_id, model }),
             signal: controller.signal
         });
 

@@ -4,6 +4,7 @@ import { Bell, Search, UserCircle, Rocket, LogOut } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
+import { clearAuthSession } from "@/lib/api/core";
 
 export function Topbar() {
     const router = useRouter();
@@ -49,8 +50,7 @@ export function Topbar() {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        clearAuthSession();
         router.push("/login");
     };
 

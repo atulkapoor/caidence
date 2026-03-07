@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.models import Creator, User
 from app.api.deps import get_current_active_user, require_creators_read, require_creators_write
 from app.services.auth_service import is_super_admin, is_brand_level
+from app.services.rbac_scope import visible_user_filter
 
 router = APIRouter()
 
@@ -100,10 +101,8 @@ async def list_creators(
         query = query.where(Creator.status == status)
     
     # Org filtering
-    if current_user.role != "super_admin":
-        query = query.join(User, Creator.user_id == User.id).where(
-            User.organization_id == current_user.organization_id
-        )
+    if not is_super_admin(current_user.role):
+        query = query.where(visible_user_filter(current_user, Creator.user_id))
     
     result = await db.execute(query)
     return result.scalars().all()
@@ -149,15 +148,15 @@ async def get_creator(
     """
     Get creator details.
     """
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(select(Creator).where(Creator.id == creator_id))
     else:
         result = await db.execute(
             select(Creator)
             .join(User, Creator.user_id == User.id)
             .where(
-                (Creator.id == creator_id) &
-                (User.organization_id == current_user.organization_id)
+                (Creator.id == creator_id)
+                & visible_user_filter(current_user, Creator.user_id)
             )
         )
     creator = result.scalar_one_or_none()
@@ -178,15 +177,15 @@ async def update_creator(
     """
     Update creator details.
     """
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(select(Creator).where(Creator.id == creator_id))
     else:
         result = await db.execute(
             select(Creator)
             .join(User, Creator.user_id == User.id)
             .where(
-                (Creator.id == creator_id) &
-                (User.organization_id == current_user.organization_id)
+                (Creator.id == creator_id)
+                & visible_user_filter(current_user, Creator.user_id)
             )
         )
     creator = result.scalar_one_or_none()
@@ -211,15 +210,15 @@ async def remove_creator(
     """
     Remove creator from roster.
     """
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(select(Creator).where(Creator.id == creator_id))
     else:
         result = await db.execute(
             select(Creator)
             .join(User, Creator.user_id == User.id)
             .where(
-                (Creator.id == creator_id) &
-                (User.organization_id == current_user.organization_id)
+                (Creator.id == creator_id)
+                & visible_user_filter(current_user, Creator.user_id)
             )
         )
     creator = result.scalar_one_or_none()
@@ -242,15 +241,15 @@ async def generate_affiliate_link(
     """
     Generate unique affiliate code for creator.
     """
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(select(Creator).where(Creator.id == creator_id))
     else:
         result = await db.execute(
             select(Creator)
             .join(User, Creator.user_id == User.id)
             .where(
-                (Creator.id == creator_id) &
-                (User.organization_id == current_user.organization_id)
+                (Creator.id == creator_id)
+                & visible_user_filter(current_user, Creator.user_id)
             )
         )
     creator = result.scalar_one_or_none()
@@ -278,15 +277,15 @@ async def get_creator_performance(
     """
     Get creator performance metrics.
     """
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(select(Creator).where(Creator.id == creator_id))
     else:
         result = await db.execute(
             select(Creator)
             .join(User, Creator.user_id == User.id)
             .where(
-                (Creator.id == creator_id) &
-                (User.organization_id == current_user.organization_id)
+                (Creator.id == creator_id)
+                & visible_user_filter(current_user, Creator.user_id)
             )
         )
     creator = result.scalar_one_or_none()
@@ -305,4 +304,3 @@ async def get_creator_performance(
         total_revenue=round(revenue, 2),
         commission_earned=round(revenue * creator.commission_rate, 2)
     )
-

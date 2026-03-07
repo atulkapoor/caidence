@@ -26,6 +26,7 @@ function buildApiBaseUrl(): string {
 }
 
 export const API_BASE_URL = buildApiBaseUrl();
+const ACCESS_TOKEN_REFRESH_WINDOW_SECONDS = Number(process.env.NEXT_PUBLIC_ACCESS_TOKEN_REFRESH_WINDOW_SECONDS || 120);
 
 function resolveUrl(url: string): string {
     if (!url) return API_BASE_URL;
@@ -36,6 +37,76 @@ function resolveUrl(url: string): string {
 
 export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
     return fetch(resolveUrl(url), options);
+}
+
+export function clearAuthSession(reason?: string) {
+    if (typeof localStorage === "undefined") return;
+    localStorage.removeItem("token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("token_expires_at");
+    localStorage.removeItem("user");
+    if (reason) localStorage.setItem("auth_logout_reason", reason);
+}
+
+export function storeAuthSession(accessToken: string, refreshToken?: string, accessExpiresInSeconds?: number) {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem("token", accessToken);
+    if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+    if (accessExpiresInSeconds && Number.isFinite(accessExpiresInSeconds)) {
+        const expiresAt = Date.now() + accessExpiresInSeconds * 1000;
+        localStorage.setItem("token_expires_at", String(expiresAt));
+    }
+}
+
+function getAccessTokenExpiresAt(): number | null {
+    if (typeof localStorage === "undefined") return null;
+    const raw = localStorage.getItem("token_expires_at");
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function refreshAccessTokenIfNeeded(): Promise<void> {
+    if (typeof localStorage === "undefined") return;
+
+    const accessToken = localStorage.getItem("token");
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (!accessToken || !refreshToken) return;
+
+    const expiresAt = getAccessTokenExpiresAt();
+    if (!expiresAt) return;
+
+    const remainingMs = expiresAt - Date.now();
+    if (remainingMs > ACCESS_TOKEN_REFRESH_WINDOW_SECONDS * 1000) return;
+
+    const res = await apiFetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!res.ok) {
+        let detail = "Session expired";
+        try {
+            const err = await res.json();
+            detail = err?.detail || detail;
+        } catch {
+            // ignore
+        }
+        const inactive = String(detail).toLowerCase().includes("inactive");
+        clearAuthSession(inactive ? "inactive" : "expired");
+        if (typeof window !== "undefined") {
+            window.location.href = inactive ? "/login?reason=inactive" : "/login";
+        }
+        return;
+    }
+
+    const data = await res.json();
+    storeAuthSession(data.access_token, data.refresh_token, data.access_expires_in_seconds);
+}
+
+export async function maybeRefreshAuthSession(): Promise<void> {
+    await refreshAccessTokenIfNeeded();
 }
 
 export async function getAuthHeaders(options: { includeJsonContentType?: boolean } = {}): Promise<HeadersInit> {
@@ -50,6 +121,8 @@ export async function getAuthHeaders(options: { includeJsonContentType?: boolean
 }
 
 export async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
+    await refreshAccessTokenIfNeeded();
+
     const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
     const mergedHeaders = new Headers(options.headers);
 
@@ -70,8 +143,23 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
 
     if (response.status === 401) {
         if (typeof window !== "undefined") {
-            localStorage.removeItem("token");
+            clearAuthSession("expired");
             window.location.href = "/login";
+        }
+    }
+
+    if (response.status === 400 || response.status === 403) {
+        try {
+            const body = await response.clone().json();
+            const detail = String(body?.detail || "").toLowerCase();
+            if (detail.includes("inactive user") || detail.includes("inactive user.") || detail.includes("inactive")) {
+                if (typeof window !== "undefined") {
+                    clearAuthSession("inactive");
+                    window.location.href = "/login?reason=inactive";
+                }
+            }
+        } catch {
+            // ignore non-json responses
         }
     }
 
