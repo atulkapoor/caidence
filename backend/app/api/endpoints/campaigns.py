@@ -6,6 +6,8 @@ from app.core.database import get_db
 from app.models import models
 from app.models.models import Campaign, CampaignEvent, Influencer, CampaignInfluencer, User
 from app.api.deps import require_campaign_read, require_campaign_write
+from app.services.auth_service import is_super_admin
+from app.services.rbac_scope import visible_user_filter
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -28,15 +30,14 @@ async def read_campaigns(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_campaign_read)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(Campaign).order_by(Campaign.created_at.desc()).offset(skip).limit(limit)
         )
     else:
         result = await db.execute(
             select(Campaign)
-            .join(User, Campaign.owner_id == User.id)
-            .where(User.organization_id == current_user.organization_id)
+            .where(visible_user_filter(current_user, Campaign.owner_id))
             .order_by(Campaign.created_at.desc())
             .offset(skip)
             .limit(limit)
@@ -62,7 +63,7 @@ async def read_campaign(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_campaign_read)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(Campaign)
             .options(selectinload(Campaign.influencers), selectinload(Campaign.events))
@@ -72,10 +73,9 @@ async def read_campaign(
         result = await db.execute(
             select(Campaign)
             .options(selectinload(Campaign.influencers), selectinload(Campaign.events))
-            .join(User, Campaign.owner_id == User.id)
             .where(
-                (Campaign.id == campaign_id) &
-                (User.organization_id == current_user.organization_id)
+                (Campaign.id == campaign_id)
+                & visible_user_filter(current_user, Campaign.owner_id)
             )
         )
     campaign = result.scalar_one_or_none()
@@ -89,17 +89,16 @@ async def launch_campaign(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_campaign_write)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(Campaign).where(Campaign.id == campaign_id)
         )
     else:
         result = await db.execute(
             select(Campaign)
-            .join(User, Campaign.owner_id == User.id)
             .where(
-                (Campaign.id == campaign_id) &
-                (User.organization_id == current_user.organization_id)
+                (Campaign.id == campaign_id)
+                & visible_user_filter(current_user, Campaign.owner_id)
             )
         )
     campaign = result.scalar_one_or_none()
@@ -126,17 +125,16 @@ async def add_influencer_to_campaign(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_campaign_write)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(Campaign).where(Campaign.id == campaign_id)
         )
     else:
         result = await db.execute(
             select(Campaign)
-            .join(User, Campaign.owner_id == User.id)
             .where(
-                (Campaign.id == campaign_id) &
-                (User.organization_id == current_user.organization_id)
+                (Campaign.id == campaign_id)
+                & visible_user_filter(current_user, Campaign.owner_id)
             )
         )
     campaign = result.scalar_one_or_none()
@@ -175,17 +173,16 @@ async def update_campaign(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_campaign_write)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(Campaign).where(Campaign.id == campaign_id)
         )
     else:
         result = await db.execute(
             select(Campaign)
-            .join(User, Campaign.owner_id == User.id)
             .where(
-                (Campaign.id == campaign_id) &
-                (User.organization_id == current_user.organization_id)
+                (Campaign.id == campaign_id)
+                & visible_user_filter(current_user, Campaign.owner_id)
             )
         )
     db_campaign = result.scalar_one_or_none()
@@ -205,17 +202,16 @@ async def delete_campaign(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_campaign_write)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(Campaign).where(Campaign.id == campaign_id)
         )
     else:
         result = await db.execute(
             select(Campaign)
-            .join(User, Campaign.owner_id == User.id)
             .where(
-                (Campaign.id == campaign_id) &
-                (User.organization_id == current_user.organization_id)
+                (Campaign.id == campaign_id)
+                & visible_user_filter(current_user, Campaign.owner_id)
             )
         )
     db_campaign = result.scalar_one_or_none()
@@ -256,4 +252,3 @@ async def get_campaign_analytics(
             {"name": "Display", "value": 10}
         ]
     }
-

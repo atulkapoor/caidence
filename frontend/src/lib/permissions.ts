@@ -6,6 +6,7 @@ export type UserRole =
     | "root"
     | "super_admin"
     | "agency_admin"
+    | "org_admin"
     | "agency_member"
     | "brand_admin"
     | "brand_member"
@@ -17,6 +18,7 @@ const ROLE_HIERARCHY: Record<UserRole, number> = {
     root: 110,
     super_admin: 100,
     agency_admin: 80,
+    org_admin: 80,
     agency_member: 60,
     brand_admin: 50,
     brand_member: 40,
@@ -114,6 +116,23 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
         "content_studio:read", "content_studio:write",
         "presentation_studio:read", "presentation_studio:write",
     ],
+    org_admin: [
+        "agency:read", "agency:write",
+        "brand:read", "brand:write",
+        "creators:read", "creators:write",
+        "campaign:read", "campaign:write",
+        "content:read", "content:write",
+        "analytics:read",
+        "discovery:read", "discovery:write",
+        "crm:read", "crm:write",
+        "design_studio:read", "design_studio:write",
+        "marcom:read", "marcom:write",
+        "workflow:read", "workflow:write",
+        "ai_agent:read", "ai_agent:write",
+        "ai_chat:read", "ai_chat:write",
+        "content_studio:read", "content_studio:write",
+        "presentation_studio:read", "presentation_studio:write",
+    ],
     agency_member: [
         "agency:read",
         "brand:read",
@@ -192,14 +211,14 @@ export function isSuperAdmin(role: UserRole): boolean {
  * Check if user has agency-level access.
  */
 export function isAgencyLevel(role: UserRole): boolean {
-    return ["super_admin", "agency_admin", "agency_member"].includes(role);
+    return ["super_admin", "agency_admin", "org_admin", "agency_member"].includes(role);
 }
 
 /**
  * Check if user has brand-level access.
  */
 export function isBrandLevel(role: UserRole): boolean {
-    return ["super_admin", "agency_admin", "agency_member", "brand_admin", "brand_member"].includes(role);
+    return ["super_admin", "agency_admin", "org_admin", "agency_member", "brand_admin", "brand_member"].includes(role);
 }
 
 /**
@@ -210,6 +229,7 @@ export function getRoleDisplayName(role: UserRole): string {
         root: "Root",
         super_admin: "Super Admin",
         agency_admin: "Agency Admin",
+        org_admin: "Org Admin",
         agency_member: "Agency Member",
         brand_admin: "Brand Admin",
         brand_member: "Brand Member",

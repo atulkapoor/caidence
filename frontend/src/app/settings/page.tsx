@@ -16,6 +16,7 @@ function SettingsContent() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState("profile");
+    const isOnboardingTabAllowed = !["brand_member", "agency_member"].includes((profile?.role || "").toLowerCase());
 
     const [formData, setFormData] = useState({
         full_name: "",
@@ -35,6 +36,12 @@ function SettingsContent() {
             setActiveTab(tab);
         }
     }, [searchParams]);
+
+    useEffect(() => {
+        if (!isOnboardingTabAllowed && activeTab === "onboarding") {
+            setActiveTab("profile");
+        }
+    }, [activeTab, isOnboardingTabAllowed]);
 
     const loadProfile = async () => {
         try {
@@ -115,14 +122,16 @@ function SettingsContent() {
                     >
                         Social
                     </button>
-                    <button
-                        onClick={() => setActiveTab("onboarding")}
-                        className={`pb-4 px-4 text-sm font-bold border-b-2 transition-colors ${activeTab === "onboarding"
-                            ? "border-indigo-600 text-indigo-600"
-                            : "border-transparent text-slate-500 hover:text-slate-700"}`}
-                    >
-                        Onboarding
-                    </button>
+                    {isOnboardingTabAllowed && (
+                        <button
+                            onClick={() => setActiveTab("onboarding")}
+                            className={`pb-4 px-4 text-sm font-bold border-b-2 transition-colors ${activeTab === "onboarding"
+                                ? "border-indigo-600 text-indigo-600"
+                                : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                        >
+                            Onboarding
+                        </button>
+                    )}
                 </div>
 
                 {activeTab === "profile" && (
@@ -263,7 +272,7 @@ function SettingsContent() {
                 )}
 
                 {activeTab === "social" && <SocialAccountsSettings />}
-                {activeTab === "onboarding" && <OnboardingSettings />}
+                {activeTab === "onboarding" && isOnboardingTabAllowed && <OnboardingSettings />}
             </div>
         </div>
     );

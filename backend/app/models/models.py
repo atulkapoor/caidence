@@ -53,6 +53,7 @@ class User(Base):
     
     # Organization & Role
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    parent_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     
     # RBAC Fields
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
@@ -65,12 +66,14 @@ class User(Base):
     # Status
     is_active = Column(Boolean, default=True)
     is_approved = Column(Boolean, default=False)  # Requires super admin approval for new signups
+    must_reset_password = Column(Boolean, default=False, nullable=False)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
     organization = relationship("Organization", back_populates="members")
+    parent_user = relationship("User", remote_side=[id], backref="child_users")
     team = relationship("Team", back_populates="members")
     role_model = relationship("Role", back_populates="users") # Rename to avoid conflict with 'role' string
     

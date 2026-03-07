@@ -10,6 +10,7 @@ from app.models.models import User
 from app.services.onboarding_service import OnboardingService
 
 router = APIRouter()
+ONBOARDING_EXEMPT_ROLES = {"brand_member", "agency_member"}
 
 
 class UpdateStepRequest(BaseModel):
@@ -24,6 +25,16 @@ async def get_progress(
     db: AsyncSession = Depends(get_db),
 ):
     """Get the current onboarding progress for the authenticated user."""
+    if current_user.role in ONBOARDING_EXEMPT_ROLES:
+        return {
+            "current_step": 0,
+            "profile_type": current_user.profile_type,
+            "is_complete": True,
+            "steps": [],
+            "completed_steps": [],
+            "step_data": {},
+        }
+
     progress = await OnboardingService.get_or_create_progress(current_user.id, db)
     steps = OnboardingService.get_steps(progress.profile_type)
     import json
@@ -44,6 +55,16 @@ async def update_progress(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a specific onboarding step's data and advance progress."""
+    if current_user.role in ONBOARDING_EXEMPT_ROLES:
+        return {
+            "current_step": 0,
+            "profile_type": current_user.profile_type,
+            "is_complete": True,
+            "steps": [],
+            "completed_steps": [],
+            "step_data": {},
+        }
+
     try:
         result = await OnboardingService.update_step(
             current_user.id,
@@ -63,6 +84,13 @@ async def complete_onboarding(
     db: AsyncSession = Depends(get_db),
 ):
     """Mark onboarding as complete. Validates all required steps are done."""
+    if current_user.role in ONBOARDING_EXEMPT_ROLES:
+        return {
+            "is_complete": True,
+            "profile_type": current_user.profile_type,
+            "completed_at": None,
+        }
+
     try:
         result = await OnboardingService.mark_complete(current_user.id, db)
         return result

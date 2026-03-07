@@ -24,7 +24,29 @@ const RESOURCES = [
     { key: "admin", label: "Admin Panel" },
 ];
 
-const ACTIONS = ["read", "write", "delete"];
+const ACTIONS = ["create", "read", "update", "delete"];
+
+function normalizePermissions(input: Record<string, string[]>): Record<string, string[]> {
+    const normalized: Record<string, string[]> = {};
+    for (const [resource, actions] of Object.entries(input || {})) {
+        const set = new Set(actions || []);
+        if (set.has("*")) {
+            normalized[resource] = ["*"];
+            continue;
+        }
+        if (set.has("write")) {
+            set.add("create");
+            set.add("update");
+            set.add("delete");
+        }
+        if ((set.has("create") || set.has("update") || set.has("delete")) && !set.has("read")) {
+            set.add("read");
+        }
+        const cleaned = ACTIONS.filter(action => set.has(action));
+        if (cleaned.length) normalized[resource] = cleaned;
+    }
+    return normalized;
+}
 
 export function RoleManagementTab() {
     const [roles, setRoles] = useState<RoleData[]>([]);
@@ -57,12 +79,16 @@ export function RoleManagementTab() {
             // Initialize edits from current role permissions
             const role = roles.find(r => r.id === id);
             if (role && !edits[id]) {
-                setEdits(prev => ({ ...prev, [id]: { ...role.permissions_json } }));
+                setEdits(prev => ({ ...prev, [id]: normalizePermissions(role.permissions_json) }));
             }
         }
     };
 
     const toggleAction = (roleId: number, resource: string, action: string) => {
+        const role = roles.find(r => r.id === roleId);
+        const isProtectedAdminMenu = (role?.name === "root" || role?.name === "super_admin") && resource === "admin";
+        if (isProtectedAdminMenu) return;
+
         setEdits(prev => {
             const current = prev[roleId] || {};
             const actions = current[resource] || [];
@@ -83,7 +109,7 @@ export function RoleManagementTab() {
         const perms = edits[roleId];
         if (!perms) return false;
         const actions = perms[resource] || [];
-        return actions.includes(action) || actions.includes("*");
+        return actions.includes(action) || actions.includes("*") || (action !== "read" && actions.includes("write"));
     };
 
     const isWildcard = (roleId: number): boolean => {
@@ -95,7 +121,7 @@ export function RoleManagementTab() {
     const isDirty = (roleId: number): boolean => {
         const role = roles.find(r => r.id === roleId);
         if (!role || !edits[roleId]) return false;
-        return JSON.stringify(role.permissions_json) !== JSON.stringify(edits[roleId]);
+        return JSON.stringify(normalizePermissions(role.permissions_json)) !== JSON.stringify(edits[roleId]);
     };
 
     const savePermissions = async (roleId: number) => {
@@ -124,7 +150,7 @@ export function RoleManagementTab() {
     const resetEdits = (roleId: number) => {
         const role = roles.find(r => r.id === roleId);
         if (role) {
-            setEdits(prev => ({ ...prev, [roleId]: { ...role.permissions_json } }));
+            setEdits(prev => ({ ...prev, [roleId]: normalizePermissions(role.permissions_json) }));
         }
     };
 
@@ -134,7 +160,7 @@ export function RoleManagementTab() {
     );
 
     const countPermissions = (role: RoleData): string => {
-        const perms = role.permissions_json;
+        const perms = normalizePermissions(role.permissions_json);
         if (perms["*"]?.includes("*")) return "Full Access";
         let count = 0;
         for (const actions of Object.values(perms)) {
@@ -243,6 +269,9 @@ export function RoleManagementTab() {
                                                                     <td className="py-2.5 pr-4 font-medium text-slate-700">{res.label}</td>
                                                                     {ACTIONS.map(action => {
                                                                         const active = hasAction(role.id, res.key, action);
+                                                                        const isProtectedAdminMenu =
+                                                                            (role.name === "root" || role.name === "super_admin") &&
+                                                                            res.key === "admin";
                                                                         return (
                                                                             <td key={action} className="px-4 py-2.5 text-center">
                                                                                 <button
@@ -250,11 +279,14 @@ export function RoleManagementTab() {
                                                                                         e.stopPropagation();
                                                                                         toggleAction(role.id, res.key, action);
                                                                                     }}
+                                                                                    disabled={isProtectedAdminMenu}
+                                                                                    title={isProtectedAdminMenu ? "Admin access is locked for this role" : ""}
                                                                                     className={cn(
                                                                                         "w-8 h-8 rounded-lg border transition-all text-xs font-bold",
                                                                                         active
                                                                                             ? "bg-emerald-100 border-emerald-300 text-emerald-700"
-                                                                                            : "bg-white border-slate-200 text-slate-300 hover:border-slate-300"
+                                                                                            : "bg-white border-slate-200 text-slate-300 hover:border-slate-300",
+                                                                                        isProtectedAdminMenu && "opacity-60 cursor-not-allowed"
                                                                                     )}
                                                                                 >
                                                                                     {active ? <ShieldCheck size={14} className="mx-auto" /> : ""}

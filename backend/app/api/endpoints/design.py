@@ -13,6 +13,8 @@ from app.models.models import User
 from typing import List
 import base64
 import io
+from app.services.auth_service import is_super_admin
+from app.services.rbac_scope import visible_user_filter
 
 router = APIRouter()
 
@@ -22,7 +24,7 @@ async def get_design_image(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_design_read)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.DesignAsset).where(models.DesignAsset.id == asset_id)
         )
@@ -31,7 +33,7 @@ async def get_design_image(
             select(models.DesignAsset)
             .where(
                 (models.DesignAsset.id == asset_id)
-                & (models.DesignAsset.user_id == current_user.id)
+                & visible_user_filter(current_user, models.DesignAsset.user_id)
             )
         )
     asset = result.scalar_one_or_none()
@@ -57,8 +59,8 @@ async def get_design_assets(
     current_user: User = Depends(require_design_read)
 ):
     filters = []
-    if current_user.role != "super_admin":
-        filters.append(models.DesignAsset.user_id == current_user.id)
+    if not is_super_admin(current_user.role):
+        filters.append(visible_user_filter(current_user, models.DesignAsset.user_id))
     if q:
         search = f"%{q.strip()}%"
         filters.append(
@@ -99,7 +101,7 @@ async def get_design_asset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_design_read)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.DesignAsset).where(models.DesignAsset.id == asset_id)
         )
@@ -108,7 +110,7 @@ async def get_design_asset(
             select(models.DesignAsset)
             .where(
                 (models.DesignAsset.id == asset_id)
-                & (models.DesignAsset.user_id == current_user.id)
+                & visible_user_filter(current_user, models.DesignAsset.user_id)
             )
         )
     asset = result.scalar_one_or_none()
@@ -162,7 +164,7 @@ async def save_design(
     try:
         # ✅ EDIT MODE → update existing
         if request.id:
-            if current_user.role == "super_admin":
+            if is_super_admin(current_user.role):
                 result = await db.execute(
                     select(models.DesignAsset).where(
                         models.DesignAsset.id == request.id
@@ -172,7 +174,7 @@ async def save_design(
                 result = await db.execute(
                     select(models.DesignAsset).where(
                         (models.DesignAsset.id == request.id)
-                        & (models.DesignAsset.user_id == current_user.id)
+                        & visible_user_filter(current_user, models.DesignAsset.user_id)
                     )
                 )
             db_asset = result.scalar_one_or_none()
@@ -220,7 +222,7 @@ async def update_design_asset(
     current_user: User = Depends(require_design_write)
 ):
     # Fetch design
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.DesignAsset).where(models.DesignAsset.id == asset_id)
         )
@@ -229,7 +231,7 @@ async def update_design_asset(
             select(models.DesignAsset)
             .where(
                 (models.DesignAsset.id == asset_id)
-                & (models.DesignAsset.user_id == current_user.id)
+                & visible_user_filter(current_user, models.DesignAsset.user_id)
             )
         )
 
@@ -272,7 +274,7 @@ async def delete_design_asset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_design_write)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.DesignAsset).where(models.DesignAsset.id == asset_id)
         )
@@ -281,7 +283,7 @@ async def delete_design_asset(
             select(models.DesignAsset)
             .where(
                 (models.DesignAsset.id == asset_id)
-                & (models.DesignAsset.user_id == current_user.id)
+                & visible_user_filter(current_user, models.DesignAsset.user_id)
             )
         )
     asset = result.scalar_one_or_none()

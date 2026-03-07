@@ -68,7 +68,9 @@ async def get_current_active_user(
     current_user: User = Depends(get_current_user)
 ) -> User:
     if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise HTTPException(status_code=400, detail="Inactive user. Please contact your administrator.")
+    if getattr(current_user, "must_reset_password", False):
+        raise HTTPException(status_code=403, detail="Password reset required")
     if not current_user.is_approved:
         raise HTTPException(status_code=403, detail="Account pending approval")
     return current_user
@@ -80,7 +82,7 @@ async def get_current_authenticated_user(
     """Like get_current_active_user but skips is_approved check.
     Used for onboarding endpoints that must work before admin approval."""
     if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise HTTPException(status_code=400, detail="Inactive user. Please contact your administrator.")
     return current_user
 
 # --- RBAC Permission Checks ---
@@ -113,8 +115,8 @@ def require_permission(action: str, resource: Optional[str] = None) -> Callable:
     return check_permission
 
 # Convenience dependencies
-require_admin = require_role("root", "super_admin", "agency_admin")
-require_manager = require_role("root", "super_admin", "agency_admin", "agency_member")
+require_admin = require_role("root", "super_admin", "agency_admin", "org_admin")
+require_manager = require_role("root", "super_admin", "agency_admin", "org_admin", "agency_member")
 
 
 # ========== ORGANIZATION FILTERING HELPERS ==========
@@ -210,4 +212,3 @@ def require_super_admin(current_user: User = Depends(get_current_active_user)) -
     if not _is_super_admin(current_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin access required")
     return current_user
-

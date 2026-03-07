@@ -110,7 +110,7 @@ describe('hasRole', () => {
   })
 
   it('hierarchy is correctly ordered', () => {
-    const roles: UserRole[] = ['viewer', 'creator', 'brand_member', 'brand_admin', 'agency_member', 'agency_admin', 'super_admin', 'root']
+    const roles: UserRole[] = ['viewer', 'creator', 'brand_member', 'brand_admin', 'agency_member', 'agency_admin', 'org_admin', 'super_admin', 'root']
     for (let i = 0; i < roles.length; i++) {
       for (let j = 0; j <= i; j++) {
         expect(hasRole(roles[i], roles[j])).toBe(true)
@@ -129,9 +129,10 @@ describe('isSuperAdmin', () => {
 })
 
 describe('isAgencyLevel', () => {
-  it('returns true for super_admin, agency_admin, agency_member', () => {
+  it('returns true for super_admin, agency_admin, org_admin, agency_member', () => {
     expect(isAgencyLevel('super_admin')).toBe(true)
     expect(isAgencyLevel('agency_admin')).toBe(true)
+    expect(isAgencyLevel('org_admin')).toBe(true)
     expect(isAgencyLevel('agency_member')).toBe(true)
   })
 
@@ -162,6 +163,7 @@ describe('getRoleDisplayName', () => {
     expect(getRoleDisplayName('root')).toBe('Root')
     expect(getRoleDisplayName('super_admin')).toBe('Super Admin')
     expect(getRoleDisplayName('agency_admin')).toBe('Agency Admin')
+    expect(getRoleDisplayName('org_admin')).toBe('Org Admin')
     expect(getRoleDisplayName('brand_member')).toBe('Brand Member')
     expect(getRoleDisplayName('creator')).toBe('Creator')
     expect(getRoleDisplayName('viewer')).toBe('Viewer')
@@ -169,9 +171,9 @@ describe('getRoleDisplayName', () => {
 })
 
 describe('getAllRoles', () => {
-  it('returns all 8 roles', () => {
+  it('returns all built-in roles', () => {
     const roles = getAllRoles()
-    expect(roles).toHaveLength(8)
+    expect(roles).toHaveLength(9)
   })
 
   it('each role has value and label', () => {

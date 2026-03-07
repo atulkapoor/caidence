@@ -53,6 +53,15 @@ export function ProtectedRoute({
             router.replace("/pending-approval");
             return;
         }
+        if (user.is_active === false) {
+            localStorage.setItem("auth_logout_reason", "inactive");
+            localStorage.removeItem("token");
+            localStorage.removeItem("refresh_token");
+            localStorage.removeItem("token_expires_at");
+            localStorage.removeItem("user");
+            router.replace("/login?reason=inactive");
+            return;
+        }
 
         const role = (user.role || "viewer") as UserRole;
 
@@ -68,6 +77,7 @@ export function ProtectedRoute({
                 root: 110,
                 super_admin: 100,
                 agency_admin: 80,
+                org_admin: 80,
                 agency_member: 60,
                 brand_admin: 50,
                 brand_member: 40,

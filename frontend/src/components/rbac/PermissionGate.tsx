@@ -44,12 +44,26 @@ export function PermissionGate({
     children,
 }: PermissionGateProps) {
     const { hasPermission, role, isSuperAdmin, loading } = usePermissionContext();
+    const cachedRole =
+        typeof window !== "undefined"
+            ? (() => {
+                try {
+                    const raw = localStorage.getItem("user");
+                    if (!raw) return null;
+                    const parsed = JSON.parse(raw);
+                    return parsed?.role ?? null;
+                } catch {
+                    return null;
+                }
+            })()
+            : null;
+    const cachedIsSuperAdmin = cachedRole === "root" || cachedRole === "super_admin";
 
     // While loading, render nothing (prevents flash of unauthorized content)
     if (loading) return null;
 
     // Super admins pass all gates
-    if (isSuperAdmin) return <>{children}</>;
+    if (isSuperAdmin || (!role && cachedIsSuperAdmin)) return <>{children}</>;
 
     // Check single permission
     if (require && !hasPermission(require)) {
@@ -72,6 +86,7 @@ export function PermissionGate({
             root: 110,
             super_admin: 100,
             agency_admin: 80,
+            org_admin: 80,
             agency_member: 60,
             brand_admin: 50,
             brand_member: 40,

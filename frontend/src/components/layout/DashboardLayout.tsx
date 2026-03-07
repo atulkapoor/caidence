@@ -4,6 +4,8 @@ import { ReactNode, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { useRouter } from "next/navigation";
+import { fetchCurrentUser } from "@/lib/api/auth";
+import { clearAuthSession, maybeRefreshAuthSession } from "@/lib/api/core";
 
 interface DashboardLayoutProps {
     children: ReactNode;
@@ -16,7 +18,34 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         const token = localStorage.getItem("token");
         if (!token) {
             router.push("/login");
+            return;
         }
+
+        const validateSession = async () => {
+            try {
+                await fetchCurrentUser();
+            } catch (error: any) {
+                const msg = String(error?.message || "").toLowerCase();
+                const inactive = msg.includes("inactive");
+                clearAuthSession(inactive ? "inactive" : "expired");
+                router.push(inactive ? "/login?reason=inactive" : "/login");
+            }
+        };
+
+        validateSession();
+        const interval = setInterval(validateSession, 60_000);
+
+        const onActivity = () => {
+            void maybeRefreshAuthSession();
+        };
+        window.addEventListener("click", onActivity);
+        window.addEventListener("keydown", onActivity);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener("click", onActivity);
+            window.removeEventListener("keydown", onActivity);
+        };
     }, [router]);
 
     return (

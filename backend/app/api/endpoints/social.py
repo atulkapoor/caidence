@@ -20,6 +20,7 @@ from app.core.database import get_db
 from app.models.models import Campaign, ContentGeneration, DesignAsset, ScheduledPost, User
 from app.models.social import SocialConnection
 from app.services.auth_service import is_super_admin
+from app.services.rbac_scope import visible_user_filter
 from app.services.social_auth_service import SocialAuthService, VALID_PLATFORMS
 
 router = APIRouter()
@@ -297,20 +298,9 @@ async def list_connections_for_settings(
     current_user: User = Depends(get_current_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Settings view:
-    - super admin: all users
-    - agency/root admin: same organization
-    - others: only own records
-    """
+    """Settings view with RBAC visibility (self + descendants, super users = all)."""
     query = select(SocialConnection, User.email).join(User, SocialConnection.user_id == User.id)
-
-    if is_super_admin(current_user.role):
-        pass
-    elif current_user.role in {"agency_admin", "root"} and current_user.organization_id:
-        query = query.where(User.organization_id == current_user.organization_id)
-    else:
-        query = query.where(SocialConnection.user_id == current_user.id)
+    query = query.where(visible_user_filter(current_user, SocialConnection.user_id))
 
     query = query.order_by(SocialConnection.connected_at.desc())
     result = await db.execute(query)
@@ -622,7 +612,7 @@ async def list_scheduled_posts(
 ):
     query = (
         select(ScheduledPost)
-        .where(ScheduledPost.user_id == current_user.id)
+        .where(visible_user_filter(current_user, ScheduledPost.user_id))
         .order_by(ScheduledPost.scheduled_at.asc())
     )
 
@@ -661,7 +651,7 @@ async def cancel_scheduled_post(
     row_result = await db.execute(
         select(ScheduledPost).where(
             ScheduledPost.id == scheduled_post_id,
-            ScheduledPost.user_id == current_user.id,
+            visible_user_filter(current_user, ScheduledPost.user_id),
         )
     )
     scheduled = row_result.scalar_one_or_none()

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { login, fetchCurrentUser } from "@/lib/api";
 import { getOnboardingProgress } from "@/lib/api/onboarding";
+import { storeAuthSession } from "@/lib/api/core";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -15,13 +16,22 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
 
+    useEffect(() => {
+        const reason = new URLSearchParams(window.location.search).get("reason");
+        const cachedReason = localStorage.getItem("auth_logout_reason");
+        if (reason === "inactive" || cachedReason === "inactive") {
+            toast.error("User is inactive. Please contact your administrator.");
+            localStorage.removeItem("auth_logout_reason");
+        }
+    }, []);
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
         try {
             const data = await login({ email, password });
-            localStorage.setItem("token", data.access_token);
+            storeAuthSession(data.access_token, data.refresh_token, data.access_expires_in_seconds);
             toast.success("Welcome back!");
 
             // Fetch and store user details for RBAC & routing decisions
@@ -31,6 +41,11 @@ export default function LoginPage() {
                 localStorage.setItem("user", JSON.stringify(user));
             } catch (userErr) {
                 console.error("Failed to fetch user details", userErr);
+            }
+
+            if (data.requires_password_reset || user?.must_reset_password) {
+                router.push("/force-password-reset");
+                return;
             }
 
             // If user is not approved, send to pending-approval page first.

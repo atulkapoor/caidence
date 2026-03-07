@@ -12,6 +12,8 @@ from app.models import models
 from app.models.models import User
 from app.schemas import schemas
 from app.services.ai_service import AIService
+from app.services.auth_service import is_super_admin
+from app.services.rbac_scope import visible_user_filter
 
 router = APIRouter()
 
@@ -40,8 +42,8 @@ async def get_content_generations(
     current_user: User = Depends(require_content_read),
 ):
     filters = []
-    if current_user.role != "super_admin":
-        filters.append(models.ContentGeneration.user_id == current_user.id)
+    if not is_super_admin(current_user.role):
+        filters.append(visible_user_filter(current_user, models.ContentGeneration.user_id))
     if q:
         search = f"%{q.strip()}%"
         filters.append(
@@ -77,7 +79,7 @@ async def get_content_generation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_content_read),
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.ContentGeneration).where(models.ContentGeneration.id == content_id)
         )
@@ -86,7 +88,7 @@ async def get_content_generation(
             select(models.ContentGeneration)
             .where(
                 (models.ContentGeneration.id == content_id)
-                & (models.ContentGeneration.user_id == current_user.id)
+                & visible_user_filter(current_user, models.ContentGeneration.user_id)
             )
         )
     content = result.scalar_one_or_none()
@@ -175,7 +177,7 @@ async def save_content(
         normalized_title = _normalize_platform_title(request.title, request.platform)
 
         if request.id:
-            if current_user.role == "super_admin":
+            if is_super_admin(current_user.role):
                 result = await db.execute(
                     select(models.ContentGeneration).where(
                         models.ContentGeneration.id == request.id
@@ -185,7 +187,7 @@ async def save_content(
                 result = await db.execute(
                     select(models.ContentGeneration).where(
                         (models.ContentGeneration.id == request.id)
-                        & (models.ContentGeneration.user_id == current_user.id)
+                        & visible_user_filter(current_user, models.ContentGeneration.user_id)
                     )
                 )
             db_content = result.scalar_one_or_none()
@@ -241,7 +243,7 @@ async def update_content(
     try:
         normalized_title = _normalize_platform_title(request.title, request.platform)
 
-        if current_user.role == "super_admin":
+        if is_super_admin(current_user.role):
             result = await db.execute(
                 select(models.ContentGeneration).where(models.ContentGeneration.id == content_id)
             )
@@ -249,7 +251,7 @@ async def update_content(
             result = await db.execute(
                 select(models.ContentGeneration).where(
                     (models.ContentGeneration.id == content_id)
-                    & (models.ContentGeneration.user_id == current_user.id)
+                    & visible_user_filter(current_user, models.ContentGeneration.user_id)
                 )
             )
         db_content = result.scalar_one_or_none()
@@ -294,7 +296,7 @@ async def delete_content_generation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_content_write),
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.ContentGeneration).where(models.ContentGeneration.id == content_id)
         )
@@ -302,7 +304,7 @@ async def delete_content_generation(
         result = await db.execute(
             select(models.ContentGeneration).where(
                 (models.ContentGeneration.id == content_id)
-                & (models.ContentGeneration.user_id == current_user.id)
+                & visible_user_filter(current_user, models.ContentGeneration.user_id)
             )
         )
     content = result.scalar_one_or_none()

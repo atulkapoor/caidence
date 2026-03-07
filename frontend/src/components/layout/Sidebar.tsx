@@ -27,6 +27,7 @@ import { usePermissionContext } from "@/contexts/PermissionContext";
 interface UserInfo {
     full_name: string;
     email: string;
+    role?: string;
 }
 
 interface NavItem {
@@ -101,7 +102,8 @@ export function Sidebar() {
                 const userData = JSON.parse(userJson);
                 setUser({
                     full_name: userData.full_name || "User",
-                    email: userData.email || ""
+                    email: userData.email || "",
+                    role: userData.role || undefined,
                 });
             } catch (e) {
                 console.error("Failed to parse user data", e);
@@ -137,11 +139,11 @@ export function Sidebar() {
         if (!item.permission) return true;
         // Super admin sees everything
         if (isSuperAdmin) return true;
-        // Still loading or permission API unavailable — show all to avoid broken navigation.
-        // Route-level permission gates still protect access.
-        if (!permissionData) return true;
-        // Still loading — show all (prevent flash of missing items)
-        if (permLoading) return true;
+        // Fallback: if permission endpoint failed, trust cached role for root/super_admin nav visibility.
+        if ((user?.role === "root" || user?.role === "super_admin") && !permissionData) return true;
+        // Keep permissioned nav hidden until permissions are available.
+        if (permLoading) return false;
+        if (!permissionData) return false;
         // Check permission
         return hasPermission(item.permission);
     };

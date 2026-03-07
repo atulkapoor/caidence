@@ -27,38 +27,31 @@ export async function fetchAdminUsers(): Promise<AdminUser[]> {
 }
 
 export async function approveUser(userId: number): Promise<AdminUser> {
+    return updateAdminUser(userId, { is_approved: true });
+}
+
+export async function updateAdminUser(
+    userId: number,
+    payload: Partial<Pick<AdminUser, "role" | "organization_id" | "is_active" | "is_approved">>
+): Promise<AdminUser> {
     const res = await authenticatedFetch(`${API_BASE_URL}/admin/users/${userId}`, {
         method: "PATCH",
-        body: JSON.stringify({ is_approved: true }),
+        body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error("Failed to approve user");
+    if (!res.ok) throw new Error("Failed to update user");
     return res.json();
 }
 
 export async function inviteUser(data: TeamInvite): Promise<AdminUser> {
-    try {
-        const res = await authenticatedFetch(`${API_BASE_URL}/admin/invite`, {
-            method: "POST",
-            body: JSON.stringify(data),
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || "Failed to invite user");
-        }
-        return res.json();
-    } catch (error) {
-        console.error("Invite User API failed, using mock data:", error);
-        return {
-            id: Math.floor(Math.random() * 1000) + 1000,
-            email: data.email,
-            full_name: data.full_name,
-            role: data.role,
-            organization_id: data.organization_id || null,
-            is_active: true,
-            is_approved: true,
-            created_at: new Date().toISOString(),
-        };
+    const res = await authenticatedFetch(`${API_BASE_URL}/admin/invite`, {
+        method: "POST",
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to invite user");
     }
+    return res.json();
 }
 
 export interface PlatformOverview {

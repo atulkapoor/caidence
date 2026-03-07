@@ -11,6 +11,7 @@ from app.models.team import Team
 from app.api.endpoints.auth import get_current_active_user
 from app.services.auth_service import is_super_admin, ROLE_HIERARCHY
 from app.services.permission_engine import PermissionEngine
+from app.services.rbac_scope import can_manage_user, is_role_assignable
 from app.schemas import rbac_schemas as schemas
 
 router = APIRouter()
@@ -41,6 +42,25 @@ def _require_admin(current_user: User):
     """Raise 403 if the user is not a super admin or root."""
     if not is_super_admin(current_user.role):
         raise HTTPException(status_code=403, detail="Super admin access required")
+
+
+def _ensure_admin_menu_invariant(role_name: str, permissions_json: dict) -> dict:
+    """
+    Root and super_admin must always retain admin menu access.
+    """
+    if role_name not in {"root", "super_admin"}:
+        return permissions_json
+
+    normalized = dict(permissions_json or {})
+    admin_actions = set(normalized.get("admin", []))
+    has_admin_read = "read" in admin_actions
+    has_admin_mutation = any(a in admin_actions for a in {"write", "create", "update", "delete"})
+    if not has_admin_read or not has_admin_mutation:
+        raise HTTPException(
+            status_code=422,
+            detail="Cannot remove admin menu permissions from root/super_admin",
+        )
+    return normalized
 
 
 # ========== ROLE ENDPOINTS ==========
@@ -106,6 +126,9 @@ async def update_role(
         raise HTTPException(status_code=403, detail="Cannot modify built-in root/super_admin roles")
 
     update_data = role_data.model_dump(exclude_unset=True)
+    if "permissions_json" in update_data:
+        update_data["permissions_json"] = _ensure_admin_menu_invariant(role.name, update_data["permissions_json"])
+
     old_values = {}
     for field, value in update_data.items():
         old_values[field] = getattr(role, field)
@@ -135,7 +158,17 @@ async def delete_role(
         raise HTTPException(status_code=404, detail="Role not found")
 
     # Protect built-in roles
-    built_in = {"root", "super_admin", "agency_admin", "agency_member", "brand_admin", "brand_member", "creator", "viewer"}
+    built_in = {
+        "root",
+        "super_admin",
+        "agency_admin",
+        "org_admin",
+        "agency_member",
+        "brand_admin",
+        "brand_member",
+        "creator",
+        "viewer",
+    }
     if role.name in built_in:
         raise HTTPException(status_code=403, detail=f"Cannot delete built-in role '{role.name}'")
 
@@ -168,7 +201,7 @@ async def update_role_permissions(
         raise HTTPException(status_code=404, detail="Role not found")
 
     # Validate actions
-    valid_actions = {"read", "write"}
+    valid_actions = {"create", "read", "update", "delete", "write"}
     for resource, actions in data.permissions_json.items():
         invalid = set(actions) - valid_actions
         if invalid:
@@ -177,12 +210,14 @@ async def update_role_permissions(
                 detail=f"Invalid actions {invalid} for resource '{resource}'. Valid: {valid_actions}"
             )
 
+    checked_permissions = _ensure_admin_menu_invariant(role.name, data.permissions_json)
+
     old_perms = role.permissions_json
-    role.permissions_json = data.permissions_json
+    role.permissions_json = checked_permissions
 
     await _log_audit(
         db, current_user, "role_permissions_updated",
-        details={"role_id": role_id, "role_name": role.name, "old_permissions": old_perms, "new_permissions": data.permissions_json}
+        details={"role_id": role_id, "role_name": role.name, "old_permissions": old_perms, "new_permissions": checked_permissions}
     )
     await db.commit()
     await db.refresh(role)
@@ -215,24 +250,24 @@ async def assign_role(
         raise HTTPException(status_code=404, detail="Role not found")
 
     # 3. Permission Checks
-    if current_user.role != "root":
-        if not is_super_admin(current_user.role):
-            current_level = ROLE_HIERARCHY.get(current_user.role, 0)
-            if current_level < ROLE_HIERARCHY.get("agency_admin", 80):
-                raise HTTPException(status_code=403, detail="Insufficient permissions to assign roles")
+    allowed_assigner_roles = {"root", "super_admin", "agency_admin", "org_admin", "brand_admin"}
+    if current_user.role not in allowed_assigner_roles:
+        raise HTTPException(status_code=403, detail="Insufficient permissions to assign roles")
 
-        if not is_super_admin(current_user.role):
-            if current_user.organization_id and target_user.organization_id:
-                if current_user.organization_id != target_user.organization_id:
-                    raise HTTPException(status_code=403, detail="Cannot manage users outside your organization")
+    if not is_role_assignable(current_user.role, role_obj.name):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Role '{current_user.role}' cannot assign role '{role_obj.name}'",
+        )
 
-        assigner_level = ROLE_HIERARCHY.get(current_user.role, 0)
-        target_role_level = ROLE_HIERARCHY.get(role_obj.name, 0)
-        if target_role_level >= assigner_level:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Cannot assign role '{role_obj.name}' — it is at or above your permission level"
-            )
+    if not is_super_admin(current_user.role):
+        if current_user.organization_id and target_user.organization_id:
+            if current_user.organization_id != target_user.organization_id:
+                raise HTTPException(status_code=403, detail="Cannot manage users outside your organization")
+
+        can_manage = await can_manage_user(current_user, target_user.id, db)
+        if not can_manage:
+            raise HTTPException(status_code=403, detail="Can only manage your own user tree")
 
     # 4. Apply Assignment
     old_role = target_user.role

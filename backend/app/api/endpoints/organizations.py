@@ -12,6 +12,7 @@ from app.models import Organization, User
 from app.schemas import schemas
 from app.api.endpoints.auth import get_current_active_user
 from app.services.auth_service import is_super_admin, is_agency_level
+from app.services.rbac_scope import visible_users_where_clause
 
 router = APIRouter()
 
@@ -188,6 +189,11 @@ async def list_organization_users(
     # Permission check
     if not is_super_admin(current_user.role) and current_user.organization_id != org_id:
         raise HTTPException(status_code=403, detail="Not authorized to view this organization's users")
-    
-    result = await db.execute(select(User).where(User.organization_id == org_id))
+
+    query = select(User).where(User.organization_id == org_id)
+    visibility_clause = visible_users_where_clause(current_user)
+    if visibility_clause is not None:
+        query = query.where(visibility_clause)
+
+    result = await db.execute(query)
     return result.scalars().all()

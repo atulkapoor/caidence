@@ -8,6 +8,8 @@ from app.models.models import User
 from app.schemas import schemas
 from app.api.deps import require_workflow_read, require_workflow_write
 from typing import List
+from app.services.auth_service import is_super_admin
+from app.services.rbac_scope import visible_user_filter
 
 router = APIRouter()
 
@@ -18,15 +20,14 @@ async def get_workflows(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_workflow_read)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.Workflow).order_by(models.Workflow.created_at.desc()).offset(skip).limit(limit)
         )
     else:
         result = await db.execute(
             select(models.Workflow)
-            .join(User, models.Workflow.user_id == User.id)
-            .where(User.organization_id == current_user.organization_id)
+            .where(visible_user_filter(current_user, models.Workflow.user_id))
             .order_by(models.Workflow.created_at.desc())
             .offset(skip)
             .limit(limit)
@@ -58,7 +59,7 @@ async def update_workflow(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_workflow_write)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.Workflow).where(models.Workflow.id == workflow_id)
         )
@@ -68,7 +69,7 @@ async def update_workflow(
             .join(User, models.Workflow.user_id == User.id)
             .where(
                 (models.Workflow.id == workflow_id) &
-                (User.organization_id == current_user.organization_id)
+                visible_user_filter(current_user, models.Workflow.user_id)
             )
         )
     workflow = result.scalar_one_or_none()
@@ -90,7 +91,7 @@ async def get_workflow(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_workflow_read)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.Workflow).where(models.Workflow.id == workflow_id)
         )
@@ -100,7 +101,7 @@ async def get_workflow(
             .join(User, models.Workflow.user_id == User.id)
             .where(
                 (models.Workflow.id == workflow_id) &
-                (User.organization_id == current_user.organization_id)
+                visible_user_filter(current_user, models.Workflow.user_id)
             )
         )
     workflow = result.scalar_one_or_none()
@@ -114,7 +115,7 @@ async def get_workflow_history(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_workflow_read)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.Workflow).where(models.Workflow.id == workflow_id)
         )
@@ -124,7 +125,7 @@ async def get_workflow_history(
             .join(User, models.Workflow.user_id == User.id)
             .where(
                 (models.Workflow.id == workflow_id) &
-                (User.organization_id == current_user.organization_id)
+                visible_user_filter(current_user, models.Workflow.user_id)
             )
         )
     workflow = result.scalar_one_or_none()
@@ -144,7 +145,7 @@ async def run_workflow(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_workflow_write)
 ):
-    if current_user.role == "super_admin":
+    if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.Workflow).where(models.Workflow.id == workflow_id)
         )
@@ -154,7 +155,7 @@ async def run_workflow(
             .join(User, models.Workflow.user_id == User.id)
             .where(
                 (models.Workflow.id == workflow_id) &
-                (User.organization_id == current_user.organization_id)
+                visible_user_filter(current_user, models.Workflow.user_id)
             )
         )
     workflow = result.scalar_one_or_none()
@@ -178,4 +179,3 @@ async def run_workflow(
     await db.refresh(run)
     
     return run
-
