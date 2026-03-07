@@ -387,7 +387,7 @@ function DesignStudioContent() {
     const ratios = ["16:9", "1:1", "9:16", "4:3"];
     const models = [
         { id: "NanoBanana", label: "Nano Banana" },
-        { id: "IDKiro/sdxs-512-0.9", label: "IDKiro/sdxs-512-0.9" },
+        { id: "IDKiro/sdxs-512-0.9", label: "DIffusion" },
     ];
 
 
@@ -677,9 +677,9 @@ function DesignStudioContent() {
 
                         {/* TAB SWITCHER */}
                         <div className="flex p-1 bg-slate-100 rounded-lg ml-6">
-                            <button onClick={() => setActiveTab("generate")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "generate" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Generate Designs</button>
+                            <button onClick={() => setActiveTab("generate")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "generate" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Generate Design</button>
                             <button onClick={() => setActiveTab("library")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "library" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Design Library</button>
-                            <button onClick={() => setActiveTab("calendar")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "calendar" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Design Calendar</button>
+                            <button onClick={() => setActiveTab("calendar")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "calendar" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Calendar</button>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">

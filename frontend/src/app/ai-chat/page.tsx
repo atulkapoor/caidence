@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Send, Sparkles, Paperclip, User, Bot, Crown, ArrowRight } from "lucide-react";
+import { Send, Sparkles, Paperclip, User, Bot, Crown, ArrowRight, Trash2 } from "lucide-react";
 import { usePreferences } from "@/context/PreferencesContext";
 import { TypewriterEffect } from "@/components/ui/TypewriterEffect";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
@@ -20,9 +20,12 @@ export default function AIChatPage() {
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<any[]>([]);
     const [sessionId, setSessionId] = useState<string | null>(null);
+    const [selectedModel, setSelectedModel] = useState("Gemini");
     const [isLoading, setIsLoading] = useState(false);
     const [isEnhancing, setIsEnhancing] = useState(false);
+    const [showClearConfirm, setShowClearConfirm] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const SESSION_STORAGE_KEY = "ai_chat_session_id";
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -35,6 +38,33 @@ export default function AIChatPage() {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    useEffect(() => {
+        const restoreSession = async () => {
+            try {
+                const storedSessionId = window.localStorage.getItem(SESSION_STORAGE_KEY);
+                if (!storedSessionId) return;
+
+                // @ts-ignore
+                const { fetchChatHistory } = await import("@/lib/api");
+                const history = await fetchChatHistory(storedSessionId);
+                if (!Array.isArray(history) || history.length === 0) return;
+
+                setSessionId(storedSessionId);
+                setMessages(
+                    history.map((msg: any) => ({
+                        role: msg.role,
+                        content: msg.content,
+                        modelUsed: msg.model_used || undefined,
+                    })),
+                );
+            } catch (error) {
+                console.error("Failed to restore chat session", error);
+            }
+        };
+
+        restoreSession();
+    }, []);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -92,8 +122,6 @@ export default function AIChatPage() {
             : input;
 
         const newMsg = { role: "user", content: displayContent }; // Show short version in UI
-        const apiMsg = { role: "user", content: userMsg }; // Send full content to API
-
         setMessages(prev => [...prev, newMsg]);
 
         try {
@@ -101,13 +129,21 @@ export default function AIChatPage() {
             const { sendChatMessage } = await import("@/lib/api");
 
             // Send full content (including file text) to backend
-            const res = await sendChatMessage(userMsg, sessionId || undefined);
+            const res = await sendChatMessage(
+                userMsg,
+                sessionId || undefined,
+                selectedModel,
+            );
 
             if (!sessionId) {
                 setSessionId(res.session_id);
+                window.localStorage.setItem(SESSION_STORAGE_KEY, res.session_id);
             }
 
-            setMessages(prev => [...prev, { role: "assistant", content: res.response }]);
+            setMessages(prev => [
+                ...prev,
+                { role: "assistant", content: res.response, modelUsed: res.model_used || selectedModel },
+            ]);
         } catch (error) {
             console.error("Chat failed", error);
             setMessages(prev => [...prev, { role: "assistant", content: "Error: Could not reach the AI. Please try again." }]);
@@ -127,6 +163,19 @@ export default function AIChatPage() {
         }
     };
 
+    const handleClearSession = () => {
+        setShowClearConfirm(true);
+    };
+
+    const confirmClearSession = () => {
+        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+        setSessionId(null);
+        setMessages([]);
+        setInput("");
+        setSelectedFile(null);
+        setShowClearConfirm(false);
+    };
+
     return (
         <DashboardLayout>
             <PermissionGate require="ai_chat:read" fallback={<AccessDenied />}>
@@ -144,17 +193,37 @@ export default function AIChatPage() {
                                 <p className="text-xs text-slate-500 font-medium">Always active • {industry || "Strategy"} Expert</p>
                             </div>
                         </div>
-                        {/* Search Bar */}
-                        <div className="relative block">
-                            <input
-                                type="text"
-                                placeholder="Search chat..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-3 pr-8 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 w-48 bg-white"
-                            />
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={selectedModel}
+                                onChange={(e) => setSelectedModel(e.target.value)}
+                                className="px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white text-slate-700"
+                                title="Select AI model"
+                            >
+                                <option value="Gemini">Gemini</option>
+                                <option value="qwen2.5:0.5b">Qwen 2.5</option>
+                            </select>
+                            <button
+                                onClick={handleClearSession}
+                                disabled={!sessionId && messages.length === 0}
+                                className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white text-slate-600 hover:text-red-600 hover:border-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                title="Clear chat session"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Clear
+                            </button>
+                            {/* Search Bar */}
+                            <div className="relative block">
+                                <input
+                                    type="text"
+                                    placeholder="Search chat..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-3 pr-8 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 w-48 bg-white"
+                                />
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -176,7 +245,11 @@ export default function AIChatPage() {
                                     {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                                 </div>
                                 <div className={`space-y-1 ${msg.role === 'user' ? 'text-right' : ''}`}>
-                                    <div className="font-bold text-sm text-slate-900">{msg.role === 'user' ? 'You' : 'C(AI)DENCE AI'}</div>
+                                    <div className="font-bold text-sm text-slate-900">
+                                        {msg.role === 'user'
+                                            ? 'You'
+                                            : `C(AI)DENCE AI${msg.modelUsed ? ` • ${msg.modelUsed}` : ''}`}
+                                    </div>
                                     <div className={`p-4 rounded-2xl shadow-sm border leading-relaxed whitespace-pre-wrap text-left ${msg.role === 'user'
                                         ? 'bg-teal-600 text-white border-transparent rounded-tr-none'
                                         : 'bg-white text-slate-700 border-slate-100 rounded-tl-none'
@@ -243,7 +316,7 @@ export default function AIChatPage() {
                                         setIsEnhancing(true);
                                         try {
                                             const { enhanceDescription } = await import("@/lib/api");
-                                            const enhanced = await enhanceDescription(input);
+                                            const enhanced = await enhanceDescription(input, selectedModel);
                                             setInput(enhanced);
                                         } catch (e) {
                                             console.error("Enhance failed", e);
@@ -307,6 +380,30 @@ export default function AIChatPage() {
                     </div>
                 </div>
             </div>
+            {showClearConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+                    <div className="w-full max-w-sm rounded-xl bg-white border border-slate-200 shadow-xl p-5">
+                        <h3 className="text-base font-bold text-slate-900">Clear chat session?</h3>
+                        <p className="mt-2 text-sm text-slate-600">
+                            This will clear current chat from screen and remove saved session from this browser.
+                        </p>
+                        <div className="mt-4 flex items-center justify-end gap-2">
+                            <button
+                                onClick={() => setShowClearConfirm(false)}
+                                className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmClearSession}
+                                className="px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700"
+                            >
+                                Yes, clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             </PermissionGate>
         </DashboardLayout>
     );

@@ -729,28 +729,93 @@ Text:
             }
 
     @staticmethod
-    async def chat_completion(messages: List[dict]) -> str:
+    async def chat_completion(
+        messages: List[dict],
+        model: Optional[str] = None,
+        return_meta: bool = False,
+    ) -> str | Dict[str, str]:
         """
         Sends a chat history to the LLM.
         Messages format: [{"role": "user", "content": "..."}]
         """
+        def _result(text: str, model_used: str) -> str | Dict[str, str]:
+            cleaned_text = AIService._clean_text_output(text)
+            if return_meta:
+                return {
+                    "text": cleaned_text,
+                    "model_used": model_used,
+                }
+            return cleaned_text
+
+        model_key = AIService._normalize_model_name(model)
+
+        # Explicit Qwen route (Ollama chat)
+        if model_key == "qwen":
+            qwen_model = AIService._resolve_ollama_model(model)
+            try:
+                async with httpx.AsyncClient(timeout=300.0) as client:
+                    payload = {
+                        "model": qwen_model,
+                        "messages": messages,
+                        "stream": False,
+                    }
+                    response = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
+                    response.raise_for_status()
+                    result = response.json()
+                    text = result.get("message", {}).get("content", "")
+                    return _result(text, qwen_model)
+            except Exception as e:
+                logger.error(f"Qwen chat completion failed for model '{qwen_model}': {e}")
+                # Continue to generic fallback below.
+
+        # Explicit Gemini route
+        if model_key == "gemini":
+            try:
+                transcript_lines: List[str] = []
+                for msg in messages:
+                    role = (msg.get("role") or "user").strip().lower()
+                    content = (msg.get("content") or "").strip()
+                    if not content:
+                        continue
+                    if role == "system":
+                        transcript_lines.append(f"System: {content}")
+                    elif role == "assistant":
+                        transcript_lines.append(f"Assistant: {content}")
+                    else:
+                        transcript_lines.append(f"User: {content}")
+
+                prompt = (
+                    "You are C(AI)DENCE, an expert AI Marketing Assistant. "
+                    "Answer the user's latest message using relevant prior context. "
+                    "Be concise, practical, and professional.\n\n"
+                    "Conversation:\n"
+                    + "\n".join(transcript_lines)
+                    + "\n\nAssistant:"
+                )
+                selected_model, _ = AIService._get_google_model("Gemini", task="content")
+                response = await asyncio.to_thread(selected_model.generate_content, prompt)
+                return _result(response.text or "", "Gemini")
+            except Exception as e:
+                logger.error(f"Gemini chat completion failed: {e}")
+                # Continue to generic fallback below.
+
         # Auto-discover Ollama model if needed
         if LLM_PROVIDER == "ollama" and not AIService._cached_model:
             await AIService._discover_ollama_model()
         
-        model = AIService._get_model_name()
+        default_model = AIService._get_model_name()
         
         # Try LiteLLM for cloud providers
         if LITELLM_AVAILABLE and LLM_PROVIDER != "ollama":
             try:
-                model_name = model
+                model_name = default_model
                 if LLM_PROVIDER == "anthropic":
-                    model_name = f"anthropic/{model}"
+                    model_name = f"anthropic/{default_model}"
                 elif LLM_PROVIDER == "gemini":
-                    model_name = f"gemini/{model}" if not model.startswith("gemini/") else model
+                    model_name = f"gemini/{default_model}" if not default_model.startswith("gemini/") else default_model
                 
                 response = await acompletion(model=model_name, messages=messages)
-                return response.choices[0].message.content
+                return _result(response.choices[0].message.content, model_name)
             except Exception as e:
                 logger.error(f"LiteLLM chat error: {e}")
         
@@ -758,15 +823,18 @@ Text:
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
                 payload = {
-                    "model": model,
+                    "model": default_model,
                     "messages": messages,
                     "stream": False,
                 }
                 response = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
                 response.raise_for_status()
                 result = response.json()
-                return result.get("message", {}).get("content", "")
+                return _result(result.get("message", {}).get("content", ""), default_model)
         except Exception as e:
             logger.error(f"Chat completion failed: {e}")
             last_msg = messages[-1]["content"] if messages else ""
-            return f"[Offline Mode] Great point about '{last_msg[:30]}'. Ensure your LLM provider is configured."
+            return _result(
+                f"[Offline Mode] Great point about '{last_msg[:30]}'. Ensure your LLM provider is configured.",
+                "offline-fallback",
+            )

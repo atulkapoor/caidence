@@ -279,6 +279,7 @@ class ChatMessage(Base):
     session_id = Column(String, index=True) # To group chats
     role = Column(String) # user, ai
     content = Column(Text)
+    model_used = Column(String, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     user_id = Column(Integer, ForeignKey("users.id"))
 
