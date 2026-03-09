@@ -489,14 +489,28 @@ class SocialAuthService:
         async with httpx.AsyncClient(timeout=30.0) as client:
             if image_url:
                 if image_url.startswith(("http://", "https://")):
-                    resp = await client.post(
-                        f"https://graph.facebook.com/v18.0/{page_id}/photos",
-                        data={
-                            "caption": message or "",
-                            "url": image_url,
-                            "access_token": page_access_token,
-                        },
-                    )
+                    # Prefer byte-upload (`source`) for reliability, because Meta may reject
+                    # URLs that are locally hosted, private, or temporarily inaccessible.
+                    image_resp = await client.get(image_url, follow_redirects=True)
+                    if image_resp.status_code in (200, 201) and image_resp.content:
+                        content_type = image_resp.headers.get("content-type", "").split(";")[0].strip() or "image/png"
+                        resp = await client.post(
+                            f"https://graph.facebook.com/v18.0/{page_id}/photos",
+                            data={
+                                "caption": message or "",
+                                "access_token": page_access_token,
+                            },
+                            files={"source": ("generated.png", image_resp.content, content_type)},
+                        )
+                    else:
+                        resp = await client.post(
+                            f"https://graph.facebook.com/v18.0/{page_id}/photos",
+                            data={
+                                "caption": message or "",
+                                "url": image_url,
+                                "access_token": page_access_token,
+                            },
+                        )
                 elif image_url.startswith("data:"):
                     encoded = image_url.split(",", 1)[1] if "," in image_url else image_url
                     try:

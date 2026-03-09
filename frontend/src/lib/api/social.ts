@@ -76,6 +76,21 @@ export interface ScheduledPost {
     updated_at?: string | null;
 }
 
+export interface ScheduledPostSummary {
+    id: number;
+    user_id: number;
+    content_id?: number | null;
+    design_asset_id?: number | null;
+    campaign_id?: number | null;
+    title?: string | null;
+    platform: string;
+    status: string;
+    scheduled_at: string;
+    published_at?: string | null;
+    created_at: string;
+    updated_at?: string | null;
+}
+
 export async function getConnectionUrl(
     platform: string,
     redirectTo?: string,
@@ -192,27 +207,47 @@ export async function scheduleSocialPost(payload: SchedulePostPayload): Promise<
 
 export async function fetchScheduledPosts(params?: {
     status?: string;
-    status_in?: string;
-    scope?: "content" | "design";
     from_date?: string;
     to_date?: string;
-    skip?: number;
-    limit?: number;
 }): Promise<ScheduledPost[]> {
     const query = new URLSearchParams();
     if (params?.status) query.set("status", params.status);
-    if (params?.status_in) query.set("status_in", params.status_in);
-    if (params?.scope) query.set("scope", params.scope);
     if (params?.from_date) query.set("from_date", params.from_date);
     if (params?.to_date) query.set("to_date", params.to_date);
-    if (typeof params?.skip === "number") query.set("skip", String(params.skip));
-    if (typeof params?.limit === "number") query.set("limit", String(params.limit));
     const suffix = query.toString() ? `?${query.toString()}` : "";
 
     const res = await authenticatedFetch(`${API_BASE_URL}/social/scheduled-posts${suffix}`);
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Failed to fetch scheduled posts");
+    }
+    return res.json();
+}
+
+export async function fetchScheduledPostsSummary(params?: {
+    status?: string;
+    from_date?: string;
+    to_date?: string;
+}): Promise<ScheduledPostSummary[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set("status", params.status);
+    if (params?.from_date) query.set("from_date", params.from_date);
+    if (params?.to_date) query.set("to_date", params.to_date);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/scheduled-posts/summary${suffix}`);
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to fetch scheduled posts summary");
+    }
+    return res.json();
+}
+
+export async function fetchScheduledPostById(scheduledPostId: number): Promise<ScheduledPost> {
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/scheduled-posts/${scheduledPostId}`);
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to fetch scheduled post details");
     }
     return res.json();
 }

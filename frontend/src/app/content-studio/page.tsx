@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { generateContent, fetchContentGenerations, fetchContentGenerationsPage, ContentGeneration, saveContent, deleteContent, enhanceDescription } from "@/lib/api";
 import { getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost, type PublishPostResponse } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
 import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalendar";
@@ -75,6 +75,7 @@ function ContentStudioContent() {
     const [isLibraryLoading, setIsLibraryLoading] = useState(false);
     const [libraryPage, setLibraryPage] = useState(1);
     const [totalLibraryItems, setTotalLibraryItems] = useState(0);
+    const scheduleInputRef = useRef<HTMLInputElement | null>(null);
     useModalScroll(!!previewContent || isScheduleOpen);
     const LIBRARY_PAGE_SIZE = 12;
 
@@ -1028,13 +1029,22 @@ ${prompt}
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Date and Time</label>
-                                    <input
-                                        type="datetime-local"
-                                        value={scheduleDateTime}
-                                        onChange={(e) => setScheduleDateTime(e.target.value)}
-                                        min={toDateTimeLocalValue(new Date())}
-                                        className="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                    />
+                                    <div
+                                        className="w-full"
+                                        onClick={() => {
+                                            scheduleInputRef.current?.focus();
+                                            (scheduleInputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null)?.showPicker?.();
+                                        }}
+                                    >
+                                        <input
+                                            ref={scheduleInputRef}
+                                            type="datetime-local"
+                                            value={scheduleDateTime}
+                                            onChange={(e) => setScheduleDateTime(e.target.value)}
+                                            min={toDateTimeLocalValue(new Date())}
+                                            className="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                             <div className="mt-6 flex justify-end gap-2">

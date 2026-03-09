@@ -421,11 +421,26 @@ async def publish_post(
     db: AsyncSession = Depends(get_db),
 ):
     """Publish text post to supported social platforms."""
+    if payload.design_asset_id:
+        design_row = await db.execute(
+            select(DesignAsset).where(
+                DesignAsset.id == payload.design_asset_id,
+                DesignAsset.user_id == current_user.id,
+            )
+        )
+        design_asset = design_row.scalar_one_or_none()
+        if design_asset and design_asset.is_posted:
+            raise HTTPException(
+                status_code=409,
+                detail="This design is already posted. Create a new design to post again.",
+            )
+
     try:
         publish_response = await _publish_for_platform(
             platform=platform,
             message=payload.message,
             image_url=payload.image_url,
+            design_asset_id=payload.design_asset_id,
             user_id=current_user.id,
             db=db,
         )
@@ -519,6 +534,11 @@ async def create_scheduled_post(
         )
         design_obj = design_result.scalar_one_or_none()
         if design_obj:
+            if design_obj.is_posted:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This design is already posted. Create a new design to schedule again.",
+                )
             validated_design_asset_id = payload.design_asset_id
 
     if payload.campaign_id:
@@ -554,11 +574,18 @@ async def create_scheduled_post(
         ScheduledPost.title == normalized_title,
         ScheduledPost.image_url == normalized_image_url,
     )
-    message_only_signature_clause = ScheduledPost.message == message
-
-    conflict_filters = [signature_clause, message_only_signature_clause]
+    conflict_filters = [signature_clause]
     if reference_clauses:
         conflict_filters.append(or_(*reference_clauses))
+    else:
+        # Only when no durable references are available, use a relaxed fallback.
+        # This prevents false positives for new design assets that happen to share the same text.
+        conflict_filters.append(
+            and_(
+                ScheduledPost.message == message,
+                ScheduledPost.title == normalized_title,
+            )
+        )
 
     conflict_query = select(ScheduledPost).where(
         ScheduledPost.user_id == current_user.id,
@@ -749,6 +776,7 @@ async def _publish_for_platform(
     platform: str,
     message: str,
     image_url: Optional[str],
+    design_asset_id: Optional[int],
     user_id: int,
     db: AsyncSession,
 ) -> dict:
@@ -770,11 +798,25 @@ async def _publish_for_platform(
         )
 
     if normalized_platform == "facebook":
+        resolved_image_url = (image_url or "").strip() or None
+        # For Design Studio assets, prefer raw stored image payload (usually data URL/base64)
+        # over frontend-rendered API URLs that Facebook cannot fetch.
+        if design_asset_id:
+            design_result = await db.execute(
+                select(DesignAsset).where(
+                    DesignAsset.id == design_asset_id,
+                    DesignAsset.user_id == user_id,
+                )
+            )
+            design_asset = design_result.scalar_one_or_none()
+            if design_asset and getattr(design_asset, "image_url", None):
+                resolved_image_url = str(design_asset.image_url)
+
         data = await SocialAuthService.publish_facebook_post(
             user_id=user_id,
             message=message,
             db=db,
-            image_url=(image_url or "").strip() or None,
+            image_url=resolved_image_url,
         )
         return _normalize_publish_response(
             platform="facebook",
@@ -848,6 +890,7 @@ async def process_due_scheduled_posts(
                 platform=post.platform,
                 message=post.message,
                 image_url=post.image_url,
+                design_asset_id=post.design_asset_id,
                 user_id=post.user_id,
                 db=db,
             )
