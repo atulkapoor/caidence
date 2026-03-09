@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
+import { usePermissionContext } from "@/contexts/PermissionContext";
 
 interface PageProps {
     params: { id: string };
@@ -15,6 +16,13 @@ interface PageProps {
 
 export default function ContentDetailPage({ params }: PageProps) {
     const router = useRouter();
+    const { hasPermission, data } = usePermissionContext();
+    const granted = data?.permissions || [];
+    const hasContentStudioModelPermissions = granted.some(
+        (perm) => perm === "*:*" || perm.startsWith("content_studio:")
+    );
+    const contentPermissionResource = hasContentStudioModelPermissions ? "content_studio" : "content";
+    const canEditContent = hasPermission(`${contentPermissionResource}:update`) || hasPermission(`${contentPermissionResource}:write`);
     // Unwrap params compatible with Next.js 15+ (if params is a promise)
     // In Next 15, params is a Promise. We need to unwrap it.
     // However, since this is a client component, we can just use `use` or `useEffect` but `params` prop in Next 15 client components is still passed as a promise in some configs or as object in others depending on if it's async layout.
@@ -104,7 +112,7 @@ export default function ContentDetailPage({ params }: PageProps) {
 
     return (
         <DashboardLayout>
-            <PermissionGate require="content:read" fallback={<AccessDenied />}>
+            <PermissionGate requireAny={["content_studio:read", "content:read"]} fallback={<AccessDenied />}>
                 <div className="min-h-screen bg-slate-50/50 p-6 sm:p-8">
                     <div className="max-w-4xl mx-auto">
 
@@ -160,13 +168,15 @@ export default function ContentDetailPage({ params }: PageProps) {
                                 </button>
 
                                 {/* Edit in Studio */}
-                                <button
-                                    onClick={handleEdit}
-                                    className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-violet-200 hover:bg-violet-700 hover:shadow-xl hover:shadow-violet-200/50 transition-all transform active:scale-[0.98]"
-                                >
-                                    <PenTool className="w-4 h-4" />
-                                    Edit in Studio
-                                </button>
+                                {canEditContent && (
+                                    <button
+                                        onClick={handleEdit}
+                                        className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-violet-200 hover:bg-violet-700 hover:shadow-xl hover:shadow-violet-200/50 transition-all transform active:scale-[0.98]"
+                                    >
+                                        <PenTool className="w-4 h-4" />
+                                        Edit in Studio
+                                    </button>
+                                )}
                             </div>
                         </div>
 

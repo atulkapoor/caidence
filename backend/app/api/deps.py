@@ -168,10 +168,28 @@ def require_campaign_write(current_user: User = Depends(require_permission("writ
 def require_content_read(current_user: User = Depends(require_permission("read", "content"))) -> User:
     return current_user
 
+def require_content_create(current_user: User = Depends(require_permission("create", "content"))) -> User:
+    return current_user
+
+def require_content_update(current_user: User = Depends(require_permission("update", "content"))) -> User:
+    return current_user
+
+def require_content_delete(current_user: User = Depends(require_permission("delete", "content"))) -> User:
+    return current_user
+
 def require_content_write(current_user: User = Depends(require_permission("write", "content"))) -> User:
     return current_user
 
 def require_design_read(current_user: User = Depends(require_permission("read", "design_studio"))) -> User:
+    return current_user
+
+def require_design_create(current_user: User = Depends(require_permission("create", "design_studio"))) -> User:
+    return current_user
+
+def require_design_update(current_user: User = Depends(require_permission("update", "design_studio"))) -> User:
+    return current_user
+
+def require_design_delete(current_user: User = Depends(require_permission("delete", "design_studio"))) -> User:
     return current_user
 
 def require_design_write(current_user: User = Depends(require_permission("write", "design_studio"))) -> User:

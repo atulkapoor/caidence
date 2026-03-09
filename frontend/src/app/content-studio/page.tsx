@@ -13,8 +13,24 @@ import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalend
 
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
+import { usePermissionContext } from "@/contexts/PermissionContext";
 
 function ContentStudioContent() {
+    const { hasPermission, data } = usePermissionContext();
+    const granted = data?.permissions || [];
+    const hasContentStudioModelPermissions = granted.some(
+        (perm) => perm === "*:*" || perm.startsWith("content_studio:")
+    );
+    // Prefer "content_studio" for Content Studio module RBAC; fallback to legacy "content".
+    const contentPermissionResource = hasContentStudioModelPermissions ? "content_studio" : "content";
+    const canContentCreate = hasPermission(`${contentPermissionResource}:create`);
+    const canContentWrite =
+        hasPermission(`${contentPermissionResource}:write`) ||
+        hasPermission(`${contentPermissionResource}:update`);
+    const canContentDelete = hasPermission(`${contentPermissionResource}:delete`);
+    const canUseGenerator = canContentCreate;
+    const canEditExistingContent = canContentWrite;
+    const isContentReadOnly = !canContentCreate && !canContentWrite;
     type GeneratedResponse = {
         contentId?: number | null,
         platform: string,
@@ -194,6 +210,19 @@ function ContentStudioContent() {
     }, [activeTab, libraryPage, searchQuery, filterPlatform]);
 
     useEffect(() => {
+        if (activeTab === "generator" && !canUseGenerator) {
+            setActiveTab("library");
+        }
+    }, [activeTab, canUseGenerator, setActiveTab]);
+
+    useEffect(() => {
+        if (isEditMode && !canEditExistingContent) {
+            setIsEditMode(false);
+            setIsEditId(null);
+        }
+    }, [isEditMode, canEditExistingContent]);
+
+    useEffect(() => {
         if (!pendingCampaignTitle || campaignId !== null || availableCampaigns.length === 0) {
             return;
         }
@@ -302,6 +331,10 @@ function ContentStudioContent() {
     };
 
     const handleGenerate = async () => {
+        if (!canUseGenerator) {
+            toast.error("You don't have create access for Content generator");
+            return;
+        }
         if (!prompt || !title) {
             toast.error("Please provide a Title and Content Brief");
             return;
@@ -556,6 +589,15 @@ ${prompt}
     };
 
     const handleSave = async () => {
+        const updatingExisting = isEditMode || currentResponses.some((r) => Boolean(r.contentId));
+        if (updatingExisting && !canEditExistingContent) {
+            toast.error("You don't have update access");
+            return;
+        }
+        if (!updatingExisting && !canContentCreate) {
+            toast.error("You don't have create access");
+            return;
+        }
         if (!title || currentResponses.length === 0) {
             toast.error("Nothing to save");
             return;
@@ -636,6 +678,10 @@ ${prompt}
         imageUrl?: string,
         contentId?: number | null,
     ): Promise<PublishPostResponse | null> => {
+        if (isContentReadOnly) {
+            toast.error("Read-only access: posting is disabled");
+            return null;
+        }
         if (!text?.trim()) {
             toast.error("Nothing to post");
             return null;
@@ -686,6 +732,10 @@ ${prompt}
     };
 
     const handleScheduleSubmit = async () => {
+        if (isContentReadOnly) {
+            toast.error("Read-only access: scheduling is disabled");
+            return;
+        }
         if (!scheduleDraft) return;
         if (!scheduleDateTime) {
             toast.error("Select date and time");
@@ -740,6 +790,15 @@ ${prompt}
     };
 
     const handleSaveSingle = async (response: GeneratedResponse, idx: number) => {
+        const updatingExisting = isEditMode || Boolean(response.contentId);
+        if (updatingExisting && !canEditExistingContent) {
+            toast.error("You don't have update access");
+            return;
+        }
+        if (!updatingExisting && !canContentCreate) {
+            toast.error("You don't have create access");
+            return;
+        }
         if (isResponsePosted(response, idx)) {
             toast.error("Posted content is read-only. Create new content to make changes.");
             return;
@@ -782,6 +841,10 @@ ${prompt}
     };
 
     const loadFromHistory = (item: ContentGeneration) => {
+        if (!canEditExistingContent) {
+            toast.error("You don't have update access");
+            return;
+        }
         const parsedPrompt = parseSavedPrompt(item.prompt || "");
         const matchedCampaign = parsedPrompt.campaignTitle
             ? availableCampaigns.find((campaign) => campaign.title.trim().toLowerCase() === parsedPrompt.campaignTitle!.trim().toLowerCase())
@@ -921,22 +984,24 @@ ${prompt}
                                 </div>
 
                                 <div className="mt-auto flex flex-col gap-3">
-                                    <button
-                                        onClick={() => {
-                                            if (previewContent.is_posted) {
-                                                toast.info("Posted content is view-only.");
-                                                return;
-                                            }
-                                            loadFromHistory(previewContent);
-                                            setActiveTab("generator");
-                                            setPreviewContent(null);
-                                        }}
-                                        disabled={previewContent.is_posted}
-                                        className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                    >
-                                        <PenTool className="w-4 h-4" />
-                                        {previewContent.is_posted ? "View Only (Posted)" : "Edit / Remix"}
-                                    </button>
+                                    {canEditExistingContent && (
+                                        <button
+                                            onClick={() => {
+                                                if (previewContent.is_posted) {
+                                                    toast.info("Posted content is view-only.");
+                                                    return;
+                                                }
+                                                loadFromHistory(previewContent);
+                                                setActiveTab("generator");
+                                                setPreviewContent(null);
+                                            }}
+                                            disabled={previewContent.is_posted}
+                                            className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            <PenTool className="w-4 h-4" />
+                                            {previewContent.is_posted ? "View Only (Posted)" : "Edit / Remix"}
+                                        </button>
+                                    )}
                                     <button
                                         onClick={async () => {
                                             try {
@@ -963,7 +1028,7 @@ ${prompt}
                                                 setPostingPreview(false);
                                             }
                                         }}
-                                        disabled={postingPreview || previewContent.is_posted}
+                                        disabled={isContentReadOnly || postingPreview || previewContent.is_posted}
                                         className="w-full py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 disabled:opacity-60"
                                     >
                                         <Send className="w-4 h-4" />
@@ -983,7 +1048,7 @@ ${prompt}
                                                 contentId: previewContent.id,
                                             })
                                         }
-                                        disabled={previewContent.is_posted}
+                                        disabled={isContentReadOnly || previewContent.is_posted}
                                         className="w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-60"
                                     >
                                         <Calendar className="w-4 h-4" />
@@ -1087,14 +1152,16 @@ ${prompt}
                         <div className="flex p-1 bg-slate-100 rounded-lg ml-6">
                             <button
                                 onClick={() => {
+                                    if (!canUseGenerator) return;
                                     if (activeTab !== "generator") {
                                         startNew();
                                     }
                                     setActiveTab("generator");
                                 }}
+                                disabled={!canUseGenerator}
                                 className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "generator"
                                     ? "bg-white text-slate-900 shadow-sm"
-                                    : "text-slate-500 hover:text-slate-700"}`}
+                                    : "text-slate-500 hover:text-slate-700"} ${!canUseGenerator ? "opacity-50 cursor-not-allowed" : ""}`}
                             >
                                 Generator
                             </button>
@@ -1143,14 +1210,7 @@ ${prompt}
                             {/* LEFT PANEL: Inputs */}
                             <div className="lg:col-span-5 h-full overflow-y-auto border-r border-slate-200 bg-white p-6 custom-scrollbar">
                                 <div className="max-w-xl mx-auto space-y-8">
-                                    {/* ... Input Sections (Platforms, Details, Brief) ... */}
-                                    {/* REUSING EXISTING INPUT SECTIONS HERE WOULD BE DUPLICATED CODE IF NOT CAREFUL. 
-                                        Since I am replacing the whole return block, I must ensure the input sections are preserved relative to my Replace call.
-                                        However, replace_file_content is replacing a BLOCK. I need to be careful not to delete the inputs logic I just added.
-                                        
-                                        Wait, I am replacing from line 170 (Layout start) to the end.
-                                        I need to recreate the WHOLE render structure.
-                                    */}
+                                    {/* Input Sections (Platforms, Details, Brief) */}
 
                                     {/* 1. Platform Selection */}
                                     <section className="space-y-4">
@@ -1189,19 +1249,20 @@ ${prompt}
                                             Define Content
                                         </h2>
                                         <div className="space-y-4">
-                                            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Give your content a title..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500 font-bold text-slate-800" />
+                                            <input type="text" value={title} disabled={!canUseGenerator} onChange={(e) => setTitle(e.target.value)} placeholder="Give your content a title..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500 font-bold text-slate-800 disabled:opacity-60" />
 
                                             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                                                 {contentTypes.map((type) => (
-                                                    <button key={type} onClick={() => setContentType(type)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${contentType === type ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>{type}</button>
+                                                    <button key={type} disabled={!canUseGenerator} onClick={() => setContentType(type)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors border disabled:opacity-50 ${contentType === type ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>{type}</button>
                                                 ))}
                                             </div>
 
-                                            <input type="text" value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="Keywords (e.g. AI, automation)..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-violet-500 outline-none" />
+                                            <input type="text" value={keywords} disabled={!canUseGenerator} onChange={(e) => setKeywords(e.target.value)} placeholder="Keywords (e.g. AI, automation)..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-violet-500 outline-none disabled:opacity-60" />
 
                                             <div className="grid grid-cols-2 gap-4">
                                                 <select
                                                     value={campaignId || ""}
+                                                    disabled={!canUseGenerator}
                                                     onChange={(e) => setCampaignId(e.target.value ? Number(e.target.value) : null)}
                                                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium"
                                                 >
@@ -1210,13 +1271,13 @@ ${prompt}
                                                         <option key={c.id} value={c.id}>{c.title}</option>
                                                     ))}
                                                 </select>
-                                                <select value={writingExpert} onChange={(e) => setWritingExpert(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium"><option value="General Marketing">General Marketing</option>{experts.map(e => <option key={e} value={e}>{e}</option>)}</select>
+                                                <select value={writingExpert} disabled={!canUseGenerator} onChange={(e) => setWritingExpert(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium disabled:opacity-60"><option value="General Marketing">General Marketing</option>{experts.map(e => <option key={e} value={e}>{e}</option>)}</select>
                                             </div>
 
                                             {/* Length */}
                                             <div className="grid grid-cols-3 gap-2">
                                                 {["Short", "Medium", "Long"].map((len) => (
-                                                    <button key={len} onClick={() => setLength(len)} className={`py-2 rounded-lg text-xs font-bold border transition-colors ${length === len ? 'bg-violet-50 text-violet-600 border-violet-200' : 'bg-white text-slate-500 border-slate-200'}`}>{len}</button>
+                                                    <button key={len} disabled={!canUseGenerator} onClick={() => setLength(len)} className={`py-2 rounded-lg text-xs font-bold border transition-colors disabled:opacity-50 ${length === len ? 'bg-violet-50 text-violet-600 border-violet-200' : 'bg-white text-slate-500 border-slate-200'}`}>{len}</button>
                                                 ))}
                                             </div>
 
@@ -1225,6 +1286,7 @@ ${prompt}
                                                     <input
                                                         type="checkbox"
                                                         checked={generateWithImage}
+                                                        disabled={!canUseGenerator}
                                                         onChange={(e) => setGenerateWithImage(e.target.checked)}
                                                         className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
                                                     />
@@ -1235,6 +1297,7 @@ ${prompt}
                                                         <input
                                                             type="color"
                                                             value={normalizeHexColor(brandColors)}
+                                                            disabled={!canUseGenerator}
                                                             onChange={(e) => setBrandColors(e.target.value)}
                                                             className="h-10 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white p-1"
                                                             title="Pick brand color"
@@ -1242,6 +1305,7 @@ ${prompt}
                                                         <input
                                                             type="text"
                                                             value={brandColors}
+                                                            disabled={!canUseGenerator}
                                                             onChange={(e) => setBrandColors(e.target.value)}
                                                             onBlur={() => {
                                                                 const normalized = toHexColorOrNull(brandColors);
@@ -1266,20 +1330,20 @@ ${prompt}
                                             The Brief
                                         </h2>
                                         <div className="relative group">
-                                            <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe what you want to create..." className="w-full h-40 p-4 pb-12 bg-white border-2 border-slate-200 rounded-2xl focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none resize-none font-medium"></textarea>
+                                            <textarea value={prompt} disabled={!canUseGenerator} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe what you want to create..." className="w-full h-40 p-4 pb-12 bg-white border-2 border-slate-200 rounded-2xl focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none resize-none font-medium disabled:opacity-60"></textarea>
                                             <div className="absolute bottom-3 right-3 flex items-center gap-2">
                                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg cursor-pointer" onClick={() => setWebSearch(!webSearch)}>
                                                     <div className={`w-2 h-2 rounded-full ${webSearch ? 'bg-green-500' : 'bg-slate-300'}`}></div>
                                                     <span className="text-xs font-bold text-slate-600">Web Search {webSearch ? 'ON' : 'OFF'}</span>
                                                 </div>
-                                                <button onClick={handleEnhance} disabled={!prompt} className="flex items-center gap-1 px-3 py-1.5 bg-violet-50 text-violet-600 text-xs font-bold rounded-lg hover:bg-violet-100 disabled:opacity-50"><Wand2 className="w-3 h-3" /> Enhance</button>
+                                                <button onClick={handleEnhance} disabled={!prompt || !canUseGenerator} className="flex items-center gap-1 px-3 py-1.5 bg-violet-50 text-violet-600 text-xs font-bold rounded-lg hover:bg-violet-100 disabled:opacity-50"><Wand2 className="w-3 h-3" /> Enhance</button>
                                             </div>
                                         </div>
                                     </section>
 
                                     {/* Generate Button */}
                                     <div className="pt-4 sticky bottom-0 bg-white/95 backdrop-blur-sm pb-2">
-                                        <button onClick={handleGenerate} disabled={isGenerating || !prompt || !title || selectedPlatforms.length === 0} className="w-full py-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-bold text-lg shadow-xl shadow-violet-200 transition-all flex items-center justify-center gap-3 disabled:opacity-70">
+                                        <button onClick={handleGenerate} disabled={!canUseGenerator || isGenerating || !prompt || !title || selectedPlatforms.length === 0} className="w-full py-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-bold text-lg shadow-xl shadow-violet-200 transition-all flex items-center justify-center gap-3 disabled:opacity-70">
                                             {isGenerating ? <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>Generating...</> : <><Zap className="w-5 h-5 fill-white" />Generate Content</>}
                                         </button>
                                     </div>
@@ -1295,7 +1359,11 @@ ${prompt}
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={handleSave}
-                                                    disabled={currentResponses.some((response, idx) => isResponsePosted(response, idx))}
+                                                    disabled={
+                                                        currentResponses.some((response, idx) => isResponsePosted(response, idx)) ||
+                                                        (isEditMode && !canEditExistingContent) ||
+                                                        (!isEditMode && !canContentCreate)
+                                                    }
                                                     className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-50"
                                                 >
                                                     <Sparkles className="w-3 h-3 text-amber-400" /> Save All
@@ -1353,7 +1421,7 @@ ${prompt}
                                                                     toast.error(error?.message || "Failed to prepare scheduled post");
                                                                 }
                                                             }}
-                                                            disabled={isResponsePosted(response, idx)}
+                                                            disabled={isContentReadOnly || isResponsePosted(response, idx)}
                                                             className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-md shadow-amber-200 transition-all disabled:opacity-50"
                                                         >
                                                             <Calendar className="w-3 h-3" />
@@ -1396,7 +1464,7 @@ ${prompt}
                                                                     setPostingIndex(null);
                                                                 }
                                                             }}
-                                                            disabled={postingIndex === idx || isResponsePosted(response, idx)}
+                                                            disabled={isContentReadOnly || postingIndex === idx || isResponsePosted(response, idx)}
                                                             className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md shadow-emerald-200 transition-all disabled:opacity-50"
                                                         >
                                                             <Send className="w-3 h-3" />
@@ -1409,11 +1477,15 @@ ${prompt}
 
                                                         <button
                                                             onClick={async () => await handleSaveSingle(response, idx)}
-                                                            disabled={isResponsePosted(response, idx)}
+                                                            disabled={
+                                                                isResponsePosted(response, idx) ||
+                                                                ((isEditMode || Boolean(response.contentId)) && !canEditExistingContent) ||
+                                                                (!(isEditMode || Boolean(response.contentId)) && !canContentCreate)
+                                                            }
                                                             className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md shadow-indigo-200 transition-all disabled:opacity-50"
                                                         >
                                                             <Save className="w-3 h-3" />
-                                                            {isEditMode ? "Update" : "Save"}
+                                                            {(isEditMode && canEditExistingContent) ? "Update" : "Save"}
                                                         </button>
 
                                                     </div>
@@ -1453,7 +1525,7 @@ ${prompt}
                                                                         )
                                                                     )
                                                                 }
-                                                                disabled={isResponsePosted(response, idx)}
+                                                                disabled={isResponsePosted(response, idx) || ((isEditMode || Boolean(response.contentId)) && !canEditExistingContent)}
                                                                 className="w-full min-h-[240px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 leading-relaxed resize-y outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
                                                             />
                                                         </div>
@@ -1539,7 +1611,7 @@ ${prompt}
                                                 <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent"></div>
                                             </div>
                                             <div className="flex items-center gap-2 pt-4 border-t border-slate-100 mt-auto">
-                                                {!item.is_posted && (
+                                                {!item.is_posted && canEditExistingContent && (
                                                     <>
                                                         <button
                                                             onClick={(e) => {
@@ -1571,35 +1643,39 @@ ${prompt}
                                                         </span>
                                                     </>
                                                 )}
-                                                <div className="w-px h-4 bg-slate-200"></div>
-                                                <button
-                                                    onClick={async (e) => {
-                                                        e.stopPropagation();
+                                                {canContentDelete && (
+                                                    <>
+                                                        <div className="w-px h-4 bg-slate-200"></div>
+                                                        <button
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
 
-                                                        if (!confirm("Are you sure you want to delete this content?")) return;
+                                                                if (!confirm("Are you sure you want to delete this content?")) return;
 
-                                                        const toastId = toast.loading("Deleting...");
+                                                                const toastId = toast.loading("Deleting...");
 
-                                                        try {
-                                                            await deleteContent(item.id);
-                                                            setDeletedContentIds((prev) => {
-                                                                const next = new Set(prev);
-                                                                next.add(item.id);
-                                                                return next;
-                                                            });
-                                                            setRecentCreations((prev) => prev.filter((entry) => entry.id !== item.id));
-                                                            await loadHistory();
-                                                            toast.success("Content deleted successfully", { id: toastId });
-                                                        } catch (error) {
-                                                            console.error(error);
-                                                            toast.error("Failed to delete content", { id: toastId });
-                                                        }
-                                                    }}
-                                                    className="px-2 text-xs font-bold text-slate-400 hover:text-red-500 transition-colors"
-                                                    title="Delete"
-                                                >
-                                                    <X className="w-3 h-3" />
-                                                </button>
+                                                                try {
+                                                                    await deleteContent(item.id);
+                                                                    setDeletedContentIds((prev) => {
+                                                                        const next = new Set(prev);
+                                                                        next.add(item.id);
+                                                                        return next;
+                                                                    });
+                                                                    setRecentCreations((prev) => prev.filter((entry) => entry.id !== item.id));
+                                                                    await loadHistory();
+                                                                    toast.success("Content deleted successfully", { id: toastId });
+                                                                } catch (error) {
+                                                                    console.error(error);
+                                                                    toast.error("Failed to delete content", { id: toastId });
+                                                                }
+                                                            }}
+                                                            className="px-2 text-xs font-bold text-slate-400 hover:text-red-500 transition-colors"
+                                                            title="Delete"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -1659,7 +1735,7 @@ ${prompt}
 
 export default function ContentStudioPage() {
     return (
-        <PermissionGate require="content:read" fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
+        <PermissionGate requireAny={["content_studio:read", "content:read"]} fallback={<DashboardLayout><AccessDenied /></DashboardLayout>}>
             <Suspense fallback={<div className="p-12 text-center text-slate-500">Loading studio...</div>}>
                 <ContentStudioContent />
             </Suspense>

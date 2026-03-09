@@ -3,9 +3,12 @@
 import { ReactNode, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { fetchCurrentUser } from "@/lib/api/auth";
 import { clearAuthSession, maybeRefreshAuthSession } from "@/lib/api/core";
+import { usePermissionContext } from "@/contexts/PermissionContext";
+import { AccessDenied } from "@/components/rbac/AccessDenied";
+import { getRequiredPermissionsForPath } from "@/lib/rbac-route-map";
 
 interface DashboardLayoutProps {
     children: ReactNode;
@@ -13,6 +16,8 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
     const router = useRouter();
+    const pathname = usePathname();
+    const { loading: permissionsLoading, hasPermission, isSuperAdmin } = usePermissionContext();
 
     useEffect(() => {
         const token = localStorage.getItem("token");
@@ -48,6 +53,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         };
     }, [router]);
 
+    const requiredPermissions = getRequiredPermissionsForPath(pathname || "");
+    const hasRouteAccess =
+        !requiredPermissions ||
+        isSuperAdmin ||
+        requiredPermissions.some((perm) => hasPermission(perm));
+
     return (
         <div className="flex h-screen bg-background text-foreground overflow-hidden">
             {/* Sidebar */}
@@ -57,7 +68,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="flex flex-1 flex-col overflow-hidden">
                 <Topbar />
                 <main className="flex-1 overflow-y-auto bg-slate-100 p-6">
-                    {children}
+                    {permissionsLoading ? null : hasRouteAccess ? children : <AccessDenied />}
                 </main>
             </div>
         </div>

@@ -46,6 +46,9 @@ export function clearAuthSession(reason?: string) {
     localStorage.removeItem("token_expires_at");
     localStorage.removeItem("user");
     if (reason) localStorage.setItem("auth_logout_reason", reason);
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("auth-session-changed"));
+    }
 }
 
 export function storeAuthSession(accessToken: string, refreshToken?: string, accessExpiresInSeconds?: number) {
@@ -55,6 +58,9 @@ export function storeAuthSession(accessToken: string, refreshToken?: string, acc
     if (accessExpiresInSeconds && Number.isFinite(accessExpiresInSeconds)) {
         const expiresAt = Date.now() + accessExpiresInSeconds * 1000;
         localStorage.setItem("token_expires_at", String(expiresAt));
+    }
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("auth-session-changed"));
     }
 }
 

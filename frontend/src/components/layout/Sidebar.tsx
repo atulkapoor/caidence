@@ -38,6 +38,8 @@ interface NavItem {
     bg: string;
     /** Permission required to see this item. Omit = always visible. */
     permission?: string;
+    /** Any-of permission options. */
+    permissionAny?: string[];
 }
 
 interface NavGroup {
@@ -57,7 +59,7 @@ const navigationGroups: NavGroup[] = [
     {
         title: "Creative Studios",
         items: [
-            { name: "Content", href: "/content-studio", icon: PenTool, color: "text-emerald-600", bg: "bg-emerald-50", permission: "content:read" },
+            { name: "Content", href: "/content-studio", icon: PenTool, color: "text-emerald-600", bg: "bg-emerald-50", permissionAny: ["content_studio:read", "content:read"] },
             { name: "Design", href: "/design-studio", icon: ImageIcon, color: "text-rose-600", bg: "bg-rose-50", permission: "design_studio:read" },
             { name: "Presentations", href: "/presentation-studio", icon: Presentation, color: "text-cyan-600", bg: "bg-cyan-50", permission: "presentation_studio:read" },
         ]
@@ -136,7 +138,7 @@ export function Sidebar() {
 
     const canSeeItem = (item: NavItem): boolean => {
         // No permission required — always show
-        if (!item.permission) return true;
+        if (!item.permission && (!item.permissionAny || item.permissionAny.length === 0)) return true;
         // Super admin sees everything
         if (isSuperAdmin) return true;
         // Fallback: if permission endpoint failed, trust cached role for root/super_admin nav visibility.
@@ -145,7 +147,13 @@ export function Sidebar() {
         if (permLoading) return false;
         if (!permissionData) return false;
         // Check permission
-        return hasPermission(item.permission);
+        if (item.permissionAny && item.permissionAny.length > 0) {
+            return item.permissionAny.some((perm) => hasPermission(perm));
+        }
+        if (item.permission) {
+            return hasPermission(item.permission);
+        }
+        return true;
     };
 
     return (
