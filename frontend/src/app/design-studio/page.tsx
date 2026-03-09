@@ -10,11 +10,20 @@ import { useEffect, useRef, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
 import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalendar";
+import { usePermissionContext } from "@/contexts/PermissionContext";
 // import Link from "next/link"; // Unused
 import { toast } from "sonner";
 import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send, Save, Linkedin, Twitter, FileText, Mail, Facebook, Instagram } from "lucide-react";
 
 function DesignStudioContent() {
+    const { hasPermission } = usePermissionContext();
+    const canDesignCreate = hasPermission("design_studio:create");
+    const canDesignWrite = hasPermission("design_studio:write") || hasPermission("design_studio:update");
+    const canDesignDelete = hasPermission("design_studio:delete");
+    const canUseDesignGenerator = canDesignCreate;
+    const canEditExistingDesign = canDesignWrite;
+    const isDesignReadOnly = !canDesignCreate && !canDesignWrite;
+
     type GeneratedDesignPreview = {
         title: string;
         style: string;
@@ -147,6 +156,12 @@ function DesignStudioContent() {
     }, [activeTab, libraryPage, searchQuery, typeFilter]);
 
     useEffect(() => {
+        if (activeTab === "generate" && !canUseDesignGenerator) {
+            setActiveTab("library");
+        }
+    }, [activeTab, canUseDesignGenerator, setActiveTab]);
+
+    useEffect(() => {
         if (activeTab !== "library") return;
         const intervalId = setInterval(() => {
             loadDesigns();
@@ -167,6 +182,10 @@ function DesignStudioContent() {
     };
 
     const loadDesignIntoGenerator = (asset: DesignAsset) => {
+        if (!canEditExistingDesign) {
+            toast.error("You don't have update access");
+            return;
+        }
         if (isDesignLocked(asset)) {
             toast.info("Posted designs are read-only and cannot be edited.");
             return;
@@ -251,6 +270,10 @@ function DesignStudioContent() {
     };
 
     const handleScheduleDesign = async () => {
+        if (isDesignReadOnly) {
+            toast.error("Read-only access: scheduling is disabled");
+            return;
+        }
         if (!scheduleDraft) return;
         if (!scheduleDraft.designAssetId) {
             toast.error("Save design to library before scheduling");
@@ -303,6 +326,10 @@ function DesignStudioContent() {
     };
 
     const handleGenerate = async () => {
+        if (!canUseDesignGenerator) {
+            toast.error("You don't have create access for Design generator");
+            return;
+        }
         if (!prompt) return;
         setIsGenerating(true);
 
@@ -346,14 +373,23 @@ function DesignStudioContent() {
     };
 
     const handleSaveGeneratedDesign = async (platform: string) => {
+        const platformKey = platform.toLowerCase();
+        const existingId = designAssetIdByPlatform[platformKey]
+            ?? (selectedPlatforms.length === 1 ? editingDesignId ?? undefined : undefined);
+        const isUpdate = Boolean(existingId);
+        if (isUpdate && !canEditExistingDesign) {
+            toast.error("You don't have update access");
+            return;
+        }
+        if (!isUpdate && !canDesignCreate) {
+            toast.error("You don't have create access");
+            return;
+        }
         if (!generatedDesignPreview?.image_url) {
             toast.error("Generate a design preview before saving.");
             return;
         }
 
-        const platformKey = platform.toLowerCase();
-        const existingId = designAssetIdByPlatform[platformKey]
-            ?? (selectedPlatforms.length === 1 ? editingDesignId ?? undefined : undefined);
         const wasEditing = Boolean(existingId);
         setSavingDesignPlatform(platformKey);
         try {
@@ -404,6 +440,10 @@ function DesignStudioContent() {
     };
 
     const ensureDesignAssetIdForPublishOrSchedule = async (platform: string, existingId?: number) => {
+        if (isDesignReadOnly) {
+            toast.error("Read-only access: posting/scheduling is disabled");
+            return null;
+        }
         const platformKey = platform.toLowerCase();
         const resolvedExistingId = existingId
             ?? designAssetIdByPlatform[platformKey]
@@ -507,6 +547,10 @@ function DesignStudioContent() {
         imageUrl?: string;
         designAssetId?: number;
     }) => {
+        if (isDesignReadOnly) {
+            toast.error("Read-only access: posting is disabled");
+            return;
+        }
         const normalizedText = stripPlatformSuffixes((text || "").trim());
         if (!normalizedText) {
             toast.error("Nothing to post");
@@ -629,11 +673,11 @@ function DesignStudioContent() {
                                             loadDesignIntoGenerator(previewDesign);
                                             setPreviewDesign(null);
                                         }}
-                                        disabled={isDesignLocked(previewDesign)}
+                                        disabled={isDesignLocked(previewDesign) || !canEditExistingDesign}
                                         className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-200 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                         <Palette className="w-4 h-4" />
-                                        {isDesignLocked(previewDesign) ? "Remix Disabled" : "Remix Design"}
+                                        {isDesignLocked(previewDesign) ? "Remix Disabled" : !canEditExistingDesign ? "Edit Disabled" : "Remix Design"}
                                     </button>
                                     <button
                                         onClick={() => handleDownload(previewDesign.image_url, previewDesign.title)}
@@ -669,7 +713,7 @@ function DesignStudioContent() {
                                                             setPostingDesignPlatform(null);
                                                         }
                                                     }}
-                                                    disabled={unsupported || postingDesignPlatform === actionKey || isPostedForPlatform || isAssetPosted}
+                                                    disabled={isDesignReadOnly || unsupported || postingDesignPlatform === actionKey || isPostedForPlatform || isAssetPosted}
                                                     className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${(isPostedForPlatform || isAssetPosted)
                                                         ? "bg-emerald-100 text-emerald-700 cursor-default"
                                                         : "bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
@@ -691,7 +735,7 @@ function DesignStudioContent() {
                                                             designAssetId: previewDesign.id || undefined,
                                                         })
                                                     }
-                                                    disabled={unsupported || isPostedForPlatform || isAssetPosted}
+                                                    disabled={isDesignReadOnly || unsupported || isPostedForPlatform || isAssetPosted}
                                                     className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                                                 >
                                                     <Calendar className="w-4 h-4" />
@@ -777,7 +821,13 @@ function DesignStudioContent() {
 
                         {/* TAB SWITCHER */}
                         <div className="flex p-1 bg-slate-100 rounded-lg ml-6">
-                            <button onClick={() => setActiveTab("generate")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "generate" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Generate Design</button>
+                            <button
+                                onClick={() => canUseDesignGenerator && setActiveTab("generate")}
+                                disabled={!canUseDesignGenerator}
+                                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "generate" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"} ${!canUseDesignGenerator ? "opacity-50 cursor-not-allowed" : ""}`}
+                            >
+                                Generate Design
+                            </button>
                             <button onClick={() => setActiveTab("library")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "library" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Design Library</button>
                             <button onClick={() => setActiveTab("calendar")} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "calendar" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Calendar</button>
                         </div>
@@ -824,7 +874,8 @@ function DesignStudioContent() {
                                         {platforms.map((platform) => (
                                             <button
                                                 key={platform.id}
-                                                onClick={() => togglePlatform(platform.id)}
+                                                onClick={() => canUseDesignGenerator && togglePlatform(platform.id)}
+                                                disabled={!canUseDesignGenerator}
                                                 className={`relative p-3 rounded-xl border transition-all duration-200 flex flex-col items-center gap-2 group ${selectedPlatforms.includes(platform.id)
                                                     ? `bg-white ${platform.border} ring-2 ring-rose-500 ring-offset-1 shadow-md`
                                                     : "bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm"
@@ -854,6 +905,7 @@ function DesignStudioContent() {
                                             <input
                                                 type="text"
                                                 value={title}
+                                                disabled={!canUseDesignGenerator}
                                                 onChange={(e) => setTitle(e.target.value)}
                                                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all placeholder:font-normal"
                                                 placeholder="e.g. Summer Campaign Hero"
@@ -887,6 +939,7 @@ function DesignStudioContent() {
                                             <label className="text-xs font-bold text-slate-500 uppercase">Design Type / Size</label>
                                             <select
                                                 value={aspectRatio}
+                                                disabled={!canUseDesignGenerator}
                                                 onChange={(e) => setAspectRatio(e.target.value)}
                                                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
                                             >
@@ -897,6 +950,7 @@ function DesignStudioContent() {
                                             <label className="text-xs font-bold text-slate-500 uppercase">Visual Style</label>
                                             <select
                                                 value={selectedStyle}
+                                                disabled={!canUseDesignGenerator}
                                                 onChange={(e) => setSelectedStyle(e.target.value)}
                                                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
                                             >
@@ -912,12 +966,14 @@ function DesignStudioContent() {
                                                 <input
                                                     type="color"
                                                     value={brandColors || "#000000"}
+                                                    disabled={!canUseDesignGenerator}
                                                     onChange={(e) => setBrandColors(e.target.value)}
                                                     className="w-12 h-12 p-1 bg-white border border-slate-200 rounded-lg cursor-pointer"
                                                 />
                                                 <input
                                                     type="text"
                                                     value={brandColors}
+                                                    disabled={!canUseDesignGenerator}
                                                     onChange={(e) => setBrandColors(e.target.value)}
                                                     className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all placeholder:font-normal"
                                                     placeholder="Hex Code (e.g. #FF0000)"
@@ -932,6 +988,7 @@ function DesignStudioContent() {
                                                     <input
                                                         type="file"
                                                         accept="image/*"
+                                                        disabled={!canUseDesignGenerator}
                                                         onChange={(e) => {
                                                             const file = e.target.files?.[0];
                                                             if (file) {
@@ -995,7 +1052,7 @@ function DesignStudioContent() {
                                                 }
                                                 setIsEnhancing(false);
                                             }}
-                                            disabled={isEnhancing || !prompt}
+                                            disabled={!canUseDesignGenerator || isEnhancing || !prompt}
                                             className="text-xs font-bold text-rose-600 flex items-center gap-1 hover:text-rose-700 transition-colors disabled:opacity-50"
                                         >
                                             {isEnhancing ? (
@@ -1008,6 +1065,7 @@ function DesignStudioContent() {
                                     <div className="relative">
                                         <textarea
                                             value={prompt}
+                                            disabled={!canUseDesignGenerator}
                                             onChange={(e) => setPrompt(e.target.value)}
                                             className="w-full h-40 p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 outline-none text-sm font-medium resize-none leading-relaxed placeholder:font-normal"
                                             placeholder="Describe your visual concept in detail..."
@@ -1020,7 +1078,7 @@ function DesignStudioContent() {
                             <div className="flex items-center justify-end">
                                 <button
                                     onClick={handleGenerate}
-                                    disabled={isGenerating || !prompt}
+                                    disabled={!canUseDesignGenerator || isGenerating || !prompt}
                                     className="px-8 py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-200 transition-transform active:scale-95 disabled:opacity-70 disabled:pointer-events-none flex items-center gap-2 text-lg"
                                 >
                                     {isGenerating ? (
@@ -1115,7 +1173,7 @@ function DesignStudioContent() {
                                                                 setPostingPreviewPlatform(null);
                                                             }
                                                         }}
-                                                        disabled={unsupported || postingPreviewPlatform === platformKey || isPostedForPlatform || !generatedDesignPreview?.image_url}
+                                                        disabled={isDesignReadOnly || unsupported || postingPreviewPlatform === platformKey || isPostedForPlatform || !generatedDesignPreview?.image_url}
                                                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
                                                     >
                                                             <span className="inline-flex items-center gap-1"><Send className="w-3.5 h-3.5" /> {postingPreviewPlatform === platformKey ? "Posting..." : isPostedForPlatform ? "Posted" : "Post"}</span>
@@ -1132,14 +1190,14 @@ function DesignStudioContent() {
                                                                 designAssetId,
                                                             });
                                                         }}
-                                                        disabled={unsupported || !generatedDesignPreview?.image_url}
+                                                        disabled={isDesignReadOnly || unsupported || !generatedDesignPreview?.image_url}
                                                         className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
                                                     >
                                                             <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule</span>
                                                     </button>
                                                     <button
                                                         onClick={() => handleSaveGeneratedDesign(platform)}
-                                                        disabled={savingDesignPlatform === platformKey || isGenerating || !generatedDesignPreview?.image_url}
+                                                        disabled={savingDesignPlatform === platformKey || isGenerating || !generatedDesignPreview?.image_url || (!canEditExistingDesign && platformDesignId !== undefined) || (!canDesignCreate && platformDesignId === undefined)}
                                                         className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
                                                         <span className="inline-flex items-center gap-1">
@@ -1291,13 +1349,15 @@ function DesignStudioContent() {
 
                                                 <div className="grid grid-cols-[72px_1fr_24px] items-center gap-2">
                                                     <div className="justify-self-start w-[72px]">
-                                                        {isDesignLocked(asset) ? (
+                                                        {isDesignLocked(asset) || !canEditExistingDesign ? (
                                                             <span className="inline-block w-[72px] opacity-0 select-none text-xs">Remix</span>
                                                         ) : (
                                                             <button
                                                                 onClick={() => {
+                                                                    if (!canEditExistingDesign) return;
                                                                     loadDesignIntoGenerator(asset);
                                                                 }}
+                                                                disabled={!canEditExistingDesign}
                                                                 className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1"
                                                             >
                                                                 <Wand2 className="w-3 h-3" /> Remix
@@ -1341,6 +1401,8 @@ function DesignStudioContent() {
                                                                 }
                                                             }}
                                                             disabled={
+                                                                isDesignReadOnly
+                                                                || 
                                                                 !supportedPublishPlatforms.has(resolveAssetPlatform(asset).toLowerCase())
                                                                 || postingDesignPlatform === makeDesignPlatformKey(asset.id, resolveAssetPlatform(asset))
                                                                 || postedDesignPlatformKeys.has(makeDesignPlatformKey(asset.id, resolveAssetPlatform(asset)))
@@ -1356,23 +1418,25 @@ function DesignStudioContent() {
                                                         </button>
                                                     </div>
 
-                                                    <button
-                                                        onClick={async (e) => {
-                                                            e.stopPropagation();
-                                                            if (confirm("Delete this design?")) {
-                                                                setRecentDesigns(prev => prev.filter(p => p.id !== asset.id));
-                                                                try {
-                                                                    const { deleteDesign } = await import("@/lib/api/design");
-                                                                    await deleteDesign(asset.id);
-                                                                } catch { /* already removed from UI */ }
-                                                                toast.success("Design deleted");
-                                                            }
-                                                        }}
-                                                        className="justify-self-end text-slate-400 hover:text-red-500 transition-colors"
-                                                        title="Delete"
-                                                    >
-                                                        <X className="w-4 h-4" />
-                                                    </button>
+                                                    {canDesignDelete && (
+                                                        <button
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                if (confirm("Delete this design?")) {
+                                                                    setRecentDesigns(prev => prev.filter(p => p.id !== asset.id));
+                                                                    try {
+                                                                        const { deleteDesign } = await import("@/lib/api/design");
+                                                                        await deleteDesign(asset.id);
+                                                                    } catch { /* already removed from UI */ }
+                                                                    toast.success("Design deleted");
+                                                                }
+                                                            }}
+                                                            className="justify-self-end text-slate-400 hover:text-red-500 transition-colors"
+                                                            title="Delete"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -1384,7 +1448,7 @@ function DesignStudioContent() {
                                         </div>
                                         <h3 className="text-lg font-bold text-slate-900">No designs found</h3>
                                         <p className="text-slate-500 mb-6 max-w-sm mx-auto">Get started by generating your first AI visual in the Generate tab.</p>
-                                        <button onClick={() => setActiveTab("generate")} className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-all">
+                                        <button onClick={() => canUseDesignGenerator && setActiveTab("generate")} disabled={!canUseDesignGenerator} className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-all disabled:opacity-50">
                                             Start Creating
                                         </button>
                                     </div>

@@ -15,6 +15,7 @@ export interface OnboardingProgress {
     steps: OnboardingStep[];
     completed_steps: number[];
     step_data: Record<string, unknown>;
+    allowed_profile_types?: string[];
 }
 
 export async function getOnboardingProgress(): Promise<OnboardingProgress> {

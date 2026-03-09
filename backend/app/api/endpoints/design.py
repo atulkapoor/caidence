@@ -7,7 +7,7 @@ from app.models import models
 from app.schemas import schemas
 from app.services.ai_service import AIService
 from app.api.deps import (
-    get_current_active_user, require_design_read, require_design_write
+    get_current_active_user, require_design_read, require_design_create, require_design_update, require_design_delete
 )
 from app.models.models import User
 from typing import List
@@ -124,7 +124,7 @@ async def get_design_asset(
 @router.post("/generate")
 async def generate_design(
     request: schemas.DesignAssetCreate,
-    current_user: User = Depends(require_design_write)
+    current_user: User = Depends(require_design_create)
 ):
     try:
         image_payload = await AIService.generate_image(
@@ -152,6 +152,8 @@ async def generate_design(
             "image_fallback_used": bool(image_payload.get("image_fallback_used")) if isinstance(image_payload, dict) else False,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -159,11 +161,16 @@ async def generate_design(
 async def save_design(
     request: schemas.DesignAssetCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_design_write)
+    current_user: User = Depends(get_current_active_user)
 ):
+    from app.services.permission_engine import PermissionEngine
+
     try:
+        engine = PermissionEngine.from_loaded_user(current_user)
         # ✅ EDIT MODE → update existing
         if request.id:
+            if not engine.has_permission("design_studio", "update"):
+                raise HTTPException(status_code=403, detail="Permission denied for design_studio:update")
             if is_super_admin(current_user.role):
                 result = await db.execute(
                     select(models.DesignAsset).where(
@@ -193,6 +200,8 @@ async def save_design(
 
         # ✅ CREATE MODE
         else:
+            if not engine.has_permission("design_studio", "create"):
+                raise HTTPException(status_code=403, detail="Permission denied for design_studio:create")
             db_asset = models.DesignAsset(
                 title=request.title,
                 style=request.style,
@@ -219,7 +228,7 @@ async def update_design_asset(
     asset_id: int,
     request: schemas.DesignAssetCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_design_write)
+    current_user: User = Depends(require_design_update)
 ):
     # Fetch design
     if is_super_admin(current_user.role):
@@ -272,7 +281,7 @@ async def update_design_asset(
 async def delete_design_asset(
     asset_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_design_write)
+    current_user: User = Depends(require_design_delete)
 ):
     if is_super_admin(current_user.role):
         result = await db.execute(

@@ -6,13 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_content_read, require_content_write
+from app.api.deps import (
+    get_current_active_user,
+)
 from app.core.database import get_db
 from app.models import models
 from app.models.models import User
 from app.schemas import schemas
 from app.services.ai_service import AIService
 from app.services.auth_service import is_super_admin
+from app.services.permission_engine import PermissionEngine
 from app.services.rbac_scope import visible_user_filter
 
 router = APIRouter()
@@ -31,6 +34,17 @@ def _normalize_platform_title(title: str, platform: str) -> str:
     return f"{normalized} ({platform_value})" if normalized else f"({platform_value})"
 
 
+def _has_content_permission(engine: PermissionEngine, action: str) -> bool:
+    # Backward compatibility: support both legacy "content" and module key "content_studio".
+    return engine.has_permission("content", action) or engine.has_permission("content_studio", action)
+
+
+def _require_content_action(current_user: User, action: str) -> None:
+    engine = PermissionEngine.from_loaded_user(current_user)
+    if not _has_content_permission(engine, action):
+        raise HTTPException(status_code=403, detail=f"Permission denied for content:{action}")
+
+
 @router.get("/", response_model=List[schemas.ContentGeneration])
 async def get_content_generations(
     skip: int = 0,
@@ -39,8 +53,9 @@ async def get_content_generations(
     platform: str | None = Query(default=None),
     response: Response = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_content_read),
+    current_user: User = Depends(get_current_active_user),
 ):
+    _require_content_action(current_user, "read")
     filters = []
     if not is_super_admin(current_user.role):
         filters.append(visible_user_filter(current_user, models.ContentGeneration.user_id))
@@ -77,8 +92,9 @@ async def get_content_generations(
 async def get_content_generation(
     content_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_content_read),
+    current_user: User = Depends(get_current_active_user),
 ):
+    _require_content_action(current_user, "read")
     if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.ContentGeneration).where(models.ContentGeneration.id == content_id)
@@ -101,8 +117,9 @@ async def get_content_generation(
 async def generate_content(
     request: schemas.ContentGenerationCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_content_write),
+    current_user: User = Depends(get_current_active_user),
 ):
+    _require_content_action(current_user, "create")
     try:
         normalized_title = _normalize_platform_title(request.title, request.platform)
         generate_with_image = bool(request.generate_with_image)
@@ -171,12 +188,15 @@ async def generate_content(
 async def save_content(
     request: schemas.ContentGenerationCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_content_write),
+    current_user: User = Depends(get_current_active_user),
 ):
     try:
         normalized_title = _normalize_platform_title(request.title, request.platform)
+        engine = PermissionEngine.from_loaded_user(current_user)
 
         if request.id:
+            if not _has_content_permission(engine, "update"):
+                raise HTTPException(status_code=403, detail="Permission denied for content:update")
             if is_super_admin(current_user.role):
                 result = await db.execute(
                     select(models.ContentGeneration).where(
@@ -209,6 +229,8 @@ async def save_content(
             db_content.brand_colors = request.brand_colors
             db_content.generate_with_image = bool(request.generate_with_image)
         else:
+            if not _has_content_permission(engine, "create"):
+                raise HTTPException(status_code=403, detail="Permission denied for content:create")
             db_content = models.ContentGeneration(
                 title=normalized_title,
                 platform=request.platform,
@@ -227,8 +249,6 @@ async def save_content(
         return db_content
     except HTTPException:
         raise
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -238,8 +258,9 @@ async def update_content(
     content_id: int,
     request: schemas.ContentGenerationCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_content_write),
+    current_user: User = Depends(get_current_active_user),
 ):
+    _require_content_action(current_user, "update")
     try:
         normalized_title = _normalize_platform_title(request.title, request.platform)
 
@@ -294,8 +315,9 @@ async def update_content(
 async def delete_content_generation(
     content_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_content_write),
+    current_user: User = Depends(get_current_active_user),
 ):
+    _require_content_action(current_user, "delete")
     if is_super_admin(current_user.role):
         result = await db.execute(
             select(models.ContentGeneration).where(models.ContentGeneration.id == content_id)

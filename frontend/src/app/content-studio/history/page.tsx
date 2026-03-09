@@ -9,8 +9,17 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
+import { usePermissionContext } from "@/contexts/PermissionContext";
 
 function ContentHistory() {
+    const { hasPermission, data } = usePermissionContext();
+    const granted = data?.permissions || [];
+    const hasContentStudioModelPermissions = granted.some(
+        (perm) => perm === "*:*" || perm.startsWith("content_studio:")
+    );
+    const contentPermissionResource = hasContentStudioModelPermissions ? "content_studio" : "content";
+    const canContentCreate = hasPermission(`${contentPermissionResource}:create`);
+    const canContentDelete = hasPermission(`${contentPermissionResource}:delete`);
     const router = useRouter();
     const [history, setHistory] = useState<ContentGeneration[]>([]);
     const [loading, setLoading] = useState(true);
@@ -86,7 +95,7 @@ function ContentHistory() {
                         <h1 className="text-2xl font-bold text-slate-900">Generated Content</h1>
                         <p className="text-sm text-slate-500 mt-1">Archive of all your AI-written posts and articles.</p>
                     </div>
-                    <Link href="/content-studio" className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 transition-all flex items-center gap-2">
+                    <Link href="/content-studio" className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${canContentCreate ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200" : "bg-slate-200 text-slate-500 pointer-events-none"}`}>
                         <PenTool className="w-4 h-4" />
                         Generate New
                     </Link>
@@ -162,13 +171,15 @@ function ContentHistory() {
                                     </div>
 
                                     <div className="absolute top-5 right-5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={(e) => handleDelete(e, item.id)}
-                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                            title="Delete"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        {canContentDelete && (
+                                            <button
+                                                onClick={(e) => handleDelete(e, item.id)}
+                                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="Delete"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
                                         <div className="p-2 text-indigo-600 bg-indigo-50 rounded-lg">
                                             <Eye className="w-4 h-4" />
                                         </div>
@@ -187,7 +198,7 @@ export default function ContentHistoryPage() {
     return (
         <Suspense fallback={<DashboardLayout><div>Loading...</div></DashboardLayout>}>
             <DashboardLayout>
-                <PermissionGate require="content:read" fallback={<AccessDenied />}>
+                <PermissionGate requireAny={["content_studio:read", "content:read"]} fallback={<AccessDenied />}>
                     <ContentHistory />
                 </PermissionGate>
             </DashboardLayout>
