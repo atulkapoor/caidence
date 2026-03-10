@@ -25,15 +25,21 @@ const PROFILE_TYPES = [
     },
 ];
 
-export function ProfileTypeStep({ onProfileTypeSelect, loading, stepData }: StepProps) {
+export function ProfileTypeStep({ onProfileTypeSelect, loading, stepData, allowedProfileTypes }: StepProps) {
     const selectedType = String(stepData.profile_type ?? "");
+    const allowedTypes = new Set(allowedProfileTypes || []);
+    const hasServerAllowedTypes = allowedTypes.size > 0;
+    const visibleProfileTypes = hasServerAllowedTypes
+        ? PROFILE_TYPES.filter((item) => allowedTypes.has(item.type))
+        : PROFILE_TYPES;
+
     return (
         <div className="space-y-4">
             <p className="text-slate-500 font-medium mb-6">
                 Choose the profile type that best describes you. This will personalize your onboarding experience.
             </p>
             <div className="grid gap-4">
-                {PROFILE_TYPES.map(({ type, icon: Icon, title, description }) => (
+                {visibleProfileTypes.map(({ type, icon: Icon, title, description }) => (
                     <button
                         key={type}
                         onClick={() => onProfileTypeSelect?.(type)}

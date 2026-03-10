@@ -33,7 +33,14 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
     const [loading, setLoading] = useState(true);
 
     const fetchPermissions = useCallback(async () => {
+        if (typeof localStorage !== "undefined" && !localStorage.getItem("token")) {
+            setData(null);
+            setLoading(false);
+            return;
+        }
         try {
+            // Prevent stale permissions from previous session/user while reloading.
+            setData(null);
             setLoading(true);
             const perms = await getMyPermissions();
             setData(perms);
@@ -49,12 +56,54 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
         fetchPermissions();
     }, [fetchPermissions]);
 
+    useEffect(() => {
+        const handleAuthChanged = () => {
+            fetchPermissions();
+        };
+        const handleStorage = (event: StorageEvent) => {
+            if (!event.key || ["token", "refresh_token", "user"].includes(event.key)) {
+                fetchPermissions();
+            }
+        };
+        window.addEventListener("auth-session-changed", handleAuthChanged as EventListener);
+        window.addEventListener("storage", handleStorage);
+        return () => {
+            window.removeEventListener("auth-session-changed", handleAuthChanged as EventListener);
+            window.removeEventListener("storage", handleStorage);
+        };
+    }, [fetchPermissions]);
+
     const hasPermission = useCallback(
         (permission: string): boolean => {
             if (!data) return false;
             if (data.is_super_admin) return true;
-            if (data.permissions.includes("*:*")) return true;
-            return data.permissions.includes(permission);
+            const granted = new Set(data.permissions || []);
+            if (granted.has("*:*")) return true;
+            if (granted.has(permission)) return true;
+
+            const [resource, action] = permission.split(":");
+            if (!resource || !action) return granted.has(permission);
+            if (granted.has(`${resource}:*`)) return true;
+
+            // Action compatibility:
+            // create => create (+read implied separately)
+            // write => update existing (legacy alias)
+            // update => update OR legacy write
+            // delete => delete only
+            // read => read OR create OR update/write
+            if (action === "create") return granted.has(`${resource}:create`);
+            if (action === "write") return granted.has(`${resource}:write`) || granted.has(`${resource}:update`);
+            if (action === "update") return granted.has(`${resource}:update`) || granted.has(`${resource}:write`);
+            if (action === "delete") return granted.has(`${resource}:delete`);
+            if (action === "read") {
+                return (
+                    granted.has(`${resource}:read`) ||
+                    granted.has(`${resource}:create`) ||
+                    granted.has(`${resource}:update`) ||
+                    granted.has(`${resource}:write`)
+                );
+            }
+            return false;
         },
         [data]
     );

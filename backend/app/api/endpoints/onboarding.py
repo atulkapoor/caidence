@@ -33,10 +33,12 @@ async def get_progress(
             "steps": [],
             "completed_steps": [],
             "step_data": {},
+            "allowed_profile_types": [],
         }
 
     progress = await OnboardingService.get_or_create_progress(current_user.id, db)
     steps = OnboardingService.get_steps(progress.profile_type)
+    allowed_profile_types = OnboardingService.get_allowed_profile_types_for_role(current_user.role)
     import json
     return {
         "current_step": progress.current_step,
@@ -45,6 +47,7 @@ async def get_progress(
         "steps": steps,
         "completed_steps": json.loads(progress.completed_steps or "[]"),
         "step_data": json.loads(progress.step_data or "{}"),
+        "allowed_profile_types": allowed_profile_types,
     }
 
 
@@ -63,6 +66,7 @@ async def update_progress(
             "steps": [],
             "completed_steps": [],
             "step_data": {},
+            "allowed_profile_types": [],
         }
 
     try:
@@ -73,6 +77,7 @@ async def update_progress(
             payload.profile_type,
             db,
         )
+        result["allowed_profile_types"] = OnboardingService.get_allowed_profile_types_for_role(current_user.role)
         return result
     except ValueError as e:
         raise HTTPException(400, str(e))

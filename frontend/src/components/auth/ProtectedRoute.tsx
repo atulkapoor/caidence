@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { hasPermission, Permission, UserRole } from "@/lib/permissions";
+import { clearAuthSession } from "@/lib/api/core";
+import { usePermissionContext } from "@/contexts/PermissionContext";
+import type { Permission, UserRole } from "@/lib/permissions";
 
 interface ProtectedRouteProps {
     children: React.ReactNode;
@@ -32,9 +34,11 @@ export function ProtectedRoute({
     fallbackPath = "/",
 }: ProtectedRouteProps) {
     const router = useRouter();
+    const { hasPermission, role: contextRole, loading: permissionsLoading } = usePermissionContext();
     const [authorized, setAuthorized] = useState(false);
 
     useEffect(() => {
+        setAuthorized(false);
         const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
         if (!token) {
             router.replace("/login");
@@ -54,11 +58,7 @@ export function ProtectedRoute({
             return;
         }
         if (user.is_active === false) {
-            localStorage.setItem("auth_logout_reason", "inactive");
-            localStorage.removeItem("token");
-            localStorage.removeItem("refresh_token");
-            localStorage.removeItem("token_expires_at");
-            localStorage.removeItem("user");
+            clearAuthSession("inactive");
             router.replace("/login?reason=inactive");
             return;
         }
@@ -66,13 +66,18 @@ export function ProtectedRoute({
         const role = (user.role || "viewer") as UserRole;
 
         // Check permission if specified
-        if (requiredPermission && !hasPermission(role, requiredPermission)) {
-            router.replace(fallbackPath);
-            return;
+        if (requiredPermission) {
+            if (permissionsLoading) return;
+            if (!hasPermission(requiredPermission)) {
+                router.replace(fallbackPath);
+                return;
+            }
         }
 
         // Check role if specified
         if (requiredRole) {
+            const effectiveRole = (contextRole || role) as UserRole;
+            if (permissionsLoading && !effectiveRole) return;
             const roleHierarchy: Record<UserRole, number> = {
                 root: 110,
                 super_admin: 100,
@@ -84,17 +89,20 @@ export function ProtectedRoute({
                 creator: 20,
                 viewer: 10,
             };
-            const userLevel = roleHierarchy[role] || 0;
+            const userLevel = roleHierarchy[effectiveRole] || 0;
             const requiredLevel = roleHierarchy[requiredRole] || 100;
-
             if (userLevel < requiredLevel) {
                 router.replace(fallbackPath);
                 return;
             }
         }
 
+        if (permissionsLoading) {
+            return;
+        }
+
         setAuthorized(true);
-    }, [requiredPermission, requiredRole, fallbackPath, router]);
+    }, [requiredPermission, requiredRole, fallbackPath, router, hasPermission, contextRole, permissionsLoading]);
 
     if (!authorized) return null;
     return <>{children}</>;

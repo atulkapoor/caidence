@@ -57,6 +57,15 @@ class OnboardingService:
     LOGO_DATA_URL_REGEX = re.compile(r"^data:(image/(?:png|jpeg|svg\+xml));base64,(.+)$", re.IGNORECASE)
     MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024
 
+    ROLE_ALLOWED_PROFILE_TYPES = {
+        "root": {"agency", "brand", "creator"},
+        "super_admin": {"agency", "brand", "creator"},
+        "agency_admin": {"agency", "brand", "creator"},
+        "org_admin": {"agency", "brand", "creator"},
+        "brand_admin": {"brand", "creator"},
+        "creator": {"creator"},
+    }
+
     @staticmethod
     async def get_or_create_progress(user_id: int, db: AsyncSession) -> OnboardingProgress:
         """Fetch or create an OnboardingProgress record for a user."""
@@ -81,6 +90,15 @@ class OnboardingService:
         return ONBOARDING_STEPS["default"]
 
     @staticmethod
+    def get_allowed_profile_types_for_role(role: Optional[str]) -> list[str]:
+        """Allowed onboarding profile types by RBAC role."""
+        if not role:
+            return ["creator"]
+        allowed = OnboardingService.ROLE_ALLOWED_PROFILE_TYPES.get(role, {"creator"})
+        ordered = [ptype for ptype in ("agency", "brand", "creator") if ptype in allowed]
+        return ordered or ["creator"]
+
+    @staticmethod
     async def update_step(
         user_id: int,
         step_index: int,
@@ -90,11 +108,20 @@ class OnboardingService:
     ) -> dict:
         """Update a specific onboarding step's data and mark it completed."""
         progress = await OnboardingService.get_or_create_progress(user_id, db)
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        allowed_profile_types = OnboardingService.get_allowed_profile_types_for_role(
+            getattr(user, "role", None)
+        )
 
         # Handle profile type selection (step 0)
         if profile_type and step_index == 0:
             if profile_type not in ONBOARDING_STEPS:
                 raise ValueError(f"Invalid profile type: {profile_type}")
+            if profile_type not in allowed_profile_types:
+                raise ValueError(
+                    f"Role '{getattr(user, 'role', 'unknown')}' cannot select profile type '{profile_type}'"
+                )
             progress.profile_type = profile_type
 
         # Creator-specific guard: social connection is required at connect_socials step.

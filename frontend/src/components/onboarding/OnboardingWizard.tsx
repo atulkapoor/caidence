@@ -52,6 +52,7 @@ export interface StepProps {
     onProfileTypeSelect?: (type: string) => void;
     stepData: Record<string, unknown>;
     loading: boolean;
+    allowedProfileTypes?: string[];
 }
 
 export function OnboardingWizard({ initialProgress, mode = "default", onCompleted }: OnboardingWizardProps) {
@@ -112,8 +113,9 @@ export function OnboardingWizard({ initialProgress, mode = "default", onComplete
                         toast.error(msg);
                     }
                 }
-            } catch {
-                toast.error("Failed to save progress");
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to save progress";
+                toast.error(message);
             } finally {
                 setSaving(false);
             }
@@ -134,8 +136,9 @@ export function OnboardingWizard({ initialProgress, mode = "default", onComplete
                 const updated = await updateOnboardingStep(currentStepIndex, {});
                 setProgress(updated);
                 setCurrentStepIndex(updated.current_step);
-            } catch {
-                toast.error("Failed to skip step");
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to skip step";
+                toast.error(message);
             } finally {
                 setSaving(false);
             }
@@ -185,6 +188,7 @@ export function OnboardingWizard({ initialProgress, mode = "default", onComplete
                         }
                         stepData={currentStepData}
                         loading={saving}
+                        allowedProfileTypes={progress.allowed_profile_types}
                     />
                 ) : (
                     <div className="text-center py-12 text-slate-400">

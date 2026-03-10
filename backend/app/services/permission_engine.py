@@ -22,7 +22,7 @@ from app.models.rbac import Role, Permission
 from app.services.auth_service import is_super_admin
 from app.services.rbac_scope import is_role_assignable
 
-MUTATION_ACTIONS = {"create", "update", "delete", "write"}
+READ_IMPLYING_ACTIONS = {"create", "update", "write"}
 
 # Profile type → allowed roles mapping
 PROFILE_TYPE_ROLE_CONSTRAINTS: Dict[str, Set[str]] = {
@@ -117,11 +117,14 @@ class PermissionEngine:
 
                 if perm.action == "none":
                     self._remove_resource_permissions(effective, perm.resource)
-                elif perm.action in MUTATION_ACTIONS:
+                elif perm.action == "create":
+                    effective.add(f"{perm.resource}:read")
+                    effective.add(f"{perm.resource}:create")
+                elif perm.action in {"update", "write"}:
                     effective.add(f"{perm.resource}:read")
                     effective.add(f"{perm.resource}:write")
-                    effective.add(f"{perm.resource}:create")
                     effective.add(f"{perm.resource}:update")
+                elif perm.action == "delete":
                     effective.add(f"{perm.resource}:delete")
                 elif perm.action == "read":
                     effective.add(f"{perm.resource}:read")
@@ -264,16 +267,16 @@ class PermissionEngine:
         if granted_action == requested_action:
             return True
 
-        # Mutation implies read
-        if requested_action == "read" and granted_action in MUTATION_ACTIONS:
+        # Create/update/write imply read. Delete does not imply read.
+        if requested_action == "read" and granted_action in READ_IMPLYING_ACTIONS:
             return True
 
-        # Legacy write should satisfy CRUD checks
-        if granted_action == "write" and requested_action in MUTATION_ACTIONS:
+        # Legacy write maps to update behavior only.
+        if granted_action == "write" and requested_action == "update":
             return True
 
-        # CRUD should satisfy legacy write checks
-        if requested_action == "write" and granted_action in {"create", "update", "delete"}:
+        # "write" checks should pass for explicit update too.
+        if requested_action == "write" and granted_action == "update":
             return True
 
         return False
@@ -300,13 +303,19 @@ class PermissionEngine:
 
         normalized: Set[str] = set(passthrough)
         for resource, actions in by_resource.items():
-            if actions & MUTATION_ACTIONS:
+            if "create" in actions:
+                normalized.add(f"{resource}:read")
+                normalized.add(f"{resource}:create")
+            if "update" in actions:
+                normalized.add(f"{resource}:read")
+                normalized.add(f"{resource}:update")
+            if "write" in actions:
                 normalized.add(f"{resource}:read")
                 normalized.add(f"{resource}:write")
-                normalized.add(f"{resource}:create")
                 normalized.add(f"{resource}:update")
+            if "delete" in actions:
                 normalized.add(f"{resource}:delete")
-            elif "read" in actions:
+            if "read" in actions:
                 normalized.add(f"{resource}:read")
 
             for action in actions:

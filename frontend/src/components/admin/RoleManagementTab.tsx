@@ -5,6 +5,7 @@ import { listRoles, updateRolePermissions, type RoleData } from "@/lib/api/rbac"
 import { toast } from "sonner";
 import { ChevronRight, Shield, ShieldCheck, Crown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePermissionContext } from "@/contexts/PermissionContext";
 
 const RESOURCES = [
     { key: "agency", label: "Agency Hub" },
@@ -48,7 +49,23 @@ function normalizePermissions(input: Record<string, string[]>): Record<string, s
     return normalized;
 }
 
+function canonicalizePermissions(input: Record<string, string[]>): Record<string, string[]> {
+    const normalized = normalizePermissions(input);
+    const sortedKeys = Object.keys(normalized).sort();
+    const canonical: Record<string, string[]> = {};
+    for (const key of sortedKeys) {
+        const uniqueActions = Array.from(new Set(normalized[key] || []));
+        if (uniqueActions.includes("*")) {
+            canonical[key] = ["*"];
+            continue;
+        }
+        canonical[key] = ACTIONS.filter(action => uniqueActions.includes(action));
+    }
+    return canonical;
+}
+
 export function RoleManagementTab() {
+    const { refresh: refreshPermissions } = usePermissionContext();
     const [roles, setRoles] = useState<RoleData[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedRole, setExpandedRole] = useState<number | null>(null);
@@ -79,7 +96,7 @@ export function RoleManagementTab() {
             // Initialize edits from current role permissions
             const role = roles.find(r => r.id === id);
             if (role && !edits[id]) {
-                setEdits(prev => ({ ...prev, [id]: normalizePermissions(role.permissions_json) }));
+                setEdits(prev => ({ ...prev, [id]: canonicalizePermissions(role.permissions_json) }));
             }
         }
     };
@@ -121,7 +138,7 @@ export function RoleManagementTab() {
     const isDirty = (roleId: number): boolean => {
         const role = roles.find(r => r.id === roleId);
         if (!role || !edits[roleId]) return false;
-        return JSON.stringify(normalizePermissions(role.permissions_json)) !== JSON.stringify(edits[roleId]);
+        return JSON.stringify(canonicalizePermissions(role.permissions_json)) !== JSON.stringify(canonicalizePermissions(edits[roleId]));
     };
 
     const savePermissions = async (roleId: number) => {
@@ -134,11 +151,13 @@ export function RoleManagementTab() {
             for (const [key, val] of Object.entries(perms)) {
                 if (val.length > 0) cleaned[key] = val;
             }
-            await updateRolePermissions(roleId, cleaned);
+            const canonical = canonicalizePermissions(cleaned);
+            await updateRolePermissions(roleId, canonical);
             toast.success("Role permissions updated");
             await loadRoles();
+            await refreshPermissions();
             // Refresh edits
-            setEdits(prev => ({ ...prev, [roleId]: cleaned }));
+            setEdits(prev => ({ ...prev, [roleId]: canonical }));
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Failed to save";
             toast.error(message);
@@ -150,7 +169,7 @@ export function RoleManagementTab() {
     const resetEdits = (roleId: number) => {
         const role = roles.find(r => r.id === roleId);
         if (role) {
-            setEdits(prev => ({ ...prev, [roleId]: normalizePermissions(role.permissions_json) }));
+            setEdits(prev => ({ ...prev, [roleId]: canonicalizePermissions(role.permissions_json) }));
         }
     };
 
