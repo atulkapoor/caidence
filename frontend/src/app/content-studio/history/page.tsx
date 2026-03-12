@@ -2,7 +2,7 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { History, Search, Filter, ArrowLeft, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, PenTool, Calendar, Trash2, Eye } from "lucide-react";
-import { fetchContentGenerations, ContentGeneration, deleteContent } from "@/lib/api";
+import { fetchContentGenerations, ContentGeneration, deleteContent, fetchBrands, type Brand } from "@/lib/api";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -25,9 +25,11 @@ function ContentHistory() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [platformFilter, setPlatformFilter] = useState("all");
+    const [availableBrands, setAvailableBrands] = useState<Brand[]>([]);
 
     useEffect(() => {
         loadHistory();
+        loadBrands();
     }, []);
 
     const loadHistory = async () => {
@@ -42,6 +44,18 @@ function ContentHistory() {
             setLoading(false);
         }
     };
+
+    const loadBrands = async () => {
+        try {
+            const data = await fetchBrands();
+            setAvailableBrands(data);
+        } catch (error) {
+            console.error("Failed to load brands", error);
+        }
+    };
+
+    const getBrandName = (brandId?: number | null) =>
+        availableBrands.find((brand) => brand.id === brandId)?.name || null;
 
     const handleDelete = async (e: React.MouseEvent, id: number) => {
         e.preventDefault(); // Prevent navigation if button is inside link
@@ -156,6 +170,9 @@ function ContentHistory() {
                                                 {item.content_type}
                                             </span>
                                         </div>
+                                        <p className="text-xs font-semibold text-slate-500 mb-1">
+                                            Brand: {getBrandName(item.brand_id) || "None"}
+                                        </p>
                                         <p className="text-sm text-slate-500 line-clamp-2">{item.result}</p>
                                         <div className="flex items-center gap-4 mt-3 text-xs font-medium text-slate-400">
                                             <span className="flex items-center gap-1">

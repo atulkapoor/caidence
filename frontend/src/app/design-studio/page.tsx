@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
-import { generateDesign, fetchDesignAssetsPage, DesignAsset, enhanceDescription } from "@/lib/api";
+import { generateDesign, fetchDesignAssetsPage, DesignAsset, enhanceDescription, fetchBrands, type Brand } from "@/lib/api";
 import { saveDesign } from "@/lib/api/design";
 import { getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost } from "@/lib/api/social";
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -13,7 +13,7 @@ import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalend
 import { usePermissionContext } from "@/contexts/PermissionContext";
 // import Link from "next/link"; // Unused
 import { toast } from "sonner";
-import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send, Save, Linkedin, Twitter, FileText, Mail, Facebook, Instagram } from "lucide-react";
+import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send, Save, Plus, Linkedin, Twitter, FileText, Mail, Facebook, Instagram } from "lucide-react";
 
 function DesignStudioContent() {
     const { hasPermission } = usePermissionContext();
@@ -32,6 +32,7 @@ function DesignStudioContent() {
         image_url: string;
         brand_colors?: string;
         reference_image?: string;
+        brand_id?: number | null;
     };
 
     // @ts-ignore
@@ -46,11 +47,14 @@ function DesignStudioContent() {
     const [selectedModel, setSelectedModel] = useState("NanoBanana");
     const [brandColors, setBrandColors] = useState(""); // Text input
     const [referenceImage, setReferenceImage] = useState("");
+    const [availableBrands, setAvailableBrands] = useState<Brand[]>([]);
+    const [selectedBrandId, setSelectedBrandId] = useState<number | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [recentDesigns, setRecentDesigns] = useState<DesignAsset[]>([]);
     const [generatedContent, setGeneratedContent] = useState("");
     const [generatedDesignPreview, setGeneratedDesignPreview] = useState<GeneratedDesignPreview | null>(null);
+    const [generatedPlatforms, setGeneratedPlatforms] = useState<string[]>([]);
     const [savingDesignPlatform, setSavingDesignPlatform] = useState<string | null>(null);
     const [designAssetIdByPlatform, setDesignAssetIdByPlatform] = useState<Record<string, number>>({});
     const [editingDesignId, setEditingDesignId] = useState<number | null>(null);
@@ -68,6 +72,7 @@ function DesignStudioContent() {
         platform: string;
         imageUrl: string;
         designAssetId?: number;
+        brandId?: number | null;
     } | null>(null);
 
     // Library State
@@ -92,7 +97,13 @@ function DesignStudioContent() {
     ];
     const supportedPublishPlatforms = new Set(["linkedin", "facebook", "instagram"]);
     const primarySelectedPlatform = selectedPlatforms[0] || "LinkedIn";
+    const previewPlatforms =
+        (isGenerating || Boolean(generatedDesignPreview)) && generatedPlatforms.length > 0
+            ? generatedPlatforms
+            : [primarySelectedPlatform];
     const knownPlatforms = ["LinkedIn", "Twitter", "Blog", "Email", "Facebook", "Instagram"];
+    const getBrandName = (brandId?: number | null) =>
+        availableBrands.find((brand) => brand.id === brandId)?.name || null;
 
     const togglePlatform = (id: string) => {
         setSelectedPlatforms((prev) =>
@@ -135,6 +146,25 @@ function DesignStudioContent() {
         }
         return null;
     };
+
+    const resetGeneratorState = () => {
+        setTitle("New Visual");
+        setPrompt("");
+        setSelectedStyle("Photorealistic");
+        setAspectRatio("16:9");
+        setSelectedPlatforms(["LinkedIn"]);
+        setBrandColors("");
+        setReferenceImage("");
+        setSelectedBrandId(null);
+        setGeneratedContent("");
+        setGeneratedDesignPreview(null);
+        setGeneratedPlatforms([]);
+        setDesignAssetIdByPlatform({});
+        setEditingDesignId(null);
+        setGeneratedTextPostedPlatforms(new Set());
+        setPostingPreviewPlatform(null);
+        setPostingDesignPlatform(null);
+    };
     const resolveAssetPlatform = (asset?: Pick<DesignAsset, "title"> | null): string =>
         detectPlatformFromTitle(asset?.title || "") || primarySelectedPlatform;
 
@@ -143,6 +173,10 @@ function DesignStudioContent() {
         const params = new URLSearchParams(window.location.search);
         const editId = params.get('edit');
         if (editId) loadForEdit(parseInt(editId));
+    }, []);
+
+    useEffect(() => {
+        loadBrands();
     }, []);
 
     useEffect(() => {
@@ -197,6 +231,7 @@ function DesignStudioContent() {
         setAspectRatio(asset.aspect_ratio || "16:9");
         setBrandColors(asset.brand_colors || "");
         setReferenceImage(asset.reference_image || "");
+        setSelectedBrandId(asset.brand_id ?? null);
         if (detectedPlatform) {
             setSelectedPlatforms([detectedPlatform]);
             setDesignAssetIdByPlatform({ [detectedPlatform.toLowerCase()]: asset.id });
@@ -212,6 +247,7 @@ function DesignStudioContent() {
             image_url: asset.image_url || "",
             brand_colors: asset.brand_colors || undefined,
             reference_image: asset.reference_image || undefined,
+            brand_id: asset.brand_id ?? null,
         });
         setGeneratedContent("");
         setActiveTab("generate");
@@ -233,6 +269,18 @@ function DesignStudioContent() {
         } catch (e) {
             console.error("Failed to load edit asset", e);
             toast.error("Failed to load design for editing");
+        }
+    };
+
+    const loadBrands = async () => {
+        try {
+            const data = await fetchBrands();
+            setAvailableBrands(data);
+            if (selectedBrandId && !data.find((b) => b.id === selectedBrandId && b.is_active)) {
+                setSelectedBrandId(null);
+            }
+        } catch (error) {
+            console.error("Failed to load brands", error);
         }
     };
 
@@ -263,7 +311,7 @@ function DesignStudioContent() {
         return new Date(date.getTime() - tzOffsetMs).toISOString().slice(0, 16);
     };
 
-    const openDesignScheduleModal = (draft: { title: string; platform: string; imageUrl: string; designAssetId?: number }) => {
+    const openDesignScheduleModal = (draft: { title: string; platform: string; imageUrl: string; designAssetId?: number; brandId?: number | null }) => {
         setScheduleDraft(draft);
         setScheduleDateTime(toDateTimeLocalValue(new Date(Date.now() + 30 * 60 * 1000)));
         setIsScheduleOpen(true);
@@ -298,9 +346,14 @@ function DesignStudioContent() {
             return;
         }
 
-        const status = await getConnectionStatus(platformKey);
+        const status = await getConnectionStatus(platformKey, scheduleDraft.brandId ?? undefined);
         if (!status.connected) {
-            toast.error(`Connect ${scheduleDraft.platform} in Onboarding/Settings before scheduling`);
+            const brandName = scheduleDraft.brandId ? getBrandName(scheduleDraft.brandId) : null;
+            toast.error(
+                brandName
+                    ? `Connect ${scheduleDraft.platform} for ${brandName} before scheduling`
+                    : `Connect ${scheduleDraft.platform} in Onboarding/Settings before scheduling`
+            );
             return;
         }
 
@@ -313,6 +366,7 @@ function DesignStudioContent() {
                 message: stripPlatformSuffixes(scheduleDraft.title || "New design"),
                 image_url: scheduleDraft.imageUrl,
                 design_asset_id: scheduleDraft.designAssetId,
+                brand_id: scheduleDraft.brandId ?? undefined,
                 scheduled_at: new Date(scheduleDateTime).toISOString(),
             });
             toast.success(`Scheduled to ${scheduleDraft.platform}`, { id: toastId });
@@ -331,26 +385,33 @@ function DesignStudioContent() {
             return;
         }
         if (!prompt) return;
+        setGeneratedPlatforms(selectedPlatforms.length > 0 ? [...selectedPlatforms] : [primarySelectedPlatform]);
         setIsGenerating(true);
 
         try {
+            const selectedBrandName = getBrandName(selectedBrandId);
+            const promptForGeneration = selectedBrandName
+                ? `Brand: ${selectedBrandName}\n${prompt}`
+                : prompt;
             const generated = await generateDesign({
                 title: title || "Untitled Design",
                 style: selectedStyle,
                 aspect_ratio: aspectRatio,
-                prompt: prompt,
+                prompt: promptForGeneration,
                 model: selectedModel,
                 brand_colors: brandColors,
-                reference_image: referenceImage
+                reference_image: referenceImage,
+                brand_id: selectedBrandId ?? undefined,
             });
             setGeneratedDesignPreview({
                 title: generated.title || title || "Untitled Design",
                 style: generated.style || selectedStyle,
                 aspect_ratio: generated.aspect_ratio || aspectRatio,
-                prompt: generated.prompt || prompt,
+                prompt: generated.prompt || promptForGeneration,
                 image_url: generated.image_url,
                 brand_colors: generated.brand_colors || brandColors || undefined,
                 reference_image: generated.reference_image || referenceImage || undefined,
+                brand_id: generated.brand_id ?? selectedBrandId ?? null,
             });
             setGeneratedContent("");
             if (editingDesignId && selectedPlatforms.length === 1) {
@@ -403,6 +464,7 @@ function DesignStudioContent() {
                 model: selectedModel,
                 brand_colors: generatedDesignPreview.brand_colors || brandColors || undefined,
                 reference_image: generatedDesignPreview.reference_image || referenceImage || undefined,
+                brand_id: selectedBrandId ?? undefined,
             });
 
             setRecentDesigns((prev) => {
@@ -428,6 +490,7 @@ function DesignStudioContent() {
                 image_url: saved.image_url || generatedDesignPreview.image_url,
                 brand_colors: saved.brand_colors || generatedDesignPreview.brand_colors,
                 reference_image: saved.reference_image || generatedDesignPreview.reference_image,
+                brand_id: saved.brand_id ?? generatedDesignPreview.brand_id ?? selectedBrandId ?? null,
             });
 
             toast.success(wasEditing ? `${platform} design updated in library.` : `${platform} design saved to library.`);
@@ -436,6 +499,17 @@ function DesignStudioContent() {
             toast.error("Failed to save design. Please try again.");
         } finally {
             setSavingDesignPlatform(null);
+        }
+    };
+
+    const handleSaveAllGeneratedDesigns = async () => {
+        if (!generatedDesignPreview?.image_url) {
+            toast.error("Generate a design preview before saving.");
+            return;
+        }
+        for (const platform of previewPlatforms) {
+            // eslint-disable-next-line no-await-in-loop
+            await handleSaveGeneratedDesign(platform);
         }
     };
 
@@ -464,6 +538,7 @@ function DesignStudioContent() {
                 model: selectedModel,
                 brand_colors: generatedDesignPreview.brand_colors || brandColors || undefined,
                 reference_image: generatedDesignPreview.reference_image || referenceImage || undefined,
+                brand_id: selectedBrandId ?? undefined,
             });
 
             setRecentDesigns((prev) => {
@@ -491,6 +566,7 @@ function DesignStudioContent() {
                         image_url: saved.image_url || prev.image_url,
                         brand_colors: saved.brand_colors || prev.brand_colors,
                         reference_image: saved.reference_image || prev.reference_image,
+                        brand_id: saved.brand_id ?? prev.brand_id ?? selectedBrandId ?? null,
                     }
                     : prev
             ));
@@ -541,11 +617,13 @@ function DesignStudioContent() {
         text,
         imageUrl,
         designAssetId,
+        brandId,
     }: {
         platform: string;
         text: string;
         imageUrl?: string;
         designAssetId?: number;
+        brandId?: number | null;
     }) => {
         if (isDesignReadOnly) {
             toast.error("Read-only access: posting is disabled");
@@ -571,9 +649,14 @@ function DesignStudioContent() {
             return;
         }
 
-        const status = await getConnectionStatus(platformKey);
+        const status = await getConnectionStatus(platformKey, brandId ?? undefined);
         if (!status.connected) {
-            toast.error(`Connect ${platform} in Onboarding/Settings before posting`);
+            const brandName = brandId ? getBrandName(brandId) : null;
+            toast.error(
+                brandName
+                    ? `Connect ${platform} for ${brandName} before posting`
+                    : `Connect ${platform} in Onboarding/Settings before posting`
+            );
             return;
         }
 
@@ -584,8 +667,9 @@ function DesignStudioContent() {
                     text: normalizedText,
                     image_data_url: imageUrl,
                     design_asset_id: designAssetId,
+                    brand_id: brandId ?? undefined,
                 })
-                : await publishSocialPost(platformKey, normalizedText, imageUrl, undefined, designAssetId);
+                : await publishSocialPost(platformKey, normalizedText, imageUrl, undefined, designAssetId, brandId ?? undefined);
 
             if (!publishResult.published) {
                 throw new Error(`Unexpected ${platform} publish response`);
@@ -646,6 +730,9 @@ function DesignStudioContent() {
                                         </span>
                                         <span className="px-2 py-1 bg-slate-100 rounded border border-slate-200 uppercase">
                                             {previewDesign.style}
+                                        </span>
+                                        <span className="px-2 py-1 bg-slate-100 rounded border border-slate-200">
+                                            Brand: {getBrandName(previewDesign.brand_id) || "None"}
                                         </span>
                                     </div>
                                 </div>
@@ -708,6 +795,7 @@ function DesignStudioContent() {
                                                                 text: previewDesign.title || "New design",
                                                                 imageUrl: previewDesign.image_url,
                                                                 designAssetId: previewDesign.id || undefined,
+                                                                brandId: previewDesign.brand_id ?? null,
                                                             });
                                                         } finally {
                                                             setPostingDesignPlatform(null);
@@ -733,6 +821,7 @@ function DesignStudioContent() {
                                                             platform,
                                                             imageUrl: previewDesign.image_url,
                                                             designAssetId: previewDesign.id || undefined,
+                                                            brandId: previewDesign.brand_id ?? null,
                                                         })
                                                     }
                                                     disabled={isDesignReadOnly || unsupported || isPostedForPlatform || isAssetPosted}
@@ -822,7 +911,11 @@ function DesignStudioContent() {
                         {/* TAB SWITCHER */}
                         <div className="flex p-1 bg-slate-100 rounded-lg ml-6">
                             <button
-                                onClick={() => canUseDesignGenerator && setActiveTab("generate")}
+                                onClick={() => {
+                                    if (!canUseDesignGenerator) return;
+                                    if (activeTab !== "generate") resetGeneratorState();
+                                    setActiveTab("generate");
+                                }}
                                 disabled={!canUseDesignGenerator}
                                 className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === "generate" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"} ${!canUseDesignGenerator ? "opacity-50 cursor-not-allowed" : ""}`}
                             >
@@ -854,384 +947,411 @@ function DesignStudioContent() {
 
                     {/* GENERATE TAB */}
                     {activeTab === "generate" && (
-                        <div className="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-12 gap-8 pb-20">
-                            <div className="xl:col-span-6 space-y-8">
-
-                            
-
-                            <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm space-y-8">
-                                
-                                 {/* Platform Selection */}
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">1</span>
-                                            Choose Platform(s)
-                                        </h2>
-                                        <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">Multi-select enabled</span>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        {platforms.map((platform) => (
-                                            <button
-                                                key={platform.id}
-                                                onClick={() => canUseDesignGenerator && togglePlatform(platform.id)}
-                                                disabled={!canUseDesignGenerator}
-                                                className={`relative p-3 rounded-xl border transition-all duration-200 flex flex-col items-center gap-2 group ${selectedPlatforms.includes(platform.id)
-                                                    ? `bg-white ${platform.border} ring-2 ring-rose-500 ring-offset-1 shadow-md`
-                                                    : "bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm"
-                                                    }`}
-                                            >
-                                                <div className={`p-2 rounded-lg ${platform.bg} ${platform.color} transition-transform group-hover:scale-110`}>
-                                                    <platform.icon className="w-5 h-5" />
-                                                </div>
-                                                <span className={`text-xs font-bold ${selectedPlatforms.includes(platform.id) ? "text-slate-800" : "text-slate-500"}`}>{platform.id}</span>
-                                                {selectedPlatforms.includes(platform.id) && (
-                                                    <div className="absolute top-2 right-2 w-2 h-2 bg-rose-600 rounded-full"></div>
-                                                )}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                
-                                {/* Design Name */}
-                                <div className="space-y-4">
-                                    <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                        <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">2</span>
-                                        Project Details
-                                    </h2>
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold text-slate-500 uppercase">Design Name</label>
-                                            <input
-                                                type="text"
-                                                value={title}
-                                                disabled={!canUseDesignGenerator}
-                                                onChange={(e) => setTitle(e.target.value)}
-                                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all placeholder:font-normal"
-                                                placeholder="e.g. Summer Campaign Hero"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold text-slate-500 uppercase">Campaign (Optional)</label>
-                                            <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all text-slate-500">
-                                                <option>Select a campaign...</option>
-                                                <option>Summer Launch 2024</option>
-                                                <option>Q3 Brand Awareness</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="w-full h-px bg-slate-100"></div>
-
-                               
-
-                                <div className="w-full h-px bg-slate-100"></div>
-
-                                {/* Configuration */}
-                                <div className="space-y-4">
-                                    <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                        <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">3</span>
-                                        Visual Settings
-                                    </h2>
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold text-slate-500 uppercase">Design Type / Size</label>
-                                            <select
-                                                value={aspectRatio}
-                                                disabled={!canUseDesignGenerator}
-                                                onChange={(e) => setAspectRatio(e.target.value)}
-                                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
-                                            >
-                                                {ratios.map(r => <option key={r} value={r}>{r}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold text-slate-500 uppercase">Visual Style</label>
-                                            <select
-                                                value={selectedStyle}
-                                                disabled={!canUseDesignGenerator}
-                                                onChange={(e) => setSelectedStyle(e.target.value)}
-                                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
-                                            >
-                                                {styles.map(s => <option key={s} value={s}>{s}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold text-slate-500 uppercase">Brand Colors (Optional)</label>
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="color"
-                                                    value={brandColors || "#000000"}
-                                                    disabled={!canUseDesignGenerator}
-                                                    onChange={(e) => setBrandColors(e.target.value)}
-                                                    className="w-12 h-12 p-1 bg-white border border-slate-200 rounded-lg cursor-pointer"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={brandColors}
-                                                    disabled={!canUseDesignGenerator}
-                                                    onChange={(e) => setBrandColors(e.target.value)}
-                                                    className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all placeholder:font-normal"
-                                                    placeholder="Hex Code (e.g. #FF0000)"
-                                                />
+                        <div className="h-full grid grid-cols-1 lg:grid-cols-12">
+                            {/* LEFT PANEL: Inputs */}
+                            <div className="lg:col-span-5 h-full overflow-y-auto border-r border-slate-200 bg-white p-6 custom-scrollbar">
+                                <div className="max-w-xl mx-auto space-y-8">
+                                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-8">
+                                        {/* Platform Selection */}
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center">
+                                                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                                    <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">1</span>
+                                                    Choose Platform(s)
+                                                </h2>
+                                                <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">Multi-select enabled</span>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-3">
+                                                {platforms.map((platform) => (
+                                                    <button
+                                                        key={platform.id}
+                                                        onClick={() => canUseDesignGenerator && togglePlatform(platform.id)}
+                                                        disabled={!canUseDesignGenerator}
+                                                        className={`relative p-3 rounded-xl border transition-all duration-200 flex flex-col items-center gap-2 group ${selectedPlatforms.includes(platform.id)
+                                                            ? `bg-white ${platform.border} ring-2 ring-rose-500 ring-offset-1 shadow-md`
+                                                            : "bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm"
+                                                            }`}
+                                                    >
+                                                        <div className={`p-2 rounded-lg ${platform.bg} ${platform.color} transition-transform group-hover:scale-110`}>
+                                                            <platform.icon className="w-5 h-5" />
+                                                        </div>
+                                                        <span className={`text-xs font-bold ${selectedPlatforms.includes(platform.id) ? "text-slate-800" : "text-slate-500"}`}>{platform.id}</span>
+                                                        {selectedPlatforms.includes(platform.id) && (
+                                                            <div className="absolute top-2 right-2 w-2 h-2 bg-rose-600 rounded-full"></div>
+                                                        )}
+                                                    </button>
+                                                ))}
                                             </div>
                                         </div>
-                                        {/* Reference Image Placeholder */}
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold text-slate-500 uppercase">Reference Image</label>
-                                            <div className="relative h-[50px]">
-                                                {!referenceImage && (
+
+                                        {/* Design Name */}
+                                        <div className="space-y-4">
+                                            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                                <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">2</span>
+                                                Project Details
+                                            </h2>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase">Design Name</label>
                                                     <input
-                                                        type="file"
-                                                        accept="image/*"
+                                                        type="text"
+                                                        value={title}
                                                         disabled={!canUseDesignGenerator}
-                                                        onChange={(e) => {
-                                                            const file = e.target.files?.[0];
-                                                            if (file) {
-                                                                const reader = new FileReader();
-                                                                reader.onloadend = () => {
-                                                                    setReferenceImage(reader.result as string);
-                                                                };
-                                                                reader.readAsDataURL(file);
+                                                        onChange={(e) => setTitle(e.target.value)}
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all placeholder:font-normal"
+                                                        placeholder="e.g. Summer Campaign Hero"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase">Brand (Optional)</label>
+                                                    <select
+                                                        value={selectedBrandId || ""}
+                                                        disabled={!canUseDesignGenerator}
+                                                        onChange={(e) => setSelectedBrandId(e.target.value ? Number(e.target.value) : null)}
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all text-slate-500"
+                                                    >
+                                                        <option value="">No Brand</option>
+                                                        {availableBrands
+                                                            .filter((brand) => brand.is_active)
+                                                            .map((brand) => (
+                                                                <option key={brand.id} value={brand.id}>{brand.name}</option>
+                                                            ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="w-full h-px bg-slate-100"></div>
+
+                                        {/* Configuration */}
+                                        <div className="space-y-4">
+                                            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                                <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">3</span>
+                                                Visual Settings
+                                            </h2>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase">Design Type / Size</label>
+                                                    <select
+                                                        value={aspectRatio}
+                                                        disabled={!canUseDesignGenerator}
+                                                        onChange={(e) => setAspectRatio(e.target.value)}
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
+                                                    >
+                                                        {ratios.map(r => <option key={r} value={r}>{r}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase">Visual Style</label>
+                                                    <select
+                                                        value={selectedStyle}
+                                                        disabled={!canUseDesignGenerator}
+                                                        onChange={(e) => setSelectedStyle(e.target.value)}
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
+                                                    >
+                                                        {styles.map(s => <option key={s} value={s}>{s}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase">Brand Colors (Optional)</label>
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="color"
+                                                            value={brandColors || "#000000"}
+                                                            disabled={!canUseDesignGenerator}
+                                                            onChange={(e) => setBrandColors(e.target.value)}
+                                                            className="w-12 h-12 p-1 bg-white border border-slate-200 rounded-lg cursor-pointer"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={brandColors}
+                                                            disabled={!canUseDesignGenerator}
+                                                            onChange={(e) => setBrandColors(e.target.value)}
+                                                            className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all placeholder:font-normal"
+                                                            placeholder="Hex Code (e.g. #FF0000)"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                {/* Reference Image Placeholder */}
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase">Reference Image</label>
+                                                    <div className="relative h-[50px]">
+                                                        {!referenceImage && (
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                disabled={!canUseDesignGenerator}
+                                                                onChange={(e) => {
+                                                                    const file = e.target.files?.[0];
+                                                                    if (file) {
+                                                                        const reader = new FileReader();
+                                                                        reader.onloadend = () => {
+                                                                            setReferenceImage(reader.result as string);
+                                                                        };
+                                                                        reader.readAsDataURL(file);
+                                                                    }
+                                                                }}
+                                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                                                id="reference-image-upload"
+                                                            />
+                                                        )}
+                                                        <div className={`w-full p-3 border-2 border-dashed rounded-xl text-sm font-medium flex items-center justify-center transition-colors h-[50px] ${referenceImage ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
+                                                            {referenceImage ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <img src={referenceImage} alt="Reference" className="w-6 h-6 rounded object-cover" />
+                                                                    <span className="text-xs">Image uploaded</span>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            setReferenceImage("");
+                                                                        }}
+                                                                        className="text-red-500 hover:text-red-700 ml-2"
+                                                                    >
+                                                                        <X className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-2">
+                                                                    <Upload className="w-4 h-4" />
+                                                                    <span>Click or drop to upload</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="w-full h-px bg-slate-100"></div>
+
+                                        {/* Prompt */}
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                                    <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">4</span>
+                                                    Design Brief
+                                                </h2>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!prompt) return;
+                                                        setIsEnhancing(true);
+                                                        try {
+                                                            const enhanced = await enhanceDescription(prompt, selectedModel);
+                                                            setPrompt(enhanced);
+                                                        } catch (e) {
+                                                            console.error("Enhance failed", e);
+                                                        }
+                                                        setIsEnhancing(false);
+                                                    }}
+                                                    disabled={!canUseDesignGenerator || isEnhancing || !prompt}
+                                                    className="text-xs font-bold text-rose-600 flex items-center gap-1 hover:text-rose-700 transition-colors disabled:opacity-50"
+                                                >
+                                                    {isEnhancing ? (
+                                                        <><div className="w-3 h-3 border border-rose-600 border-t-transparent rounded-full animate-spin" /> Enhancing...</>
+                                                    ) : (
+                                                        <><Sparkles className="w-3 h-3" /> Enhance Prompt</>
+                                                    )}
+                                                </button>
+                                            </div>
+                                            <div className="relative">
+                                                <textarea
+                                                    value={prompt}
+                                                    disabled={!canUseDesignGenerator}
+                                                    onChange={(e) => setPrompt(e.target.value)}
+                                                    className="w-full h-40 p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 outline-none text-sm font-medium resize-none leading-relaxed placeholder:font-normal"
+                                                    placeholder="Describe your visual concept in detail..."
+                                                ></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Bar */}
+                                    <div className="flex items-center justify-end">
+                                        <button
+                                            onClick={handleGenerate}
+                                            disabled={!canUseDesignGenerator || isGenerating || !prompt}
+                                            className="px-8 py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-200 transition-transform active:scale-95 disabled:opacity-70 disabled:pointer-events-none flex items-center gap-2 text-lg"
+                                        >
+                                            {isGenerating ? (
+                                                <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Generating...</>
+                                            ) : (
+                                                <><Wand2 className="w-5 h-5" /> {editingDesignId ? "Regenerate Design" : "Generate AI Design"}</>
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    {generatedContent && (
+                                        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Generated Content</h3>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => navigator.clipboard.writeText(generatedContent)}
+                                                        className="px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg bg-white hover:bg-slate-50"
+                                                    >
+                                                        Copy
+                                                    </button>
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                if (!supportedPublishPlatforms.has(primarySelectedPlatform.toLowerCase())) {
+                                                                    toast.error(`Direct publishing is not supported for ${primarySelectedPlatform} yet.`);
+                                                                    return;
+                                                                }
+                                                                setPostingGeneratedText(true);
+                                                                await handleDesignPost({
+                                                                    platform: primarySelectedPlatform,
+                                                                    text: generatedContent,
+                                                                    brandId: selectedBrandId ?? null,
+                                                                });
+                                                                setGeneratedTextPostedPlatforms((prev) => {
+                                                                    const next = new Set(prev);
+                                                                    next.add(primarySelectedPlatform.toLowerCase());
+                                                                    return next;
+                                                                });
+                                                            } catch (error: any) {
+                                                                toast.error(error?.message || `Failed to post to ${primarySelectedPlatform}`);
+                                                            } finally {
+                                                                setPostingGeneratedText(false);
                                                             }
                                                         }}
-                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                                                        id="reference-image-upload"
-                                                    />
-                                                )}
-                                                <div className={`w-full p-3 border-2 border-dashed rounded-xl text-sm font-medium flex items-center justify-center transition-colors h-[50px] ${referenceImage ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
-                                                    {referenceImage ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <img src={referenceImage} alt="Reference" className="w-6 h-6 rounded object-cover" />
-                                                            <span className="text-xs">Image uploaded</span>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    e.stopPropagation();
-                                                                    setReferenceImage("");
-                                                                }}
-                                                                className="text-red-500 hover:text-red-700 ml-2"
-                                                            >
-                                                                <X className="w-4 h-4" />
-                                                            </button>
+                                                        disabled={postingGeneratedText || generatedTextPostedPlatforms.has(primarySelectedPlatform.toLowerCase())}
+                                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg ${generatedTextPostedPlatforms.has(primarySelectedPlatform.toLowerCase())
+                                                            ? "bg-emerald-100 text-emerald-700 cursor-default"
+                                                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                            }`}
+                                                    >
+                                                        {generatedTextPostedPlatforms.has(primarySelectedPlatform.toLowerCase()) ? `Posted on ${primarySelectedPlatform}` : postingGeneratedText ? "Posting..." : `Post to ${primarySelectedPlatform}`}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{generatedContent}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* RIGHT PANEL: Previews */}
+                            <div className="lg:col-span-7 h-full bg-slate-100 p-6 sm:p-8 overflow-y-auto custom-scrollbar">
+                                <div className="max-w-3xl mx-auto space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <button
+                                            onClick={resetGeneratorState}
+                                            className="text-sm font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 hover:bg-white px-3 py-1.5 rounded-lg transition-all"
+                                        >
+                                            <Plus className="w-4 h-4" /> New Design
+                                        </button>
+                                        <button
+                                            onClick={handleSaveAllGeneratedDesigns}
+                                            disabled={!generatedDesignPreview?.image_url || !(canDesignCreate || canEditExistingDesign)}
+                                            className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-50"
+                                        >
+                                            <Sparkles className="w-3 h-3 text-amber-400" /> Save All
+                                        </button>
+                                    </div>
+                                    {previewPlatforms.map((platform) => {
+                                        const platformKey = platform.toLowerCase();
+                                        const platformDesignId = designAssetIdByPlatform[platformKey]
+                                            ?? (selectedPlatforms.length === 1 ? editingDesignId ?? undefined : undefined);
+                                        const actionKey = makeDesignPlatformKey(platformDesignId, platform);
+                                        const isPostedForPlatform = postedDesignPlatformKeys.has(actionKey);
+                                        const unsupported = !supportedPublishPlatforms.has(platformKey);
+
+                                        return (
+                                            <div key={`generate-preview:${platform}`} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-bold text-slate-900 truncate">{generatedDesignPreview?.title || title || "Untitled Design"}</p>
+                                                        <p className="text-xs text-slate-500 font-medium">{platform}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (!generatedDesignPreview?.image_url) return;
+                                                                if (unsupported) {
+                                                                    toast.error(`Direct publishing is not supported for ${platform} yet.`);
+                                                                    return;
+                                                                }
+                                                                try {
+                                                                    const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(platform, platformDesignId);
+                                                                    if (!designAssetId) return;
+                                                                    setPostingPreviewPlatform(platformKey);
+                                                                    await handleDesignPost({
+                                                                        platform,
+                                                                        text: generatedDesignPreview.title || title || "New design",
+                                                                        imageUrl: generatedDesignPreview.image_url,
+                                                                        designAssetId,
+                                                                        brandId: generatedDesignPreview.brand_id ?? selectedBrandId ?? null,
+                                                                    });
+                                                                } finally {
+                                                                    setPostingPreviewPlatform(null);
+                                                                }
+                                                            }}
+                                                            disabled={isDesignReadOnly || unsupported || postingPreviewPlatform === platformKey || isPostedForPlatform || !generatedDesignPreview?.image_url}
+                                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                                                        >
+                                                            <span className="inline-flex items-center gap-1"><Send className="w-3.5 h-3.5" /> {postingPreviewPlatform === platformKey ? "Posting..." : isPostedForPlatform ? "Posted" : "Post"}</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (!generatedDesignPreview?.image_url) return;
+                                                                const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(platform, platformDesignId);
+                                                                if (!designAssetId) return;
+                                                                openDesignScheduleModal({
+                                                                    title: generatedDesignPreview.title || title || "New design",
+                                                                    platform,
+                                                                    imageUrl: generatedDesignPreview.image_url,
+                                                                    designAssetId,
+                                                                    brandId: generatedDesignPreview.brand_id ?? selectedBrandId ?? null,
+                                                                });
+                                                            }}
+                                                            disabled={isDesignReadOnly || unsupported || !generatedDesignPreview?.image_url}
+                                                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                                                        >
+                                                            <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleSaveGeneratedDesign(platform)}
+                                                            disabled={savingDesignPlatform === platformKey || isGenerating || !generatedDesignPreview?.image_url || (!canEditExistingDesign && platformDesignId !== undefined) || (!canDesignCreate && platformDesignId === undefined)}
+                                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            <span className="inline-flex items-center gap-1">
+                                                                {savingDesignPlatform === platformKey ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                                                {savingDesignPlatform === platformKey ? "Saving..." : platformDesignId ? "Update" : "Save"}
+                                                            </span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="relative rounded-xl border border-slate-200 bg-slate-50 min-h-[420px] flex items-center justify-center overflow-hidden">
+                                                    {isGenerating ? (
+                                                        <div className="flex flex-col items-center gap-3 text-slate-500">
+                                                            <div className="w-10 h-10 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin"></div>
+                                                            <p className="text-xs font-semibold uppercase tracking-wider">Generating Preview...</p>
                                                         </div>
+                                                    ) : generatedDesignPreview?.image_url ? (
+                                                        <img
+                                                            src={generatedDesignPreview.image_url}
+                                                            alt={`${generatedDesignPreview.title || "Generated design preview"} - ${platform}`}
+                                                            className="w-full h-full object-contain"
+                                                        />
                                                     ) : (
-                                                        <div className="flex items-center gap-2">
-                                                            <Upload className="w-4 h-4" />
-                                                            <span>Click or drop to upload</span>
+                                                        <div className="text-center p-6">
+                                                            <ImageIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                                                            <p className="text-sm font-medium text-slate-500">
+                                                                Generate a design to preview it here before saving.
+                                                            </p>
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
-                                        </div>
-                                    </div>
+                                        );
+                                    })}
                                 </div>
-
-                                <div className="w-full h-px bg-slate-100"></div>
-
-                                {/* Prompt */}
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">4</span>
-                                            Design Brief
-                                        </h2>
-                                        <button
-                                            onClick={async () => {
-                                                if (!prompt) return;
-                                                setIsEnhancing(true);
-                                                try {
-                                                    const enhanced = await enhanceDescription(prompt, selectedModel);
-                                                    setPrompt(enhanced);
-                                                } catch (e) {
-                                                    console.error("Enhance failed", e);
-                                                }
-                                                setIsEnhancing(false);
-                                            }}
-                                            disabled={!canUseDesignGenerator || isEnhancing || !prompt}
-                                            className="text-xs font-bold text-rose-600 flex items-center gap-1 hover:text-rose-700 transition-colors disabled:opacity-50"
-                                        >
-                                            {isEnhancing ? (
-                                                <><div className="w-3 h-3 border border-rose-600 border-t-transparent rounded-full animate-spin" /> Enhancing...</>
-                                            ) : (
-                                                <><Sparkles className="w-3 h-3" /> Enhance Prompt</>
-                                            )}
-                                        </button>
-                                    </div>
-                                    <div className="relative">
-                                        <textarea
-                                            value={prompt}
-                                            disabled={!canUseDesignGenerator}
-                                            onChange={(e) => setPrompt(e.target.value)}
-                                            className="w-full h-40 p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 outline-none text-sm font-medium resize-none leading-relaxed placeholder:font-normal"
-                                            placeholder="Describe your visual concept in detail..."
-                                        ></textarea>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Action Bar */}
-                            <div className="flex items-center justify-end">
-                                <button
-                                    onClick={handleGenerate}
-                                    disabled={!canUseDesignGenerator || isGenerating || !prompt}
-                                    className="px-8 py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-lg shadow-rose-200 transition-transform active:scale-95 disabled:opacity-70 disabled:pointer-events-none flex items-center gap-2 text-lg"
-                                >
-                                    {isGenerating ? (
-                                        <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Generating...</>
-                                    ) : (
-                                        <><Wand2 className="w-5 h-5" /> {editingDesignId ? "Regenerate Design" : "Generate AI Design"}</>
-                                    )}
-                                </button>
-                            </div>
-
-                            {generatedContent && (
-                                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Generated Content</h3>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => navigator.clipboard.writeText(generatedContent)}
-                                                className="px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg bg-white hover:bg-slate-50"
-                                            >
-                                                Copy
-                                            </button>
-                                            <button
-                                                onClick={async () => {
-                                                    try {
-                                                        if (!supportedPublishPlatforms.has(primarySelectedPlatform.toLowerCase())) {
-                                                            toast.error(`Direct publishing is not supported for ${primarySelectedPlatform} yet.`);
-                                                            return;
-                                                        }
-                                                        setPostingGeneratedText(true);
-                                                        await handleDesignPost({ platform: primarySelectedPlatform, text: generatedContent });
-                                                        setGeneratedTextPostedPlatforms((prev) => {
-                                                            const next = new Set(prev);
-                                                            next.add(primarySelectedPlatform.toLowerCase());
-                                                            return next;
-                                                        });
-                                                    } catch (error: any) {
-                                                        toast.error(error?.message || `Failed to post to ${primarySelectedPlatform}`);
-                                                    } finally {
-                                                        setPostingGeneratedText(false);
-                                                    }
-                                                }}
-                                                disabled={postingGeneratedText || generatedTextPostedPlatforms.has(primarySelectedPlatform.toLowerCase())}
-                                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg ${generatedTextPostedPlatforms.has(primarySelectedPlatform.toLowerCase())
-                                                    ? "bg-emerald-100 text-emerald-700 cursor-default"
-                                                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                                    }`}
-                                            >
-                                                {generatedTextPostedPlatforms.has(primarySelectedPlatform.toLowerCase()) ? `Posted on ${primarySelectedPlatform}` : postingGeneratedText ? "Posting..." : `Post to ${primarySelectedPlatform}`}
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{generatedContent}</p>
-                                </div>
-                            )}
-                            </div>
-
-                            <div className="xl:col-span-6 space-y-6">
-                                {selectedPlatforms.map((platform) => {
-                                    const platformKey = platform.toLowerCase();
-                                    const platformDesignId = designAssetIdByPlatform[platformKey]
-                                        ?? (selectedPlatforms.length === 1 ? editingDesignId ?? undefined : undefined);
-                                    const actionKey = makeDesignPlatformKey(platformDesignId, platform);
-                                    const isPostedForPlatform = postedDesignPlatformKeys.has(actionKey);
-                                    const unsupported = !supportedPublishPlatforms.has(platformKey);
-
-                                    return (
-                                        <div key={`generate-preview:${platform}`} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-                                            <div className="flex items-center justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-bold text-slate-900 truncate">{generatedDesignPreview?.title || title || "Untitled Design"}</p>
-                                                    <p className="text-xs text-slate-500 font-medium">{platform}</p>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={async () => {
-                                                            if (!generatedDesignPreview?.image_url) return;
-                                                            if (unsupported) {
-                                                                toast.error(`Direct publishing is not supported for ${platform} yet.`);
-                                                                return;
-                                                            }
-                                                            try {
-                                                                const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(platform, platformDesignId);
-                                                                if (!designAssetId) return;
-                                                                setPostingPreviewPlatform(platformKey);
-                                                                await handleDesignPost({
-                                                                    platform,
-                                                                    text: generatedDesignPreview.title || title || "New design",
-                                                                    imageUrl: generatedDesignPreview.image_url,
-                                                                    designAssetId,
-                                                                });
-                                                            } finally {
-                                                                setPostingPreviewPlatform(null);
-                                                            }
-                                                        }}
-                                                        disabled={isDesignReadOnly || unsupported || postingPreviewPlatform === platformKey || isPostedForPlatform || !generatedDesignPreview?.image_url}
-                                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
-                                                    >
-                                                            <span className="inline-flex items-center gap-1"><Send className="w-3.5 h-3.5" /> {postingPreviewPlatform === platformKey ? "Posting..." : isPostedForPlatform ? "Posted" : "Post"}</span>
-                                                    </button>
-                                                    <button
-                                                        onClick={async () => {
-                                                            if (!generatedDesignPreview?.image_url) return;
-                                                            const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(platform, platformDesignId);
-                                                            if (!designAssetId) return;
-                                                            openDesignScheduleModal({
-                                                                title: generatedDesignPreview.title || title || "New design",
-                                                                platform,
-                                                                imageUrl: generatedDesignPreview.image_url,
-                                                                designAssetId,
-                                                            });
-                                                        }}
-                                                        disabled={isDesignReadOnly || unsupported || !generatedDesignPreview?.image_url}
-                                                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
-                                                    >
-                                                            <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule</span>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleSaveGeneratedDesign(platform)}
-                                                        disabled={savingDesignPlatform === platformKey || isGenerating || !generatedDesignPreview?.image_url || (!canEditExistingDesign && platformDesignId !== undefined) || (!canDesignCreate && platformDesignId === undefined)}
-                                                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        <span className="inline-flex items-center gap-1">
-                                                            {savingDesignPlatform === platformKey ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                                                            {savingDesignPlatform === platformKey ? "Saving..." : platformDesignId ? "Update" : "Save"}
-                                                        </span>
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <div className="relative rounded-xl border border-slate-200 bg-slate-50 min-h-[420px] flex items-center justify-center overflow-hidden">
-                                                {isGenerating ? (
-                                                    <div className="flex flex-col items-center gap-3 text-slate-500">
-                                                        <div className="w-10 h-10 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin"></div>
-                                                        <p className="text-xs font-semibold uppercase tracking-wider">Generating Preview...</p>
-                                                    </div>
-                                                ) : generatedDesignPreview?.image_url ? (
-                                                    <img
-                                                        src={generatedDesignPreview.image_url}
-                                                        alt={`${generatedDesignPreview.title || "Generated design preview"} - ${platform}`}
-                                                        className="w-full h-full object-contain"
-                                                    />
-                                                ) : (
-                                                    <div className="text-center p-6">
-                                                        <ImageIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                                                        <p className="text-sm font-medium text-slate-500">
-                                                            Generate a design to preview it here before saving.
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
                             </div>
                         </div>
                     )}
@@ -1281,8 +1401,16 @@ function DesignStudioContent() {
                                         <p className="text-slate-500 font-medium">Loading designs...</p>
                                     </div>
                                 ) : recentDesigns.length > 0 ? (
-                                    recentDesigns.map((asset) => (
-                                        <div key={asset.id} className="group flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
+                                    recentDesigns.map((asset) => {
+                                        const isLocked = isDesignLocked(asset) || !canEditExistingDesign;
+                                        const platform = resolveAssetPlatform(asset);
+                                        const platformKey = platform.toLowerCase();
+                                        const isAssetPosted = Boolean(asset.is_posted) || postedDesignIds.has(asset.id || 0);
+                                        const actionKey = makeDesignPlatformKey(asset.id, platform);
+                                        const isPostedForPlatform = postedDesignPlatformKeys.has(actionKey);
+
+                                        return (
+                                            <div key={asset.id} className="group flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden animate-in fade-in zoom-in-95 duration-500">
                                             {/* Image Preview */}
                                             <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden cursor-pointer" onClick={() => setPreviewDesign(asset)}>
                                                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1330,10 +1458,13 @@ function DesignStudioContent() {
                                             </div>
 
                                             {/* Card Body */}
-                                            <div className="p-5 flex flex-col gap-3">
+                                            <div className="p-5 flex flex-col gap-3 flex-1">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div>
                                                         <h3 className="font-bold text-slate-900 line-clamp-1 group-hover:text-rose-600 transition-colors cursor-pointer" onClick={() => setPreviewDesign(asset)}>{stripPlatformSuffixes(asset.title || "Untitled Design")}</h3>
+                                                        <p className="text-[11px] font-semibold text-slate-500 mt-1">
+                                                            Brand: {getBrandName(asset.brand_id) || "None"}
+                                                        </p>
                                                         <div className="flex items-center gap-2 mt-1">
                                                             <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded border border-slate-200">
                                                                 {new Date(asset.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -1345,22 +1476,90 @@ function DesignStudioContent() {
                                                     </div>
                                                 </div>
 
-                                                <div className="w-full h-px bg-slate-100"></div>
+                                                <div className="mt-auto">
+                                                    <div className="w-full h-px bg-slate-100"></div>
 
-                                                <div className="grid grid-cols-[72px_1fr_24px] items-center gap-2">
-                                                    <div className="justify-self-start w-[72px]">
-                                                        {isDesignLocked(asset) || !canEditExistingDesign ? (
-                                                            <span className="inline-block w-[72px] opacity-0 select-none text-xs">Remix</span>
-                                                        ) : (
+                                                    <div className="grid grid-cols-[1fr_15px] items-center mt-3">
+                                                        <div className="flex items-center">
+                                                            {isLocked ? (
+                                                                <span className="inline-flex items-center gap-1 text-xs opacity-0 select-none w-[72px]">
+                                                                    <Wand2 className="w-3 h-3" /> Remix
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (!canEditExistingDesign) return;
+                                                                        loadDesignIntoGenerator(asset);
+                                                                    }}
+                                                                    disabled={!canEditExistingDesign}
+                                                                    className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 w-[72px] justify-start"
+                                                                >
+                                                                    <Wand2 className="w-3 h-3" /> Remix
+                                                                </button>
+                                                            )}
+
                                                             <button
-                                                                onClick={() => {
-                                                                    if (!canEditExistingDesign) return;
-                                                                    loadDesignIntoGenerator(asset);
-                                                                }}
-                                                                disabled={!canEditExistingDesign}
-                                                                className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1"
+                                                                onClick={() => setPreviewDesign(asset)}
+                                                                className="text-slate-500 hover:text-slate-700 transition-colors flex items-center gap-1 text-xs font-semibold w-[68px] justify-center"
                                                             >
-                                                                <Wand2 className="w-3 h-3" /> Remix
+                                                                View <ArrowRight className="w-3 h-3" />
+                                                            </button>
+
+                                                            <button
+                                                                onClick={async (e) => {
+                                                                    e.stopPropagation();
+                                                                    if (isAssetPosted) return;
+                                                                    if (!supportedPublishPlatforms.has(platformKey)) {
+                                                                        toast.error(`Direct publishing is not supported for ${platform} yet.`);
+                                                                        return;
+                                                                    }
+                                                                    try {
+                                                                        setPostingDesignPlatform(actionKey);
+                                                                        await handleDesignPost({
+                                                                            platform,
+                                                                            text: asset.title || "New design",
+                                                                            imageUrl: asset.image_url,
+                                                                            designAssetId: asset.id || undefined,
+                                                                        });
+                                                                    } catch (error: any) {
+                                                                        toast.error(error?.message || `Failed to post to ${platform}`);
+                                                                    } finally {
+                                                                        setPostingDesignPlatform(null);
+                                                                    }
+                                                                }}
+                                                                disabled={
+                                                                    isDesignReadOnly
+                                                                    || !supportedPublishPlatforms.has(platformKey)
+                                                                    || postingDesignPlatform === actionKey
+                                                                    || isPostedForPlatform
+                                                                    || isAssetPosted
+                                                                }
+                                                                className={`transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider min-w-[80px] justify-center ${(isPostedForPlatform || isAssetPosted)
+                                                                    ? "px-3 py-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                                    : "text-emerald-600 hover:text-emerald-700"
+                                                                    }`}
+                                                            >
+                                                                <Send className="w-3 h-3" /> {(isPostedForPlatform || isAssetPosted) ? "Posted" : postingDesignPlatform === actionKey ? "Posting" : "Post"}
+                                                            </button>
+                                                        </div>
+
+                                                        {canDesignDelete && (
+                                                            <button
+                                                                onClick={async (e) => {
+                                                                    e.stopPropagation();
+                                                                    if (confirm("Delete this design?")) {
+                                                                        setRecentDesigns(prev => prev.filter(p => p.id !== asset.id));
+                                                                        try {
+                                                                            const { deleteDesign } = await import("@/lib/api/design");
+                                                                            await deleteDesign(asset.id);
+                                                                        } catch { /* already removed from UI */ }
+                                                                        toast.success("Design deleted");
+                                                                    }
+                                                                }}
+                                                                className="justify-self-end text-slate-400 hover:text-red-500 transition-colors"
+                                                                title="Delete"
+                                                            >
+                                                                <X className="w-4 h-4" />
                                                             </button>
                                                         )}
                                                     </div>
@@ -1393,6 +1592,7 @@ function DesignStudioContent() {
                                                                         text: asset.title || "New design",
                                                                         imageUrl: asset.image_url,
                                                                         designAssetId: asset.id || undefined,
+                                                                        brandId: asset.brand_id ?? null,
                                                                     });
                                                                 } catch (error: any) {
                                                                     toast.error(error?.message || `Failed to post to ${platform}`);
@@ -1440,7 +1640,8 @@ function DesignStudioContent() {
                                                 </div>
                                             </div>
                                         </div>
-                                    ))
+                                    );
+                                })
                                 ) : (
                                     <div className="col-span-full py-20 text-center bg-white rounded-2xl border border-slate-200 border-dashed">
                                         <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">

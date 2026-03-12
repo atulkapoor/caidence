@@ -12,7 +12,13 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
                 <div className="relative z-10 flex-1 flex flex-col justify-between p-12">
                     <div>
                         <Link href="/" className="inline-block">
-                            <h1 className="text-3xl font-black text-white tracking-tight">C(AI)DENCE</h1>
+                            <div className="inline-flex items-center justify-center rounded-2xl bg-white/90 backdrop-blur-sm px-4 py-3 shadow-lg">
+                                <img
+                                    src="/images/caidenz_logo.png"
+                                    alt="C(AI)DENCE"
+                                    className="h-16 sm:h-20 lg:h-24 w-auto object-contain"
+                                />
+                            </div>
                         </Link>
                     </div>
 

@@ -155,6 +155,7 @@ function AdminOverview() {
 
 function UserManagement() {
     const [users, setUsers] = useState<AdminUser[]>([]);
+    const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(true);
     const [showInviteModal, setShowInviteModal] = useState(false);
 
@@ -212,6 +213,11 @@ function UserManagement() {
         }
     };
 
+    const filteredUsers = users.filter((u) =>
+        u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (u.full_name && u.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+
     return (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -222,6 +228,8 @@ function UserManagement() {
                         <input
                             type="text"
                             placeholder="Search users..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-900 w-64"
                         />
                     </div>
@@ -249,7 +257,7 @@ function UserManagement() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {users.map((user) => (
+                        {filteredUsers.map((user) => (
                             <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
                                 <td className="px-6 py-4">
                                     <div>

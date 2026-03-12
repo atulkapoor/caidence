@@ -2,7 +2,7 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ArrowLeft, Copy, PenTool, Calendar, Trash2, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Share2 } from "lucide-react";
-import { fetchContentGenerationById, ContentGeneration } from "@/lib/api";
+import { fetchContentGenerationById, ContentGeneration, fetchBrands, type Brand } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -37,6 +37,7 @@ export default function ContentDetailPage({ params }: PageProps) {
     const [content, setContent] = useState<ContentGeneration | null>(null);
     const [loading, setLoading] = useState(true);
     const [copied, setCopied] = useState(false);
+    const [availableBrands, setAvailableBrands] = useState<Brand[]>([]);
 
     useEffect(() => {
         // Unwrap params
@@ -46,6 +47,12 @@ export default function ContentDetailPage({ params }: PageProps) {
         };
         unwrapparams();
     }, [params]);
+
+    useEffect(() => {
+        fetchBrands()
+            .then(setAvailableBrands)
+            .catch(() => setAvailableBrands([]));
+    }, []);
 
     useEffect(() => {
         if (resolvedParams?.id) {
@@ -88,6 +95,9 @@ export default function ContentDetailPage({ params }: PageProps) {
             router.push(`/content-studio?edit=${content.id}`);
         }
     };
+
+    const getBrandName = (brandId?: number | null) =>
+        availableBrands.find((brand) => brand.id === brandId)?.name || null;
 
     if (!resolvedParams || loading) {
         return (
@@ -230,6 +240,12 @@ export default function ContentDetailPage({ params }: PageProps) {
                                                 <label className="text-xs font-bold text-slate-400 uppercase mb-1.5 block">Format</label>
                                                 <div className="inline-flex items-center px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-xs font-bold border border-slate-100">
                                                     Text
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-400 uppercase mb-1.5 block">Brand</label>
+                                                <div className="inline-flex items-center px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-xs font-bold border border-slate-100">
+                                                    {getBrandName(content.brand_id) || "None"}
                                                 </div>
                                             </div>
                                         </div>

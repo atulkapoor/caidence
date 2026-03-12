@@ -35,6 +35,7 @@ class SocialConnectionResponse(BaseModel):
     connected_at: str | None = None
     follower_count: int | None = None
     profile_picture_url: str | None = None
+    brand_id: int | None = None
 
 
 class FacebookPageResponse(BaseModel):
@@ -63,6 +64,7 @@ class PublishPostRequest(BaseModel):
     image_url: Optional[str] = None
     content_id: Optional[int] = None
     design_asset_id: Optional[int] = None
+    brand_id: Optional[int] = None
 
 
 class PublishPostResponse(BaseModel):
@@ -83,6 +85,7 @@ class AdminSocialConnectionResponse(BaseModel):
     is_active: bool
     connected_at: str | None = None
     token_expires_at: str | None = None
+    brand_id: int | None = None
 
 
 class LinkedInPublishRequest(BaseModel):
@@ -92,6 +95,7 @@ class LinkedInPublishRequest(BaseModel):
     image_data_url: Optional[str] = None
     design_asset_id: Optional[int] = None
     content_id: Optional[int] = None
+    brand_id: Optional[int] = None
 
 
 class SchedulePostRequest(BaseModel):
@@ -103,6 +107,7 @@ class SchedulePostRequest(BaseModel):
     content_id: Optional[int] = None
     design_asset_id: Optional[int] = None
     campaign_id: Optional[int] = None
+    brand_id: Optional[int] = None
 
 
 class ScheduledPostResponse(BaseModel):
@@ -111,6 +116,7 @@ class ScheduledPostResponse(BaseModel):
     content_id: Optional[int] = None
     design_asset_id: Optional[int] = None
     campaign_id: Optional[int] = None
+    brand_id: Optional[int] = None
     title: Optional[str] = None
     platform: str
     message: str
@@ -129,6 +135,7 @@ class ScheduledPostResponse(BaseModel):
 async def initiate_connection(
     platform: str,
     redirect_to: str | None = Query(default=None),
+    brand_id: int | None = Query(default=None),
     current_user: User = Depends(get_current_authenticated_user),
 ):
     """Generate OAuth authorization URL for a social platform."""
@@ -139,7 +146,12 @@ async def initiate_connection(
         )
 
     try:
-        url = SocialAuthService.get_authorization_url(platform, current_user.id, redirect_to=redirect_to)
+        url = SocialAuthService.get_authorization_url(
+            platform,
+            current_user.id,
+            redirect_to=redirect_to,
+            brand_id=brand_id,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"authorization_url": url, "platform": platform}
@@ -179,10 +191,11 @@ async def oauth_callback(
 async def select_facebook_page(
     payload: SelectFacebookPageRequest,
     current_user: User = Depends(get_current_authenticated_user),
+    brand_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Select the Facebook page used for future publishing."""
-    connection = await SocialAuthService.get_connection("facebook", current_user.id, db)
+    connection = await SocialAuthService.get_connection("facebook", current_user.id, db, brand_id=brand_id)
     if not connection:
         raise HTTPException(status_code=400, detail="Facebook is not connected")
 
@@ -222,10 +235,11 @@ async def select_facebook_page(
 async def select_instagram_account(
     payload: SelectInstagramAccountRequest,
     current_user: User = Depends(get_current_authenticated_user),
+    brand_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Select the Instagram business/creator account used for publishing."""
-    connection = await SocialAuthService.get_connection("instagram", current_user.id, db)
+    connection = await SocialAuthService.get_connection("instagram", current_user.id, db, brand_id=brand_id)
     if not connection:
         raise HTTPException(status_code=400, detail="Instagram is not connected")
 
@@ -273,11 +287,12 @@ async def select_instagram_account(
 
 @router.get("/connections", response_model=list[SocialConnectionResponse])
 async def list_connections(
+    brand_id: int | None = Query(default=None),
     current_user: User = Depends(get_current_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List active social connections for the current user."""
-    connections = await SocialAuthService.get_connections(current_user.id, db)
+    connections = await SocialAuthService.get_connections(current_user.id, db, brand_id=brand_id)
     return [
         SocialConnectionResponse(
             id=connection.id,
@@ -288,6 +303,7 @@ async def list_connections(
             connected_at=connection.connected_at.isoformat() if connection.connected_at else None,
             follower_count=connection.follower_count,
             profile_picture_url=connection.profile_picture_url,
+            brand_id=connection.brand_id,
         )
         for connection in connections
     ]
@@ -317,6 +333,7 @@ async def list_connections_for_settings(
             is_active=connection.is_active,
             connected_at=connection.connected_at.isoformat() if connection.connected_at else None,
             token_expires_at=connection.token_expires_at.isoformat() if connection.token_expires_at else None,
+            brand_id=connection.brand_id,
         )
         for connection, user_email in rows
     ]
@@ -326,13 +343,14 @@ async def list_connections_for_settings(
 async def disconnect_platform(
     platform: str,
     current_user: User = Depends(get_current_authenticated_user),
+    brand_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Deactivate a social connection."""
     if platform not in VALID_PLATFORMS:
         raise HTTPException(status_code=400, detail=f"Unsupported platform: {platform}")
 
-    await SocialAuthService.disconnect(platform, current_user.id, db)
+    await SocialAuthService.disconnect(platform, current_user.id, db, brand_id=brand_id)
     return {"message": f"Disconnected from {platform}", "platform": platform}
 
 
@@ -380,6 +398,28 @@ async def publish_linkedin(
     if not publish_text:
         raise HTTPException(status_code=400, detail="LinkedIn post text is required")
 
+    effective_brand_id = payload.brand_id
+    if effective_brand_id is None and payload.content_id:
+        content_row = await db.execute(
+            select(ContentGeneration).where(
+                ContentGeneration.id == payload.content_id,
+                ContentGeneration.user_id == current_user.id,
+            )
+        )
+        content_item = content_row.scalar_one_or_none()
+        if content_item:
+            effective_brand_id = content_item.brand_id
+    if effective_brand_id is None and payload.design_asset_id:
+        design_row = await db.execute(
+            select(DesignAsset).where(
+                DesignAsset.id == payload.design_asset_id,
+                DesignAsset.user_id == current_user.id,
+            )
+        )
+        design_item = design_row.scalar_one_or_none()
+        if design_item:
+            effective_brand_id = design_item.brand_id
+
     try:
         data = await SocialAuthService.publish_linkedin_post(
             user_id=current_user.id,
@@ -387,6 +427,7 @@ async def publish_linkedin(
             db=db,
             visibility=payload.visibility,
             image_bytes=image_bytes,
+            brand_id=effective_brand_id,
         )
         normalized = _normalize_publish_response(
             platform="linkedin",
@@ -435,6 +476,28 @@ async def publish_post(
                 detail="This design is already posted. Create a new design to post again.",
             )
 
+    effective_brand_id = payload.brand_id
+    if effective_brand_id is None and payload.content_id:
+        content_row = await db.execute(
+            select(ContentGeneration).where(
+                ContentGeneration.id == payload.content_id,
+                ContentGeneration.user_id == current_user.id,
+            )
+        )
+        content_item = content_row.scalar_one_or_none()
+        if content_item:
+            effective_brand_id = content_item.brand_id
+    if effective_brand_id is None and payload.design_asset_id:
+        design_row = await db.execute(
+            select(DesignAsset).where(
+                DesignAsset.id == payload.design_asset_id,
+                DesignAsset.user_id == current_user.id,
+            )
+        )
+        design_item = design_row.scalar_one_or_none()
+        if design_item:
+            effective_brand_id = design_item.brand_id
+
     try:
         publish_response = await _publish_for_platform(
             platform=platform,
@@ -443,6 +506,7 @@ async def publish_post(
             design_asset_id=payload.design_asset_id,
             user_id=current_user.id,
             db=db,
+            brand_id=effective_brand_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -494,19 +558,9 @@ async def create_scheduled_post(
     if scheduled_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Scheduled Time must be future")
 
-    connection_result = await db.execute(
-        select(SocialConnection).where(
-            SocialConnection.user_id == current_user.id,
-            SocialConnection.platform == platform,
-            SocialConnection.is_active == True,  # noqa: E712
-        )
-    )
-    connection = connection_result.scalar_one_or_none()
-    if not connection or not connection.access_token:
-        raise HTTPException(status_code=400, detail=f"Connect {platform} before scheduling a post")
-
     validated_content_id: Optional[int] = None
     validated_design_asset_id: Optional[int] = None
+    effective_brand_id: Optional[int] = payload.brand_id
     if payload.content_id:
         if is_super_admin(current_user.role):
             content_result = await db.execute(
@@ -524,6 +578,8 @@ async def create_scheduled_post(
         # Scheduling should still work with raw message payload.
         if content_obj:
             validated_content_id = payload.content_id
+            if effective_brand_id is None:
+                effective_brand_id = content_obj.brand_id
 
     if payload.design_asset_id:
         design_result = await db.execute(
@@ -540,6 +596,8 @@ async def create_scheduled_post(
                     detail="This design is already posted. Create a new design to schedule again.",
                 )
             validated_design_asset_id = payload.design_asset_id
+            if effective_brand_id is None:
+                effective_brand_id = design_obj.brand_id
 
     if payload.campaign_id:
         campaign_result = await db.execute(
@@ -549,6 +607,10 @@ async def create_scheduled_post(
         )
         if not campaign_result.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Campaign not found")
+
+    connection = await SocialAuthService.get_connection(platform, current_user.id, db, brand_id=effective_brand_id)
+    if not connection or not connection.access_token:
+        raise HTTPException(status_code=400, detail=f"Connect {platform} before scheduling a post")
 
     # Prevent duplicate scheduling of the same content/design item.
     # Re-scheduling is allowed only if previous attempts failed/cancelled.
@@ -612,6 +674,7 @@ async def create_scheduled_post(
         content_id=validated_content_id,
         design_asset_id=validated_design_asset_id,
         campaign_id=payload.campaign_id,
+        brand_id=effective_brand_id,
         title=normalized_title,
         platform=platform,
         message=message,
@@ -734,6 +797,7 @@ async def cancel_scheduled_post_alt_path(
 @router.get("/status/{platform}")
 async def connection_status(
     platform: str,
+    brand_id: int | None = Query(default=None),
     current_user: User = Depends(get_current_authenticated_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -741,14 +805,7 @@ async def connection_status(
     if platform not in VALID_PLATFORMS:
         raise HTTPException(status_code=400, detail=f"Unsupported platform: {platform}")
 
-    result = await db.execute(
-        select(SocialConnection).where(
-            SocialConnection.user_id == current_user.id,
-            SocialConnection.platform == platform,
-            SocialConnection.is_active == True,  # noqa: E712
-        )
-    )
-    connection = result.scalar_one_or_none()
+    connection = await SocialAuthService.get_connection(platform, current_user.id, db, brand_id=brand_id)
     return {
         "platform": platform,
         "connected": bool(connection and connection.access_token),
@@ -779,6 +836,7 @@ async def _publish_for_platform(
     design_asset_id: Optional[int],
     user_id: int,
     db: AsyncSession,
+    brand_id: Optional[int] = None,
 ) -> dict:
     normalized_platform = (platform or "").strip().lower()
     if normalized_platform == "linkedin":
@@ -790,6 +848,7 @@ async def _publish_for_platform(
             text=message,
             db=db,
             image_bytes=image_bytes,
+            brand_id=brand_id,
         )
         return _normalize_publish_response(
             platform="linkedin",
@@ -817,6 +876,7 @@ async def _publish_for_platform(
             message=message,
             db=db,
             image_url=resolved_image_url,
+            brand_id=brand_id,
         )
         return _normalize_publish_response(
             platform="facebook",
@@ -830,6 +890,7 @@ async def _publish_for_platform(
             caption=message,
             image_url=(image_url or "").strip(),
             db=db,
+            brand_id=brand_id,
         )
         return _normalize_publish_response(
             platform="instagram",
@@ -847,6 +908,7 @@ def _to_scheduled_post_response(post: ScheduledPost) -> ScheduledPostResponse:
         content_id=post.content_id,
         design_asset_id=post.design_asset_id,
         campaign_id=post.campaign_id,
+        brand_id=post.brand_id,
         title=post.title,
         platform=post.platform,
         message=post.message,
@@ -893,6 +955,7 @@ async def process_due_scheduled_posts(
                 design_asset_id=post.design_asset_id,
                 user_id=post.user_id,
                 db=db,
+                brand_id=post.brand_id,
             )
             if not publish_response.get("published"):
                 raise ValueError(f"Unexpected publish response for {post.platform}")

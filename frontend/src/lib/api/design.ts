@@ -13,6 +13,7 @@ export interface DesignAsset {
     is_posted?: boolean;
     posted_at?: string | null;
     posted_target_name?: string | null;
+    brand_id?: number | null;
 }
 
 export interface GenerateDesignRequest {
@@ -23,6 +24,7 @@ export interface GenerateDesignRequest {
     model?: string;
     brand_colors?: string;
     reference_image?: string;
+    brand_id?: number | null;
 }
 
 export interface DesignAssetsPage {
@@ -67,6 +69,7 @@ export async function saveDesign(data: {
     model?: string;
     brand_colors?: string;
     reference_image?: string;
+    brand_id?: number | null;
 }): Promise<DesignAsset> {
     const res = await authenticatedFetch(`${API_BASE_URL}/design/save`, {
         method: "POST",

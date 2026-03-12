@@ -12,6 +12,8 @@ class Brand(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_by_role = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False)
     slug = Column(String, index=True)
     logo_url = Column(String, nullable=True)
@@ -25,3 +27,4 @@ class Brand(Base):
     # Relationships
     organization = relationship("Organization", back_populates="brands")
     creators = relationship("Creator", back_populates="brand")
+    social_connections = relationship("SocialConnection", back_populates="brand")

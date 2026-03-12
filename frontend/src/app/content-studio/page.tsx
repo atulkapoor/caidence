@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
 import { toast } from "sonner";
-import { generateContent, fetchContentGenerations, fetchContentGenerationsPage, ContentGeneration, saveContent, deleteContent, enhanceDescription } from "@/lib/api";
+import { generateContent, fetchContentGenerations, fetchContentGenerationsPage, ContentGeneration, saveContent, deleteContent, enhanceDescription, fetchBrands, type Brand } from "@/lib/api";
 import { getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost, type PublishPostResponse } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -39,7 +39,8 @@ function ContentStudioContent() {
         brandColors?: string | null,
         generateWithImage?: boolean,
         title: string,
-        outputType: "text" | "image"
+        outputType: "text" | "image",
+        brandId?: number | null
     };
 
     // @ts-ignore
@@ -50,6 +51,8 @@ function ContentStudioContent() {
     const [campaignId, setCampaignId] = useState<number | null>(null);
     const [pendingCampaignTitle, setPendingCampaignTitle] = useState<string | null>(null);
     const [availableCampaigns, setAvailableCampaigns] = useState<Campaign[]>([]);
+    const [availableBrands, setAvailableBrands] = useState<Brand[]>([]);
+    const [selectedBrandId, setSelectedBrandId] = useState<number | null>(null);
     const [contentType, setContentType] = useState("Blog Post");
     const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["LinkedIn"]);
     const [keywords, setKeywords] = useState("");
@@ -82,6 +85,7 @@ function ContentStudioContent() {
         text: string;
         imageUrl?: string;
         contentId?: number | null;
+        brandId?: number | null;
     } | null>(null);
 
     // Library State
@@ -108,6 +112,8 @@ function ContentStudioContent() {
     const contentTypes = ["Post", "Article", "Thread", "Caption", "Newsletter", "Ad Copy"];
     const experts = ["General Marketing", "SEO Specialist", "Copywriter", "Technical Writer", "Creative Storyteller", "Viral Tweeter"];
     const knownPlatforms = ["LinkedIn", "Twitter", "Blog", "Email", "Facebook", "Instagram"];
+    const getBrandName = (brandId?: number | null) =>
+        availableBrands.find((brand) => brand.id === brandId)?.name || null;
 
     const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -141,6 +147,7 @@ function ContentStudioContent() {
                 parsed: false,
                 contentType: "",
                 campaignTitle: null as string | null,
+                brandName: null as string | null,
                 keywords: "",
                 writingStyle: "",
                 webSearch: false,
@@ -150,6 +157,7 @@ function ContentStudioContent() {
 
         const contextMatch = source.match(/^Context:\s*Creating\s+(.+)$/im);
         const campaignMatch = source.match(/^Campaign:\s*(.+)$/im);
+        const brandMatch = source.match(/^Brand:\s*(.+)$/im);
         const keywordsMatch = source.match(/^Keywords:\s*(.+)$/im);
         const writingStyleMatch = source.match(/^Writing Style:\s*(.+)$/im);
         const webSearchMatch = source.match(/^Web Search:\s*(.+)$/im);
@@ -159,6 +167,10 @@ function ContentStudioContent() {
         const parsedCampaignTitleRaw = (campaignMatch?.[1] || "").trim();
         const parsedCampaignTitle = parsedCampaignTitleRaw && parsedCampaignTitleRaw.toLowerCase() !== "none"
             ? parsedCampaignTitleRaw
+            : null;
+        const parsedBrandRaw = (brandMatch?.[1] || "").trim();
+        const parsedBrandName = parsedBrandRaw && parsedBrandRaw.toLowerCase() !== "none"
+            ? parsedBrandRaw
             : null;
         const parsedKeywordsRaw = (keywordsMatch?.[1] || "").trim();
         const parsedKeywords = parsedKeywordsRaw.toLowerCase() === "none" ? "" : parsedKeywordsRaw;
@@ -178,6 +190,7 @@ function ContentStudioContent() {
             parsed,
             contentType: parsedContentType,
             campaignTitle: parsedCampaignTitle,
+            brandName: parsedBrandName,
             keywords: parsedKeywords,
             writingStyle: parsedWritingStyle,
             webSearch: parsedWebSearch,
@@ -190,6 +203,7 @@ function ContentStudioContent() {
     useEffect(() => {
         loadHistory();
         loadCampaigns();
+        loadBrands();
 
         // Check for edit mode
         const params = new URLSearchParams(window.location.search);
@@ -307,6 +321,18 @@ function ContentStudioContent() {
         }
     };
 
+    const loadBrands = async () => {
+        try {
+            const data = await fetchBrands();
+            setAvailableBrands(data);
+            if (selectedBrandId && !data.find((b) => b.id === selectedBrandId && b.is_active)) {
+                setSelectedBrandId(null);
+            }
+        } catch (error) {
+            console.error("Failed to load brands", error);
+        }
+    };
+
     const togglePlatform = (id: string) => {
         if (selectedPlatforms.includes(id)) {
             if (selectedPlatforms.length > 1) { // Prevent empty selection
@@ -346,9 +372,11 @@ function ContentStudioContent() {
 
         try {
             const selectedCampaign = availableCampaigns.find(c => c.id === campaignId);
+            const selectedBrandName = getBrandName(selectedBrandId);
             const baseRichPrompt = `
 Context: Creating ${contentType} for Social Media.
 Campaign: ${selectedCampaign?.title || "None"}
+Brand: ${selectedBrandName || "None"}
 Keywords: ${keywords || "None"}
 Writing Style: ${writingExpert}
 Web Search: ${webSearch ? "Enabled" : "Disabled"}
@@ -367,6 +395,7 @@ ${prompt}
                     model: selectedModel,
                     generate_with_image: generateWithImage,
                     brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
+                    brand_id: selectedBrandId ?? undefined,
                 });
 
                 const sharedImageUrl = baseResult.image_url || null;
@@ -383,6 +412,7 @@ ${prompt}
                         image_url: sharedImageUrl || undefined,
                         generate_with_image: false,
                         brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
+                        brand_id: selectedBrandId ?? undefined,
                     });
 
                     return {
@@ -394,6 +424,7 @@ ${prompt}
                         generateWithImage: generateWithImage,
                         title: withPlatformSuffix(adapted.title || platformTitle, platform),
                         outputType: "text",
+                        brandId: selectedBrandId ?? null,
                     } as GeneratedResponse;
                 }));
                 setCurrentResponses(adaptedResponses);
@@ -403,6 +434,7 @@ ${prompt}
                     const richPrompt = `
 Context: Creating ${contentType} for ${platform}.
 Campaign: ${selectedCampaign?.title || "None"}
+Brand: ${selectedBrandName || "None"}
 Keywords: ${keywords || "None"}
 Writing Style: ${writingExpert}
 Web Search: ${webSearch ? "Enabled" : "Disabled"}
@@ -419,6 +451,7 @@ ${prompt}
                         model: selectedModel,
                         generate_with_image: generateWithImage,
                         brand_colors: generateWithImage ? toHexColorOrNull(brandColors) ?? undefined : undefined,
+                        brand_id: selectedBrandId ?? undefined,
                     });
 
                     return {
@@ -430,6 +463,7 @@ ${prompt}
                         generateWithImage: Boolean(result.generate_with_image),
                         title: withPlatformSuffix(result.title || platformTitle, platform),
                         outputType: "text",
+                        brandId: selectedBrandId ?? null,
                     } as GeneratedResponse;
                 }));
                 setCurrentResponses(generatedResponses);
@@ -449,10 +483,12 @@ ${prompt}
         const selectedCampaign = availableCampaigns.find(
             c => c.id === campaignId
         );
+        const selectedBrandName = getBrandName(selectedBrandId);
 
         return `
 Context: Creating ${contentType}
 Campaign: ${selectedCampaign?.title || "None"}
+Brand: ${selectedBrandName || "None"}
 Keywords: ${keywords || "None"}
 Writing Style: ${writingExpert}
 Web Search: ${webSearch ? "Enabled" : "Disabled"}
@@ -479,6 +515,7 @@ ${prompt}
             image_url: response.imageUrl || null,
             brand_colors: response.brandColors || null,
             generate_with_image: Boolean(response.generateWithImage),
+            brand_id: response.brandId ?? selectedBrandId ?? null,
         });
     };
 
@@ -513,6 +550,7 @@ ${prompt}
         text: string;
         imageUrl?: string;
         contentId?: number | null;
+        brandId?: number | null;
     }) => {
         const defaultDate = new Date(Date.now() + 30 * 60 * 1000);
         setScheduleDraft(draft);
@@ -576,6 +614,7 @@ ${prompt}
                         imageUrl: saved.image_url || item.imageUrl || null,
                         brandColors: saved.brand_colors || item.brandColors || null,
                         generateWithImage: Boolean(saved.generate_with_image),
+                        brandId: saved.brand_id ?? item.brandId ?? null,
                     }
                     : item
             )
@@ -631,6 +670,7 @@ ${prompt}
                         imageUrl: saved.image_url || updatedResponses[idx].imageUrl || null,
                         brandColors: saved.brand_colors || updatedResponses[idx].brandColors || null,
                         generateWithImage: Boolean(saved.generate_with_image),
+                        brandId: saved.brand_id ?? updatedResponses[idx].brandId ?? null,
                     };
                     if (postedIndices[idx] && saved?.id) {
                         newlyPostedContentIds.push(saved.id);
@@ -677,6 +717,7 @@ ${prompt}
         text: string,
         imageUrl?: string,
         contentId?: number | null,
+        brandId?: number | null,
     ): Promise<PublishPostResponse | null> => {
         if (isContentReadOnly) {
             toast.error("Read-only access: posting is disabled");
@@ -701,9 +742,14 @@ ${prompt}
             return null;
         }
 
-        const status = await getConnectionStatus(platformKey);
+        const status = await getConnectionStatus(platformKey, brandId ?? undefined);
         if (!status.connected) {
-            toast.error(`Connect ${platform} in Onboarding or Settings before posting`);
+            const brandName = brandId ? getBrandName(brandId) : null;
+            toast.error(
+                brandName
+                    ? `Connect ${platform} for ${brandName} before posting`
+                    : `Connect ${platform} in Onboarding or Settings before posting`
+            );
             return null;
         }
 
@@ -714,8 +760,9 @@ ${prompt}
                     text,
                     image_data_url: imageUrl,
                     content_id: contentId ?? undefined,
+                    brand_id: brandId ?? undefined,
                 })
-                : await publishSocialPost(platformKey, text, imageUrl, contentId ?? undefined);
+                : await publishSocialPost(platformKey, text, imageUrl, contentId ?? undefined, undefined, brandId ?? undefined);
             if (!result.published) {
                 throw new Error(`Unexpected ${platform} publish response`);
             }
@@ -762,9 +809,14 @@ ${prompt}
             return;
         }
 
-        const status = await getConnectionStatus(platformKey);
+        const status = await getConnectionStatus(platformKey, scheduleDraft.brandId ?? undefined);
         if (!status.connected) {
-            toast.error(`Connect ${scheduleDraft.platform} in Onboarding or Settings before scheduling`);
+            const brandName = scheduleDraft.brandId ? getBrandName(scheduleDraft.brandId) : null;
+            toast.error(
+                brandName
+                    ? `Connect ${scheduleDraft.platform} for ${brandName} before scheduling`
+                    : `Connect ${scheduleDraft.platform} in Onboarding or Settings before scheduling`
+            );
             return;
         }
 
@@ -777,6 +829,7 @@ ${prompt}
                 message: scheduleDraft.text,
                 image_url: scheduleDraft.imageUrl || undefined,
                 content_id: scheduleDraft.contentId ?? undefined,
+                brand_id: scheduleDraft.brandId ?? undefined,
                 scheduled_at: scheduleDate.toISOString(),
             });
             toast.success(`Post scheduled for ${scheduleDate.toLocaleString()}`, { id: toastId });
@@ -818,6 +871,7 @@ ${prompt}
                             imageUrl: saved.image_url || item.imageUrl || null,
                             brandColors: saved.brand_colors || item.brandColors || null,
                             generateWithImage: Boolean(saved.generate_with_image),
+                            brandId: saved.brand_id ?? item.brandId ?? null,
                         }
                         : item
                 )
@@ -849,6 +903,9 @@ ${prompt}
         const matchedCampaign = parsedPrompt.campaignTitle
             ? availableCampaigns.find((campaign) => campaign.title.trim().toLowerCase() === parsedPrompt.campaignTitle!.trim().toLowerCase())
             : null;
+        const matchedBrand = parsedPrompt.brandName
+            ? availableBrands.find((brand) => brand.name.trim().toLowerCase() === parsedPrompt.brandName!.trim().toLowerCase())
+            : null;
 
         setIsEditMode(true);
         setIsEditId(item.id);
@@ -861,6 +918,7 @@ ${prompt}
         setWebSearch(parsedPrompt.parsed ? parsedPrompt.webSearch : false);
         setCampaignId(matchedCampaign?.id ?? null);
         setPendingCampaignTitle(matchedCampaign ? null : parsedPrompt.campaignTitle);
+        setSelectedBrandId(item.brand_id ?? matchedBrand?.id ?? null);
         setSelectedPlatforms([item.platform]);
         setGenerateWithImage(Boolean(item.generate_with_image));
         setBrandColors(item.brand_colors || "");
@@ -875,6 +933,7 @@ ${prompt}
                 generateWithImage: Boolean(item.generate_with_image),
                 title: withPlatformSuffix(item.title, item.platform),
                 outputType: "text",
+                brandId: item.brand_id ?? matchedBrand?.id ?? null,
             },
         ]);
         if (item.is_posted) {
@@ -898,6 +957,7 @@ ${prompt}
         setSelectedPlatforms(["LinkedIn"]);
         setGenerateWithImage(false);
         setBrandColors("");
+        setSelectedBrandId(null);
         setPendingCampaignTitle(null);
         setPostedPreviewByContentId({});
         setPostedIndices({});
@@ -973,6 +1033,12 @@ ${prompt}
                                                 {previewContent.content_type}
                                             </span>
                                         </div>
+                                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <span className="text-xs font-bold text-slate-500 uppercase">Brand</span>
+                                            <span className="text-xs font-bold text-slate-900 truncate max-w-[140px]" title={getBrandName(previewContent.brand_id) || "None"}>
+                                                {getBrandName(previewContent.brand_id) || "None"}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1011,6 +1077,7 @@ ${prompt}
                                                     previewContent.result || "",
                                                     previewContent.image_url || undefined,
                                                     previewContent.id,
+                                                    previewContent.brand_id ?? null,
                                                 );
                                                 if (publishResult?.published) {
                                                     setPostedPreviewByContentId((prev) => ({
@@ -1046,6 +1113,7 @@ ${prompt}
                                                 text: previewContent.result || "",
                                                 imageUrl: previewContent.image_url || undefined,
                                                 contentId: previewContent.id,
+                                                brandId: previewContent.brand_id ?? null,
                                             })
                                         }
                                         disabled={isContentReadOnly || previewContent.is_posted}
@@ -1259,7 +1327,20 @@ ${prompt}
 
                                             <input type="text" value={keywords} disabled={!canUseGenerator} onChange={(e) => setKeywords(e.target.value)} placeholder="Keywords (e.g. AI, automation)..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-violet-500 outline-none disabled:opacity-60" />
 
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <select
+                                                    value={selectedBrandId || ""}
+                                                    disabled={!canUseGenerator}
+                                                    onChange={(e) => setSelectedBrandId(e.target.value ? Number(e.target.value) : null)}
+                                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium"
+                                                >
+                                                    <option value="">No Brand</option>
+                                                    {availableBrands
+                                                        .filter((brand) => brand.is_active)
+                                                        .map((brand) => (
+                                                            <option key={brand.id} value={brand.id}>{brand.name}</option>
+                                                        ))}
+                                                </select>
                                                 <select
                                                     value={campaignId || ""}
                                                     disabled={!canUseGenerator}
@@ -1416,6 +1497,7 @@ ${prompt}
                                                                             ? response.result
                                                                             : response.imageUrl || undefined,
                                                                         contentId: contentIdForSchedule,
+                                                                        brandId: response.brandId ?? selectedBrandId ?? null,
                                                                     });
                                                                 } catch (error: any) {
                                                                     toast.error(error?.message || "Failed to prepare scheduled post");
@@ -1447,6 +1529,7 @@ ${prompt}
                                                                             ? response.result
                                                                             : response.imageUrl || undefined,
                                                                         contentIdForPost,
+                                                                        response.brandId ?? selectedBrandId ?? null,
                                                                     );
                                                                     if (publishResult?.published) {
                                                                         setPostedIndices((prev) => ({
@@ -1603,7 +1686,10 @@ ${prompt}
                                                     {new Date(item.created_at).toLocaleDateString()}
                                                 </span>
                                             </div>
-                                            <h3 className="font-bold text-slate-900 mb-3 line-clamp-2 leading-tight group-hover:text-violet-600 transition-colors">{item.title}</h3>
+                                            <h3 className="font-bold text-slate-900 mb-1 line-clamp-2 leading-tight group-hover:text-violet-600 transition-colors">{item.title}</h3>
+                                            <p className="text-[11px] font-semibold text-slate-500 mb-2">
+                                                Brand: {getBrandName(item.brand_id) || "None"}
+                                            </p>
                                             <div className="flex-1 overflow-hidden relative mb-4">
                                                 <p className="text-xs text-slate-500 leading-relaxed font-medium opacity-80 line-clamp-6">
                                                     {item.result}

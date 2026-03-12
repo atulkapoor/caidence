@@ -167,6 +167,7 @@ class ContentGenerationCreate(ContentGenerationBase):
     generate_with_image: bool = False
     adapt_from_base: bool = False
     base_result: Optional[str] = None
+    brand_id: Optional[int] = None
     # pass
 
 class ContentGeneration(ContentGenerationBase):
@@ -180,6 +181,7 @@ class ContentGeneration(ContentGenerationBase):
     posted_target_name: Optional[str] = None
     created_at: datetime
     user_id: int
+    brand_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -194,6 +196,7 @@ class ScheduledPostBase(BaseModel):
     content_id: Optional[int] = None
     design_asset_id: Optional[int] = None
     campaign_id: Optional[int] = None
+    brand_id: Optional[int] = None
 
 
 class ScheduledPostCreate(ScheduledPostBase):
@@ -222,6 +225,7 @@ class DesignAssetBase(BaseModel):
     prompt: str
     brand_colors: Optional[str] = None
     reference_image: Optional[str] = None
+    brand_id: Optional[int] = None
 
 class DesignAssetCreate(DesignAssetBase):
     id: Optional[int] = None
@@ -242,6 +246,7 @@ class DesignAsset(DesignAssetBase):
     posted_target_name: Optional[str] = None
     created_at: datetime
     user_id: int
+    brand_id: Optional[int] = None
 
     class Config:
         from_attributes = True

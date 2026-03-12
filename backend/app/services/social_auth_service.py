@@ -110,7 +110,12 @@ class SocialAuthService:
         return client_secret or ""
 
     @staticmethod
-    def get_authorization_url(platform: str, user_id: int, redirect_to: Optional[str] = None) -> str:
+    def get_authorization_url(
+        platform: str,
+        user_id: int,
+        redirect_to: Optional[str] = None,
+        brand_id: Optional[int] = None,
+    ) -> str:
         """Build OAuth authorization URL with CSRF state parameter."""
         if platform not in PLATFORM_CONFIG:
             raise ValueError(f"Unsupported platform: {platform}")
@@ -122,6 +127,7 @@ class SocialAuthService:
             "user_id": user_id,
             "platform": platform,
             "redirect_to": redirect_target,
+            "brand_id": brand_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -264,16 +270,18 @@ class SocialAuthService:
 
         # Upsert SocialConnection
         user_id = state_data["user_id"]
+        brand_id = state_data.get("brand_id")
         result = await db.execute(
             select(SocialConnection).where(
                 SocialConnection.user_id == user_id,
                 SocialConnection.platform == platform,
+                SocialConnection.brand_id == brand_id if brand_id is not None else SocialConnection.brand_id.is_(None),
             )
         )
         connection = result.scalar_one_or_none()
 
         if not connection:
-            connection = SocialConnection(user_id=user_id, platform=platform)
+            connection = SocialConnection(user_id=user_id, platform=platform, brand_id=brand_id)
             db.add(connection)
 
         connection.access_token = access_token
@@ -298,35 +306,52 @@ class SocialAuthService:
         return connection, redirect_to
 
     @staticmethod
-    async def get_connection(platform: str, user_id: int, db: AsyncSession) -> Optional[SocialConnection]:
+    async def get_connection(
+        platform: str,
+        user_id: int,
+        db: AsyncSession,
+        brand_id: Optional[int] = None,
+    ) -> Optional[SocialConnection]:
         """Get a single active social connection by platform for a user."""
         result = await db.execute(
             select(SocialConnection).where(
                 SocialConnection.user_id == user_id,
                 SocialConnection.platform == platform,
+                SocialConnection.brand_id == brand_id if brand_id is not None else SocialConnection.brand_id.is_(None),
                 SocialConnection.is_active == True,  # noqa: E712
             )
         )
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_connections(user_id: int, db: AsyncSession) -> list[SocialConnection]:
+    async def get_connections(
+        user_id: int,
+        db: AsyncSession,
+        brand_id: Optional[int] = None,
+    ) -> list[SocialConnection]:
         """List all active social connections for a user."""
         result = await db.execute(
             select(SocialConnection).where(
                 SocialConnection.user_id == user_id,
+                SocialConnection.brand_id == brand_id if brand_id is not None else SocialConnection.brand_id.is_(None),
                 SocialConnection.is_active == True,  # noqa: E712
             )
         )
         return list(result.scalars().all())
 
     @staticmethod
-    async def disconnect(platform: str, user_id: int, db: AsyncSession) -> None:
+    async def disconnect(
+        platform: str,
+        user_id: int,
+        db: AsyncSession,
+        brand_id: Optional[int] = None,
+    ) -> None:
         """Revoke and deactivate a social connection."""
         result = await db.execute(
             select(SocialConnection).where(
                 SocialConnection.user_id == user_id,
                 SocialConnection.platform == platform,
+                SocialConnection.brand_id == brand_id if brand_id is not None else SocialConnection.brand_id.is_(None),
             )
         )
         connection = result.scalar_one_or_none()
@@ -337,12 +362,18 @@ class SocialAuthService:
             await db.commit()
 
     @staticmethod
-    async def refresh_token(platform: str, user_id: int, db: AsyncSession) -> Optional[SocialConnection]:
+    async def refresh_token(
+        platform: str,
+        user_id: int,
+        db: AsyncSession,
+        brand_id: Optional[int] = None,
+    ) -> Optional[SocialConnection]:
         """Refresh an expired OAuth token."""
         result = await db.execute(
             select(SocialConnection).where(
                 SocialConnection.user_id == user_id,
                 SocialConnection.platform == platform,
+                SocialConnection.brand_id == brand_id if brand_id is not None else SocialConnection.brand_id.is_(None),
             )
         )
         connection = result.scalar_one_or_none()
@@ -458,9 +489,10 @@ class SocialAuthService:
         message: str,
         db: AsyncSession,
         image_url: Optional[str] = None,
+        brand_id: Optional[int] = None,
     ) -> dict:
         """Publish a text or image post to a selected Facebook page."""
-        connection = await SocialAuthService.get_connection("facebook", user_id, db)
+        connection = await SocialAuthService.get_connection("facebook", user_id, db, brand_id=brand_id)
         if not connection or not connection.access_token:
             raise ValueError("Facebook is not connected for this user")
 
@@ -553,9 +585,10 @@ class SocialAuthService:
         caption: str,
         image_url: str,
         db: AsyncSession,
+        brand_id: Optional[int] = None,
     ) -> dict:
         """Publish an image post to selected Instagram business account."""
-        connection = await SocialAuthService.get_connection("instagram", user_id, db)
+        connection = await SocialAuthService.get_connection("instagram", user_id, db, brand_id=brand_id)
         if not connection or not connection.access_token:
             raise ValueError("Instagram is not connected for this user")
 
@@ -633,15 +666,16 @@ class SocialAuthService:
         db: AsyncSession,
         visibility: str = "PUBLIC",
         image_bytes: Optional[bytes] = None,
+        brand_id: Optional[int] = None,
     ) -> dict:
         """Publish a text/image post to LinkedIn for the authenticated connected user."""
-        connection = await SocialAuthService.get_connection("linkedin", user_id, db)
+        connection = await SocialAuthService.get_connection("linkedin", user_id, db, brand_id=brand_id)
         if not connection or not connection.access_token:
             raise ValueError("LinkedIn is not connected for this user")
 
         # Attempt refresh only when token is expired and refresh token is available.
         if connection.token_expires_at and _is_expired(connection.token_expires_at):
-            refreshed = await SocialAuthService.refresh_token("linkedin", user_id, db)
+            refreshed = await SocialAuthService.refresh_token("linkedin", user_id, db, brand_id=brand_id)
             if refreshed and refreshed.access_token:
                 connection = refreshed
 
