@@ -174,6 +174,7 @@ async def generate_content(
             "image_url": generated_image,
             "brand_colors": request.brand_colors,
             "generate_with_image": generate_with_image,
+            "brand_id": request.brand_id,
             "text_model_used": AIService.get_effective_content_model_name(request.model),
             "image_model_used": image_model_used if generate_with_image else None,
             "image_fallback_used": image_fallback_used if generate_with_image else False,
@@ -228,6 +229,7 @@ async def save_content(
             db_content.image_url = request.image_url
             db_content.brand_colors = request.brand_colors
             db_content.generate_with_image = bool(request.generate_with_image)
+            db_content.brand_id = request.brand_id
         else:
             if not _has_content_permission(engine, "create"):
                 raise HTTPException(status_code=403, detail="Permission denied for content:create")
@@ -241,6 +243,7 @@ async def save_content(
                 brand_colors=request.brand_colors,
                 generate_with_image=bool(request.generate_with_image),
                 user_id=current_user.id,
+                brand_id=request.brand_id,
             )
             db.add(db_content)
 
@@ -301,6 +304,7 @@ async def update_content(
         db_content.image_url = request.image_url
         db_content.brand_colors = request.brand_colors
         db_content.generate_with_image = bool(request.generate_with_image)
+        db_content.brand_id = request.brand_id
 
         await db.commit()
         await db.refresh(db_content)

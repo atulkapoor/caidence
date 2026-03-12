@@ -6,13 +6,53 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import or_
+import re
 
 from app.core.database import get_db
-from app.models import Brand, User
+from app.models import Brand, User, Organization
 from app.api.endpoints.auth import get_current_active_user
 from app.services.auth_service import is_super_admin, is_agency_level
+from app.services.permission_engine import PermissionEngine
 
 router = APIRouter()
+
+def _slugify(value: str) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9\\s-]", "", value or "").strip().lower()
+    normalized = re.sub(r"\\s+", "-", normalized)
+    return normalized or "organization"
+
+async def _ensure_organization_for_user(
+    db: AsyncSession,
+    current_user: User,
+) -> int:
+    if current_user.organization_id:
+        return current_user.organization_id
+
+    base_name = (current_user.company or current_user.full_name or "").strip()
+    if not base_name:
+        base_name = (current_user.email.split("@")[0] if current_user.email else "Organization").strip()
+    org_name = base_name or "Organization"
+    base_slug = _slugify(org_name)
+    slug = base_slug
+    suffix = 1
+    while True:
+        exists = await db.execute(select(Organization).where(Organization.slug == slug))
+        if not exists.scalar_one_or_none():
+            break
+        suffix += 1
+        slug = f"{base_slug}-{suffix}"
+
+    new_org = Organization(name=org_name, slug=slug)
+    db.add(new_org)
+    await db.commit()
+    await db.refresh(new_org)
+
+    current_user.organization_id = new_org.id
+    await db.commit()
+    await db.refresh(current_user)
+
+    return new_org.id
 
 
 # --- Schemas ---
@@ -36,6 +76,8 @@ class BrandUpdate(BaseModel):
 class BrandResponse(BaseModel):
     id: int
     organization_id: int
+    created_by_user_id: Optional[int] = None
+    created_by_role: Optional[str] = None
     name: str
     slug: Optional[str]
     logo_url: Optional[str]
@@ -56,12 +98,21 @@ async def list_brands(
     """
     List brands in user's organization.
     """
+    engine = PermissionEngine.from_loaded_user(current_user)
+    if not engine.has_permission("agency", "read"):
+        raise HTTPException(status_code=403, detail="Not authorized to view brands")
     if is_super_admin(current_user.role):
         result = await db.execute(select(Brand))
         return result.scalars().all()
     elif current_user.organization_id:
         result = await db.execute(
-            select(Brand).where(Brand.organization_id == current_user.organization_id)
+            select(Brand).where(
+                Brand.organization_id == current_user.organization_id,
+                or_(
+                    Brand.created_by_role.is_(None),
+                    ~Brand.created_by_role.in_(["root", "super_admin"]),
+                ),
+            )
         )
         return result.scalars().all()
     return []
@@ -76,20 +127,25 @@ async def create_brand(
     """
     Create a new brand within user's organization.
     """
+    engine = PermissionEngine.from_loaded_user(current_user)
+    if not engine.has_permission("agency", "create"):
+        raise HTTPException(status_code=403, detail="Not authorized to create brands")
     if not is_agency_level(current_user.role):
         raise HTTPException(status_code=403, detail="Only agency users can create brands")
     
     # Determine organization_id
-    org_id = brand_data.organization_id if is_super_admin(current_user.role) else current_user.organization_id
-    
-    if not org_id:
-        raise HTTPException(status_code=400, detail="organization_id is required")
+    if is_super_admin(current_user.role):
+        org_id = brand_data.organization_id or await _ensure_organization_for_user(db, current_user)
+    else:
+        org_id = await _ensure_organization_for_user(db, current_user)
     
     # Generate slug if not provided
     slug = brand_data.slug or brand_data.name.lower().replace(" ", "-")
     
     new_brand = Brand(
         organization_id=org_id,
+        created_by_user_id=current_user.id,
+        created_by_role=current_user.role,
         name=brand_data.name,
         slug=slug,
         logo_url=brand_data.logo_url,
@@ -111,6 +167,9 @@ async def get_brand(
     """
     Get brand details.
     """
+    engine = PermissionEngine.from_loaded_user(current_user)
+    if not engine.has_permission("agency", "read"):
+        raise HTTPException(status_code=403, detail="Not authorized to view this brand")
     result = await db.execute(select(Brand).where(Brand.id == brand_id))
     brand = result.scalar_one_or_none()
     
@@ -134,6 +193,9 @@ async def update_brand(
     """
     Update brand settings.
     """
+    engine = PermissionEngine.from_loaded_user(current_user)
+    if not engine.has_permission("agency", "update"):
+        raise HTTPException(status_code=403, detail="Not authorized to update brands")
     result = await db.execute(select(Brand).where(Brand.id == brand_id))
     brand = result.scalar_one_or_none()
     
@@ -173,6 +235,9 @@ async def delete_brand(
     """
     Soft-delete (deactivate) a brand.
     """
+    engine = PermissionEngine.from_loaded_user(current_user)
+    if not engine.has_permission("agency", "delete"):
+        raise HTTPException(status_code=403, detail="Not authorized to delete brands")
     result = await db.execute(select(Brand).where(Brand.id == brand_id))
     brand = result.scalar_one_or_none()
     

@@ -42,10 +42,11 @@ function LandingPageContent() {
             <nav className="fixed w-full z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
                 <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200">
-                            <Bot className="w-5 h-5 text-white" />
-                        </div>
-                        <span className="text-xl font-black tracking-tight text-slate-900">C(AI)DENCE</span>
+                        <img
+                            src="/images/caidenz_logo.png"
+                            alt="C(AI)DENCE"
+                            className="h-28 w-auto object-contain"
+                        />
                     </div>
 
                     <div className="hidden md:flex items-center gap-8 text-sm font-bold text-slate-600">

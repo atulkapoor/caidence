@@ -9,6 +9,7 @@ export interface SocialConnection {
     connected_at: string | null;
     follower_count: number | null;
     profile_picture_url: string | null;
+    brand_id?: number | null;
 }
 
 export interface AdminSocialConnection {
@@ -21,6 +22,7 @@ export interface AdminSocialConnection {
     is_active: boolean;
     connected_at: string | null;
     token_expires_at: string | null;
+    brand_id?: number | null;
 }
 
 export interface SocialConnectionStatus {
@@ -35,6 +37,7 @@ export interface LinkedInPublishPayload {
     image_data_url?: string;
     design_asset_id?: number;
     content_id?: number;
+    brand_id?: number;
 }
 
 export interface PublishPostResponse {
@@ -54,6 +57,7 @@ export interface SchedulePostPayload {
     content_id?: number;
     design_asset_id?: number;
     campaign_id?: number;
+    brand_id?: number;
 }
 
 export interface ScheduledPost {
@@ -94,15 +98,20 @@ export interface ScheduledPostSummary {
 export async function getConnectionUrl(
     platform: string,
     redirectTo?: string,
+    brandId?: number | null,
 ): Promise<{ authorization_url: string; platform: string }> {
-    const query = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : "";
-    const res = await authenticatedFetch(`${API_BASE_URL}/social/connect/${platform}${query}`, { method: "POST" });
+    const query = new URLSearchParams();
+    if (redirectTo) query.set("redirect_to", redirectTo);
+    if (typeof brandId === "number") query.set("brand_id", String(brandId));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/connect/${platform}${suffix}`, { method: "POST" });
     if (!res.ok) throw new Error(`Failed to get auth URL for ${platform}`);
     return res.json();
 }
 
-export async function listConnections(): Promise<SocialConnection[]> {
-    const res = await authenticatedFetch(`${API_BASE_URL}/social/connections`);
+export async function listConnections(brandId?: number | null): Promise<SocialConnection[]> {
+    const suffix = typeof brandId === "number" ? `?brand_id=${brandId}` : "";
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/connections${suffix}`);
     if (!res.ok) throw new Error("Failed to fetch social connections");
     return res.json();
 }
@@ -113,13 +122,15 @@ export async function listConnectionsForSettings(): Promise<AdminSocialConnectio
     return res.json();
 }
 
-export async function disconnectPlatform(platform: string): Promise<void> {
-    const res = await authenticatedFetch(`${API_BASE_URL}/social/disconnect/${platform}`, { method: "DELETE" });
+export async function disconnectPlatform(platform: string, brandId?: number | null): Promise<void> {
+    const suffix = typeof brandId === "number" ? `?brand_id=${brandId}` : "";
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/disconnect/${platform}${suffix}`, { method: "DELETE" });
     if (!res.ok) throw new Error(`Failed to disconnect ${platform}`);
 }
 
-export async function getConnectionStatus(platform: string): Promise<SocialConnectionStatus> {
-    const res = await authenticatedFetch(`${API_BASE_URL}/social/status/${platform}`);
+export async function getConnectionStatus(platform: string, brandId?: number | null): Promise<SocialConnectionStatus> {
+    const suffix = typeof brandId === "number" ? `?brand_id=${brandId}` : "";
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/status/${platform}${suffix}`);
     if (!res.ok) throw new Error(`Failed to fetch ${platform} connection status`);
     return res.json();
 }
@@ -160,10 +171,11 @@ export async function publishSocialPost(
     image_url?: string,
     content_id?: number,
     design_asset_id?: number,
+    brand_id?: number,
 ): Promise<PublishPostResponse> {
     const res = await authenticatedFetch(`${API_BASE_URL}/social/publish/${platform}`, {
         method: "POST",
-        body: JSON.stringify({ message, image_url, content_id, design_asset_id }),
+        body: JSON.stringify({ message, image_url, content_id, design_asset_id, brand_id }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));

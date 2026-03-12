@@ -148,6 +148,7 @@ async def generate_design(
             "image_url": image_url,
             "brand_colors": request.brand_colors,
             "reference_image": request.reference_image,
+            "brand_id": request.brand_id,
             "image_model_used": image_payload.get("image_model_used") if isinstance(image_payload, dict) else None,
             "image_fallback_used": bool(image_payload.get("image_fallback_used")) if isinstance(image_payload, dict) else False,
         }
@@ -197,6 +198,7 @@ async def save_design(
             db_asset.brand_colors = request.brand_colors
             db_asset.reference_image = request.reference_image
             db_asset.image_url = request.image_url
+            db_asset.brand_id = request.brand_id
 
         # ✅ CREATE MODE
         else:
@@ -210,7 +212,8 @@ async def save_design(
                 image_url=request.image_url,
                 brand_colors=request.brand_colors,
                 reference_image=request.reference_image,
-                user_id=current_user.id
+                user_id=current_user.id,
+                brand_id=request.brand_id,
             )
 
             db.add(db_asset)
@@ -268,6 +271,7 @@ async def update_design_asset(
     asset.brand_colors = request.brand_colors
     asset.reference_image = request.reference_image
     asset.image_url = new_image  # ⭐ IMPORTANT
+    asset.brand_id = request.brand_id
 
     await db.commit()
     await db.refresh(asset)

@@ -14,6 +14,7 @@ export interface ContentGeneration {
     is_posted?: boolean;
     posted_at?: string | null;
     posted_target_name?: string | null;
+    brand_id?: number | null;
 }
 
 export interface GenerateContentRequest {
@@ -28,6 +29,7 @@ export interface GenerateContentRequest {
     generate_with_image?: boolean;
     adapt_from_base?: boolean;
     base_result?: string;
+    brand_id?: number | null;
     [key: string]: unknown;
 }
 

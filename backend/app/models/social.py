@@ -9,6 +9,7 @@ class SocialConnection(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=True, index=True)
     platform = Column(String, nullable=False, index=True)  # instagram, youtube, facebook, linkedin, whatsapp, snapchat
 
     # Platform identity
@@ -33,6 +34,7 @@ class SocialConnection(Base):
 
     # Relationships
     user = relationship("User", back_populates="social_connections")
+    brand = relationship("Brand", back_populates="social_connections")
 
 
 class OnboardingProgress(Base):

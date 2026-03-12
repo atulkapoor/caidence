@@ -22,6 +22,7 @@ interface SocialConnectCardProps {
     showReconnect?: boolean;
     buttonSize?: "compact" | "default";
     redirectTo?: string;
+    brandId?: number | null;
 }
 
 export function SocialConnectCard({
@@ -31,6 +32,7 @@ export function SocialConnectCard({
     showReconnect = true,
     buttonSize = "default",
     redirectTo,
+    brandId,
 }: SocialConnectCardProps) {
     const [loadingAction, setLoadingAction] = useState<"connect" | "reconnect" | "disconnect" | null>(null);
     const meta = PLATFORM_META[platform] || { label: platform, color: "text-slate-600", bgColor: "bg-slate-50" };
@@ -44,7 +46,7 @@ export function SocialConnectCard({
     const handleConnect = async () => {
         setLoadingAction("connect");
         try {
-            const { authorization_url } = await getConnectionUrl(platform, redirectTo);
+            const { authorization_url } = await getConnectionUrl(platform, redirectTo, brandId ?? undefined);
             window.location.href = authorization_url;
         } catch {
             toast.error(`Failed to connect ${meta.label}`);
@@ -55,7 +57,7 @@ export function SocialConnectCard({
     const handleDisconnect = async () => {
         setLoadingAction("disconnect");
         try {
-            await disconnectPlatform(platform);
+            await disconnectPlatform(platform, brandId ?? undefined);
             toast.success(`Disconnected from ${meta.label}`);
             onStatusChange();
         } catch {
@@ -68,7 +70,7 @@ export function SocialConnectCard({
     const handleReconnect = async () => {
         setLoadingAction("reconnect");
         try {
-            const { authorization_url } = await getConnectionUrl(platform, redirectTo);
+            const { authorization_url } = await getConnectionUrl(platform, redirectTo, brandId ?? undefined);
             window.location.href = authorization_url;
         } catch {
             toast.error(`Failed to reconnect ${meta.label}`);
