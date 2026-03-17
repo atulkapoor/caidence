@@ -1,10 +1,10 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
+import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { generateContent, fetchContentGenerations, fetchContentGenerationsPage, ContentGeneration, saveContent, deleteContent, enhanceDescription, fetchBrands, type Brand } from "@/lib/api";
-import { getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost, type PublishPostResponse } from "@/lib/api/social";
+import { getConnectionStatus, publishSocialPost, publishToLinkedIn, publishToWhatsApp, scheduleSocialPost, type PublishPostResponse } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
@@ -87,6 +87,16 @@ function ContentStudioContent() {
         contentId?: number | null;
         brandId?: number | null;
     } | null>(null);
+    const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
+    const [whatsAppRecipients, setWhatsAppRecipients] = useState("");
+    const [isWhatsAppSending, setIsWhatsAppSending] = useState(false);
+    const [whatsAppDraft, setWhatsAppDraft] = useState<{
+        title: string;
+        text: string;
+        contentId?: number | null;
+        brandId?: number | null;
+        imageUrl?: string;
+    } | null>(null);
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
@@ -96,7 +106,7 @@ function ContentStudioContent() {
     const [libraryPage, setLibraryPage] = useState(1);
     const [totalLibraryItems, setTotalLibraryItems] = useState(0);
     const scheduleInputRef = useRef<HTMLInputElement | null>(null);
-    useModalScroll(!!previewContent || isScheduleOpen);
+    useModalScroll(!!previewContent || isScheduleOpen || isWhatsAppOpen);
     const LIBRARY_PAGE_SIZE = 12;
 
     // Lists
@@ -107,11 +117,12 @@ function ContentStudioContent() {
         { id: "Email", icon: Mail, color: "text-purple-500", bg: "bg-purple-50", border: "border-purple-200" },
         { id: "Facebook", icon: Facebook, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
         { id: "Instagram", icon: Instagram, color: "text-pink-600", bg: "bg-pink-50", border: "border-pink-200" },
+        { id: "WhatsApp", icon: MessageCircle, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
     ];
 
     const contentTypes = ["Post", "Article", "Thread", "Caption", "Newsletter", "Ad Copy"];
     const experts = ["General Marketing", "SEO Specialist", "Copywriter", "Technical Writer", "Creative Storyteller", "Viral Tweeter"];
-    const knownPlatforms = ["LinkedIn", "Twitter", "Blog", "Email", "Facebook", "Instagram"];
+    const knownPlatforms = ["LinkedIn", "Twitter", "Blog", "Email", "Facebook", "Instagram", "WhatsApp"];
     const getBrandName = (brandId?: number | null) =>
         availableBrands.find((brand) => brand.id === brandId)?.name || null;
 
@@ -558,6 +569,25 @@ ${prompt}
         setIsScheduleOpen(true);
     };
 
+    const openWhatsAppModal = (draft: {
+        title: string;
+        text: string;
+        contentId?: number | null;
+        brandId?: number | null;
+        imageUrl?: string;
+    }) => {
+        setWhatsAppDraft(draft);
+        setWhatsAppRecipients("");
+        setIsWhatsAppOpen(true);
+    };
+
+    const parseRecipients = (raw: string): string[] => {
+        return raw
+            .split(/[\n,;]+/g)
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0);
+    };
+
     const markContentPostedLocally = (contentId: number | null | undefined, targetName?: string) => {
         if (!contentId) return;
         setPostedContentIds((prev) => {
@@ -775,6 +805,69 @@ ${prompt}
         } catch (error: any) {
             toast.error(error?.message || `Failed to post to ${platform}`, { id: toastId });
             return null;
+        }
+    };
+
+    const handleWhatsAppSend = async () => {
+        if (!whatsAppDraft) return;
+        if (isContentReadOnly) {
+            toast.error("Read-only access: sending is disabled");
+            return;
+        }
+
+        const recipients = parseRecipients(whatsAppRecipients);
+        if (recipients.length === 0) {
+            toast.error("Add at least one WhatsApp number");
+            return;
+        }
+
+        const status = await getConnectionStatus("whatsapp", whatsAppDraft.brandId ?? undefined);
+        if (!status.connected) {
+            const brandName = whatsAppDraft.brandId ? getBrandName(whatsAppDraft.brandId) : null;
+            toast.error(
+                brandName
+                    ? `Connect WhatsApp for ${brandName} before sending`
+                    : "Connect WhatsApp in Onboarding or Settings before sending"
+            );
+            return;
+        }
+
+        setIsWhatsAppSending(true);
+        const toastId = toast.loading(`Sending WhatsApp message to ${recipients.length} recipient(s)...`);
+        try {
+            const isDataUrl = typeof whatsAppDraft.imageUrl === "string" && whatsAppDraft.imageUrl.startsWith("data:");
+            const imageUrl = whatsAppDraft.imageUrl && /^https?:\/\//i.test(whatsAppDraft.imageUrl)
+                ? whatsAppDraft.imageUrl
+                : undefined;
+            const imageDataUrl = isDataUrl ? whatsAppDraft.imageUrl : undefined;
+
+            const result = await publishToWhatsApp({
+                to_numbers: recipients,
+                message: whatsAppDraft.text,
+                content_id: whatsAppDraft.contentId ?? undefined,
+                brand_id: whatsAppDraft.brandId ?? undefined,
+                image_url: imageUrl,
+                image_data_url: imageDataUrl,
+            });
+
+            const successes = result.results.filter((item) => item.status === "sent").length;
+            const failures = result.results.length - successes;
+            if (failures > 0) {
+                toast.error(`Sent ${successes}/${result.results.length}. Some numbers failed.`, { id: toastId });
+            } else {
+                toast.success(`WhatsApp sent to ${successes} recipient(s).`, { id: toastId });
+            }
+
+            if (whatsAppDraft.contentId) {
+                markContentPostedLocally(whatsAppDraft.contentId, "WhatsApp");
+                await loadHistory();
+            }
+            setIsWhatsAppOpen(false);
+            setWhatsAppDraft(null);
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to send WhatsApp message", { id: toastId });
+        } finally {
+            setIsWhatsAppSending(false);
         }
     };
 
@@ -1071,6 +1164,16 @@ ${prompt}
                                     <button
                                         onClick={async () => {
                                             try {
+                                                if ((previewContent.platform || "").toLowerCase() === "whatsapp") {
+                                                    openWhatsAppModal({
+                                                        title: previewContent.title,
+                                                        text: previewContent.result || "",
+                                                        contentId: previewContent.id,
+                                                        brandId: previewContent.brand_id ?? null,
+                                                        imageUrl: previewContent.image_url || undefined,
+                                                    });
+                                                    return;
+                                                }
                                                 setPostingPreview(true);
                                                 const publishResult = await handlePost(
                                                     previewContent.platform,
@@ -1107,14 +1210,20 @@ ${prompt}
                                     </button>
                                     <button
                                         onClick={() =>
-                                            openScheduleModal({
-                                                title: previewContent.title,
-                                                platform: previewContent.platform,
-                                                text: previewContent.result || "",
-                                                imageUrl: previewContent.image_url || undefined,
-                                                contentId: previewContent.id,
-                                                brandId: previewContent.brand_id ?? null,
-                                            })
+                                            {
+                                                if ((previewContent.platform || "").toLowerCase() === "whatsapp") {
+                                                    toast.error("WhatsApp scheduling is not supported yet.");
+                                                    return;
+                                                }
+                                                openScheduleModal({
+                                                    title: previewContent.title,
+                                                    platform: previewContent.platform,
+                                                    text: previewContent.result || "",
+                                                    imageUrl: previewContent.image_url || undefined,
+                                                    contentId: previewContent.id,
+                                                    brandId: previewContent.brand_id ?? null,
+                                                });
+                                            }
                                         }
                                         disabled={isContentReadOnly || previewContent.is_posted}
                                         className="w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-60"
@@ -1197,6 +1306,71 @@ ${prompt}
                                     className="px-4 py-2 text-sm font-bold bg-violet-600 hover:bg-violet-700 text-white rounded-lg disabled:opacity-60"
                                 >
                                     {scheduling ? "Scheduling..." : "Schedule Post"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {isWhatsAppOpen && whatsAppDraft && (
+                    <div
+                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+                        onClick={() => {
+                            if (!isWhatsAppSending) {
+                                setIsWhatsAppOpen(false);
+                                setWhatsAppDraft(null);
+                            }
+                        }}
+                    >
+                        <div
+                            className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-200"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <h3 className="text-lg font-bold text-slate-900 mb-1">Send WhatsApp Message</h3>
+                            <p className="text-sm text-slate-500 mb-4">
+                                {new RegExp(`\\(WhatsApp\\)\\s*$`, "i").test(whatsAppDraft.title)
+                                    ? whatsAppDraft.title
+                                    : `${whatsAppDraft.title} (WhatsApp)`}
+                            </p>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                                        Recipients (E.164)
+                                    </label>
+                                    <textarea
+                                        value={whatsAppRecipients}
+                                        onChange={(e) => setWhatsAppRecipients(e.target.value)}
+                                        placeholder="+919876543210, +919812345678"
+                                        className="w-full min-h-[90px] p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-2">
+                                        Use commas or new lines. In Meta Dev mode, only approved test numbers will receive messages.
+                                    </p>
+                                </div>
+                                <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-lg p-3">
+                                    Free-form text is delivered only within the 24-hour customer care window.
+                                    Use approved templates for outbound campaigns.
+                                </div>
+                            </div>
+
+                            <div className="mt-6 flex justify-end gap-2">
+                                <button
+                                    onClick={() => {
+                                        setIsWhatsAppOpen(false);
+                                        setWhatsAppDraft(null);
+                                    }}
+                                    disabled={isWhatsAppSending}
+                                    className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-60"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleWhatsAppSend}
+                                    disabled={isWhatsAppSending}
+                                    className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-60"
+                                >
+                                    {isWhatsAppSending ? "Sending..." : "Send WhatsApp"}
                                 </button>
                             </div>
                         </div>
@@ -1484,6 +1658,10 @@ ${prompt}
                                                                     toast.info("This content is already posted and is view-only.");
                                                                     return;
                                                                 }
+                                                                if ((response.platform || "").toLowerCase() === "whatsapp") {
+                                                                    toast.error("WhatsApp scheduling is not supported yet.");
+                                                                    return;
+                                                                }
                                                                 try {
                                                                     let contentIdForSchedule = response.contentId ?? null;
                                                                     if (!contentIdForSchedule && response.outputType !== "image") {
@@ -1517,11 +1695,23 @@ ${prompt}
                                                                     return;
                                                                 }
                                                                 try {
-                                                                    setPostingIndex(idx);
                                                                     let contentIdForPost = response.contentId ?? null;
                                                                     if (!contentIdForPost && response.outputType !== "image") {
                                                                         contentIdForPost = await ensureContentIdForPosting(response, idx);
                                                                     }
+                                                                    if ((response.platform || "").toLowerCase() === "whatsapp") {
+                                                                        openWhatsAppModal({
+                                                                            title: response.title,
+                                                                            text: response.result,
+                                                                            contentId: contentIdForPost,
+                                                                            brandId: response.brandId ?? selectedBrandId ?? null,
+                                                                            imageUrl: response.outputType === "image"
+                                                                                ? response.result
+                                                                                : response.imageUrl || undefined,
+                                                                        });
+                                                                        return;
+                                                                    }
+                                                                    setPostingIndex(idx);
                                                                     const publishResult = await handlePost(
                                                                         response.platform,
                                                                         response.result,

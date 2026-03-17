@@ -6,11 +6,11 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import or_
+from sqlalchemy import or_, update
 import re
 
 from app.core.database import get_db
-from app.models import Brand, User, Organization
+from app.models import Brand, User, Organization, Creator, SocialConnection, ContentGeneration, ScheduledPost, DesignAsset
 from app.api.endpoints.auth import get_current_active_user
 from app.services.auth_service import is_super_admin, is_agency_level
 from app.services.permission_engine import PermissionEngine
@@ -104,14 +104,10 @@ async def list_brands(
     if is_super_admin(current_user.role):
         result = await db.execute(select(Brand))
         return result.scalars().all()
-    elif current_user.organization_id:
+    else:
         result = await db.execute(
             select(Brand).where(
-                Brand.organization_id == current_user.organization_id,
-                or_(
-                    Brand.created_by_role.is_(None),
-                    ~Brand.created_by_role.in_(["root", "super_admin"]),
-                ),
+                Brand.created_by_user_id == current_user.id
             )
         )
         return result.scalars().all()
@@ -177,7 +173,7 @@ async def get_brand(
         raise HTTPException(status_code=404, detail="Brand not found")
     
     # Permission check
-    if not is_super_admin(current_user.role) and current_user.organization_id != brand.organization_id:
+    if not is_super_admin(current_user.role) and brand.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this brand")
     
     return brand
@@ -204,7 +200,7 @@ async def update_brand(
     
     # Permission check
     can_update = is_super_admin(current_user.role) or (
-        current_user.organization_id == brand.organization_id and 
+        brand.created_by_user_id == current_user.id and 
         current_user.role in ["agency_admin", "brand_admin"]
     )
     if not can_update:
@@ -233,7 +229,7 @@ async def delete_brand(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Soft-delete (deactivate) a brand.
+    Permanently delete a brand.
     """
     engine = PermissionEngine.from_loaded_user(current_user)
     if not engine.has_permission("agency", "delete"):
@@ -246,13 +242,39 @@ async def delete_brand(
     
     # Only agency admin or super admin can delete
     can_delete = is_super_admin(current_user.role) or (
-        current_user.organization_id == brand.organization_id and 
+        brand.created_by_user_id == current_user.id and 
         current_user.role == "agency_admin"
     )
     if not can_delete:
         raise HTTPException(status_code=403, detail="Not authorized to delete this brand")
     
-    brand.is_active = False
+    await db.execute(
+        update(SocialConnection)
+        .where(SocialConnection.brand_id == brand_id)
+        .values(brand_id=None)
+    )
+    await db.execute(
+        update(Creator)
+        .where(Creator.brand_id == brand_id)
+        .values(brand_id=None)
+    )
+    await db.execute(
+        update(ContentGeneration)
+        .where(ContentGeneration.brand_id == brand_id)
+        .values(brand_id=None)
+    )
+    await db.execute(
+        update(ScheduledPost)
+        .where(ScheduledPost.brand_id == brand_id)
+        .values(brand_id=None)
+    )
+    await db.execute(
+        update(DesignAsset)
+        .where(DesignAsset.brand_id == brand_id)
+        .values(brand_id=None)
+    )
+
+    await db.delete(brand)
     await db.commit()
     
-    return {"message": "Brand archived successfully"}
+    return {"message": "Brand deleted successfully"}

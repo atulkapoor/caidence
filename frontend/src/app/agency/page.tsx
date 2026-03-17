@@ -123,12 +123,22 @@ export default function AgencyPage() {
     };
 
     const handleDeleteBrand = async (brand: Brand) => {
-        const confirmDelete = window.confirm(`Delete ${brand.name}? This will archive the brand.`);
+        const confirmDelete = window.confirm(`Delete ${brand.name}? This will permanently delete the brand. This action cannot be undone.`);
         if (!confirmDelete) return;
         try {
             await deleteBrand(brand.id);
-            setBrands((prev) => prev.map((b) => (b.id === brand.id ? { ...b, is_active: false } : b)));
-            toast.success(`${brand.name} archived`);
+            setBrands((prev) => prev.filter((b) => b.id !== brand.id));
+            setConnectionsByBrand((prev) => {
+                const next = { ...prev };
+                delete next[brand.id];
+                return next;
+            });
+            setConnectionsLoadingByBrand((prev) => {
+                const next = { ...prev };
+                delete next[brand.id];
+                return next;
+            });
+            toast.success(`${brand.name} deleted`);
         } catch (error: any) {
             toast.error(error?.message || "Failed to delete brand");
         }
