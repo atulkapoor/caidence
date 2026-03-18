@@ -301,17 +301,26 @@ class SocialAuthService:
         user_id = state_data["user_id"]
         brand_id = state_data.get("brand_id")
         result = await db.execute(
-            select(SocialConnection).where(
+            select(SocialConnection)
+            .where(
                 SocialConnection.user_id == user_id,
                 SocialConnection.platform == platform,
                 SocialConnection.brand_id == brand_id if brand_id is not None else SocialConnection.brand_id.is_(None),
             )
+            .order_by(SocialConnection.connected_at.desc().nullslast())
         )
-        connection = result.scalar_one_or_none()
+        matches = list(result.scalars().all())
+        connection = matches[0] if matches else None
 
         if not connection:
             connection = SocialConnection(user_id=user_id, platform=platform, brand_id=brand_id)
             db.add(connection)
+        elif len(matches) > 1:
+            # Deactivate duplicates to avoid future MultipleResultsFound errors.
+            for duplicate in matches[1:]:
+                duplicate.is_active = False
+                duplicate.access_token = None
+                duplicate.refresh_token = None
 
         connection.access_token = access_token
         connection.refresh_token = refresh_token
@@ -378,19 +387,32 @@ class SocialAuthService:
         brand_id: Optional[int] = None,
     ) -> None:
         """Revoke and deactivate a social connection."""
-        result = await db.execute(
-            select(SocialConnection).where(
-                SocialConnection.user_id == user_id,
-                SocialConnection.platform == platform,
-                SocialConnection.brand_id == brand_id if brand_id is not None else SocialConnection.brand_id.is_(None),
+        base_filters = [
+            SocialConnection.user_id == user_id,
+            SocialConnection.platform == platform,
+        ]
+
+        if brand_id is None:
+            result = await db.execute(select(SocialConnection).where(*base_filters))
+            connections = list(result.scalars().all())
+        else:
+            result = await db.execute(
+                select(SocialConnection).where(
+                    *base_filters,
+                    SocialConnection.brand_id == brand_id,
+                )
             )
-        )
-        connection = result.scalar_one_or_none()
-        if connection:
+            connection = result.scalar_one_or_none()
+            connections = [connection] if connection else []
+
+        if not connections:
+            return
+
+        for connection in connections:
             connection.is_active = False
             connection.access_token = None
             connection.refresh_token = None
-            await db.commit()
+        await db.commit()
 
     @staticmethod
     async def refresh_token(
