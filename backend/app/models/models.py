@@ -213,6 +213,7 @@ class ScheduledPost(Base):
     platform = Column(String, nullable=False, index=True)
     message = Column(Text, nullable=False)
     image_url = Column(Text, nullable=True)
+    to_numbers = Column(Text, nullable=True)
     status = Column(String, nullable=False, default="scheduled", index=True)
     scheduled_at = Column(DateTime(timezone=True), nullable=False, index=True)
     published_at = Column(DateTime(timezone=True), nullable=True)

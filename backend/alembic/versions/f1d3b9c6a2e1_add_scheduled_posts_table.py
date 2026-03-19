@@ -18,6 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    insp = sa.inspect(op.get_bind())
+    if "scheduled_posts" in insp.get_table_names(schema="public"):
+        return
+
     op.create_table(
         "scheduled_posts",
         sa.Column("id", sa.Integer(), nullable=False),

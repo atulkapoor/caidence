@@ -21,6 +21,7 @@ class Creator(Base):
     name = Column(String, nullable=True)
     email = Column(String, nullable=True, index=True)
     phone = Column(String, nullable=True)
+    whatsapp_numbers = Column(JSON, nullable=True)  # List of WhatsApp numbers (E.164)
     bio = Column(Text, nullable=True)
     profile_image_url = Column(String, nullable=True)
     

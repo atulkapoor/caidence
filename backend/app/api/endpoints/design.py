@@ -168,6 +168,9 @@ async def save_design(
 
     try:
         engine = PermissionEngine.from_loaded_user(current_user)
+        def looks_like_url(value: str) -> bool:
+            return value.startswith(("http://", "https://", "/"))
+
         # ✅ EDIT MODE → update existing
         if request.id:
             if not engine.has_permission("design_studio", "update"):
@@ -197,7 +200,11 @@ async def save_design(
             db_asset.prompt = request.prompt
             db_asset.brand_colors = request.brand_colors
             db_asset.reference_image = request.reference_image
-            db_asset.image_url = request.image_url
+            if request.image_url and looks_like_url(request.image_url) and db_asset.image_url:
+                # Preserve stored base64; frontend sends public preview URLs when editing.
+                pass
+            else:
+                db_asset.image_url = request.image_url
             db_asset.brand_id = request.brand_id
 
         # ✅ CREATE MODE

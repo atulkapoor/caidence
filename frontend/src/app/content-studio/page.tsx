@@ -1,15 +1,16 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send, MessageCircle } from "lucide-react";
+import { Sparkles, Zap, History, Copy, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, Search, Wand2, StickyNote, PenTool, Plus, X, Calendar, ArrowRight, Maximize2, Save, Send } from "lucide-react";
 import { toast } from "sonner";
-import { generateContent, fetchContentGenerations, fetchContentGenerationsPage, ContentGeneration, saveContent, deleteContent, enhanceDescription, fetchBrands, type Brand } from "@/lib/api";
+import { generateContent, fetchContentGenerations, fetchContentGenerationsPage, ContentGeneration, saveContent, deleteContent, enhanceDescription, fetchBrands, fetchWhatsAppContacts, type Brand, type WhatsAppContact } from "@/lib/api";
 import { getConnectionStatus, publishSocialPost, publishToLinkedIn, publishToWhatsApp, scheduleSocialPost, type PublishPostResponse } from "@/lib/api/social";
 import { fetchCampaigns, Campaign } from "@/lib/api/campaigns";
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
 import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalendar";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
@@ -90,13 +91,18 @@ function ContentStudioContent() {
     const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
     const [whatsAppRecipients, setWhatsAppRecipients] = useState("");
     const [isWhatsAppSending, setIsWhatsAppSending] = useState(false);
+    const [whatsAppScheduleDateTime, setWhatsAppScheduleDateTime] = useState("");
+    const [isWhatsAppScheduling, setIsWhatsAppScheduling] = useState(false);
     const [whatsAppDraft, setWhatsAppDraft] = useState<{
         title: string;
         text: string;
         contentId?: number | null;
         brandId?: number | null;
         imageUrl?: string;
+        mode?: "send" | "schedule";
     } | null>(null);
+    const [whatsAppContacts, setWhatsAppContacts] = useState<WhatsAppContact[]>([]);
+    const [selectedCrmNumbers, setSelectedCrmNumbers] = useState<string[]>([]);
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
@@ -106,6 +112,7 @@ function ContentStudioContent() {
     const [libraryPage, setLibraryPage] = useState(1);
     const [totalLibraryItems, setTotalLibraryItems] = useState(0);
     const scheduleInputRef = useRef<HTMLInputElement | null>(null);
+    const whatsAppScheduleInputRef = useRef<HTMLInputElement | null>(null);
     useModalScroll(!!previewContent || isScheduleOpen || isWhatsAppOpen);
     const LIBRARY_PAGE_SIZE = 12;
 
@@ -117,7 +124,7 @@ function ContentStudioContent() {
         { id: "Email", icon: Mail, color: "text-purple-500", bg: "bg-purple-50", border: "border-purple-200" },
         { id: "Facebook", icon: Facebook, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
         { id: "Instagram", icon: Instagram, color: "text-pink-600", bg: "bg-pink-50", border: "border-pink-200" },
-        { id: "WhatsApp", icon: MessageCircle, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
+        { id: "WhatsApp", icon: WhatsAppIcon, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
     ];
 
     const contentTypes = ["Post", "Article", "Thread", "Caption", "Newsletter", "Ad Copy"];
@@ -215,6 +222,7 @@ function ContentStudioContent() {
         loadHistory();
         loadCampaigns();
         loadBrands();
+        loadWhatsAppContacts();
 
         // Check for edit mode
         const params = new URLSearchParams(window.location.search);
@@ -341,6 +349,15 @@ function ContentStudioContent() {
             }
         } catch (error) {
             console.error("Failed to load brands", error);
+        }
+    };
+
+    const loadWhatsAppContacts = async () => {
+        try {
+            const data = await fetchWhatsAppContacts();
+            setWhatsAppContacts(data);
+        } catch {
+            setWhatsAppContacts([]);
         }
     };
 
@@ -575,9 +592,13 @@ ${prompt}
         contentId?: number | null;
         brandId?: number | null;
         imageUrl?: string;
+        mode?: "send" | "schedule";
     }) => {
+        const defaultDate = new Date(Date.now() + 30 * 60 * 1000);
         setWhatsAppDraft(draft);
         setWhatsAppRecipients("");
+        setSelectedCrmNumbers([]);
+        setWhatsAppScheduleDateTime(toDateTimeLocalValue(defaultDate));
         setIsWhatsAppOpen(true);
     };
 
@@ -587,6 +608,47 @@ ${prompt}
             .map((value) => value.trim())
             .filter((value) => value.length > 0);
     };
+
+    const appendRecipient = (value: string) => {
+        if (!value) return;
+        const current = parseRecipients(whatsAppRecipients);
+        if (current.includes(value)) return;
+        const next = [...current, value].join(", ");
+        setWhatsAppRecipients(next);
+    };
+
+    const toggleCrmNumber = (value: string) => {
+        if (!value) return;
+        setSelectedCrmNumbers((prev) => (
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]
+        ));
+    };
+
+    const addSelectedRecipients = () => {
+        if (selectedCrmNumbers.length === 0) return;
+        const current = parseRecipients(whatsAppRecipients);
+        const merged = Array.from(new Set([...current, ...selectedCrmNumbers]));
+        setWhatsAppRecipients(merged.join(", "));
+        setSelectedCrmNumbers([]);
+    };
+
+    const selectAllCrmNumbers = () => {
+        const allNumbers = Array.from(
+            new Set(
+                whatsAppContacts.flatMap((contact) => contact.whatsapp_numbers || [])
+            )
+        );
+        setSelectedCrmNumbers(allNumbers);
+    };
+
+    const clearAllCrmNumbers = () => {
+        setSelectedCrmNumbers([]);
+    };
+
+    const allCrmNumbers = Array.from(
+        new Set(whatsAppContacts.flatMap((contact) => contact.whatsapp_numbers || []))
+    );
+    const isAllCrmSelected = allCrmNumbers.length > 0 && selectedCrmNumbers.length === allCrmNumbers.length;
 
     const markContentPostedLocally = (contentId: number | null | undefined, targetName?: string) => {
         if (!contentId) return;
@@ -868,6 +930,63 @@ ${prompt}
             toast.error(error?.message || "Failed to send WhatsApp message", { id: toastId });
         } finally {
             setIsWhatsAppSending(false);
+        }
+    };
+
+    const handleWhatsAppSchedule = async () => {
+        if (!whatsAppDraft) return;
+        if (isContentReadOnly) {
+            toast.error("Read-only access: scheduling is disabled");
+            return;
+        }
+
+        const recipients = parseRecipients(whatsAppRecipients);
+        if (recipients.length === 0) {
+            toast.error("Add at least one WhatsApp number");
+            return;
+        }
+        if (!whatsAppScheduleDateTime) {
+            toast.error("Select date and time");
+            return;
+        }
+
+        const scheduleDate = new Date(whatsAppScheduleDateTime);
+        if (Number.isNaN(scheduleDate.getTime())) {
+            toast.error("Invalid date and time");
+            return;
+        }
+
+        const status = await getConnectionStatus("whatsapp", whatsAppDraft.brandId ?? undefined);
+        if (!status.connected) {
+            const brandName = whatsAppDraft.brandId ? getBrandName(whatsAppDraft.brandId) : null;
+            toast.error(
+                brandName
+                    ? `Connect WhatsApp for ${brandName} before scheduling`
+                    : "Connect WhatsApp in Onboarding or Settings before scheduling"
+            );
+            return;
+        }
+
+        setIsWhatsAppScheduling(true);
+        const toastId = toast.loading(`Scheduling WhatsApp message to ${recipients.length} recipient(s)...`);
+        try {
+            await scheduleSocialPost({
+                title: whatsAppDraft.title,
+                platform: "whatsapp",
+                message: whatsAppDraft.text || "",
+                image_url: whatsAppDraft.imageUrl,
+                to_numbers: recipients,
+                content_id: whatsAppDraft.contentId ?? undefined,
+                brand_id: whatsAppDraft.brandId ?? undefined,
+                scheduled_at: scheduleDate.toISOString(),
+            });
+            toast.success("WhatsApp scheduled", { id: toastId });
+            setIsWhatsAppOpen(false);
+            setWhatsAppDraft(null);
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to schedule WhatsApp message", { id: toastId });
+        } finally {
+            setIsWhatsAppScheduling(false);
         }
     };
 
@@ -1171,6 +1290,7 @@ ${prompt}
                                                         contentId: previewContent.id,
                                                         brandId: previewContent.brand_id ?? null,
                                                         imageUrl: previewContent.image_url || undefined,
+                                                        mode: "send",
                                                     });
                                                     return;
                                                 }
@@ -1212,7 +1332,14 @@ ${prompt}
                                         onClick={() =>
                                             {
                                                 if ((previewContent.platform || "").toLowerCase() === "whatsapp") {
-                                                    toast.error("WhatsApp scheduling is not supported yet.");
+                                                    openWhatsAppModal({
+                                                        title: previewContent.title,
+                                                        text: previewContent.result || "",
+                                                        contentId: previewContent.id,
+                                                        brandId: previewContent.brand_id ?? null,
+                                                        imageUrl: previewContent.image_url || undefined,
+                                                        mode: "schedule",
+                                                    });
                                                     return;
                                                 }
                                                 openScheduleModal({
@@ -1316,7 +1443,7 @@ ${prompt}
                     <div
                         className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
                         onClick={() => {
-                            if (!isWhatsAppSending) {
+                            if (!isWhatsAppSending && !isWhatsAppScheduling) {
                                 setIsWhatsAppOpen(false);
                                 setWhatsAppDraft(null);
                             }
@@ -1333,11 +1460,56 @@ ${prompt}
                                     : `${whatsAppDraft.title} (WhatsApp)`}
                             </p>
 
-                            <div className="space-y-4">
+                                <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                                        Recipients (E.164)
-                                    </label>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase">
+                                            Recipients (E.164)
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={isAllCrmSelected ? clearAllCrmNumbers : selectAllCrmNumbers}
+                                            disabled={whatsAppContacts.length === 0}
+                                            className="px-2.5 py-1 text-[11px] font-bold border border-slate-200 text-slate-600 rounded-lg disabled:opacity-50"
+                                        >
+                                            {isAllCrmSelected ? "Deselect All" : "Select All"}
+                                        </button>
+                                    </div>
+                                    <div className="border border-slate-200 rounded-xl p-2 max-h-40 overflow-y-auto bg-slate-50 mb-2">
+                                        {whatsAppContacts.length === 0 ? (
+                                            <p className="text-xs text-slate-500 p-2">No WhatsApp numbers in CRM yet.</p>
+                                        ) : (
+                                            whatsAppContacts.flatMap((contact) =>
+                                                (contact.whatsapp_numbers || []).map((number) => {
+                                                    const id = `${contact.id}:${number}`;
+                                                    const checked = selectedCrmNumbers.includes(number);
+                                                    return (
+                                                        <label key={id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white cursor-pointer">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={checked}
+                                                                onChange={() => toggleCrmNumber(number)}
+                                                                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                            />
+                                                            <span className="text-xs font-medium text-slate-700">
+                                                                {contact.handle} - {number}
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })
+                                            )
+                                        )}
+                                    </div>
+                                    <div className="flex justify-end items-center">
+                                        <button
+                                            type="button"
+                                            onClick={addSelectedRecipients}
+                                            disabled={selectedCrmNumbers.length === 0}
+                                            className="px-3 py-2 text-xs font-bold bg-emerald-600 text-white rounded-lg disabled:opacity-50"
+                                        >
+                                            Add Selected
+                                        </button>
+                                    </div>
                                     <textarea
                                         value={whatsAppRecipients}
                                         onChange={(e) => setWhatsAppRecipients(e.target.value)}
@@ -1352,6 +1524,36 @@ ${prompt}
                                     Free-form text is delivered only within the 24-hour customer care window.
                                     Use approved templates for outbound campaigns.
                                 </div>
+                                {whatsAppDraft.mode === "schedule" && (
+                                    <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Schedule Send</label>
+                                        <div className="flex items-center gap-2">
+                                            <div
+                                                className="flex-1"
+                                                onClick={() => {
+                                                    whatsAppScheduleInputRef.current?.focus();
+                                                    (whatsAppScheduleInputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null)?.showPicker?.();
+                                                }}
+                                            >
+                                                <input
+                                                    ref={whatsAppScheduleInputRef}
+                                                    type="datetime-local"
+                                                    value={whatsAppScheduleDateTime}
+                                                    onChange={(e) => setWhatsAppScheduleDateTime(e.target.value)}
+                                                    min={toDateTimeLocalValue(new Date())}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer bg-white"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={handleWhatsAppSchedule}
+                                                disabled={isWhatsAppScheduling}
+                                                className="px-3 py-2 text-xs font-bold bg-emerald-600 text-white rounded-lg disabled:opacity-60"
+                                            >
+                                                {isWhatsAppScheduling ? "Scheduling..." : "Schedule WhatsApp"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="mt-6 flex justify-end gap-2">
@@ -1360,18 +1562,20 @@ ${prompt}
                                         setIsWhatsAppOpen(false);
                                         setWhatsAppDraft(null);
                                     }}
-                                    disabled={isWhatsAppSending}
+                                    disabled={isWhatsAppSending || isWhatsAppScheduling}
                                     className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-60"
                                 >
                                     Cancel
                                 </button>
-                                <button
-                                    onClick={handleWhatsAppSend}
-                                    disabled={isWhatsAppSending}
-                                    className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-60"
-                                >
-                                    {isWhatsAppSending ? "Sending..." : "Send WhatsApp"}
-                                </button>
+                                {whatsAppDraft.mode !== "schedule" && (
+                                    <button
+                                        onClick={handleWhatsAppSend}
+                                        disabled={isWhatsAppSending || isWhatsAppScheduling}
+                                        className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-60"
+                                    >
+                                        {isWhatsAppSending ? "Sending..." : "Send WhatsApp"}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -1659,7 +1863,20 @@ ${prompt}
                                                                     return;
                                                                 }
                                                                 if ((response.platform || "").toLowerCase() === "whatsapp") {
-                                                                    toast.error("WhatsApp scheduling is not supported yet.");
+                                                                    let contentIdForWhatsApp = response.contentId ?? null;
+                                                                    if (!contentIdForWhatsApp && response.outputType !== "image") {
+                                                                        contentIdForWhatsApp = await ensureContentIdForPosting(response, idx);
+                                                                    }
+                                                                    openWhatsAppModal({
+                                                                        title: response.title,
+                                                                        text: response.result,
+                                                                        contentId: contentIdForWhatsApp,
+                                                                        brandId: response.brandId ?? selectedBrandId ?? null,
+                                                                        imageUrl: response.outputType === "image"
+                                                                            ? response.result
+                                                                            : response.imageUrl || undefined,
+                                                                        mode: "schedule",
+                                                                    });
                                                                     return;
                                                                 }
                                                                 try {
@@ -1708,6 +1925,7 @@ ${prompt}
                                                                             imageUrl: response.outputType === "image"
                                                                                 ? response.result
                                                                                 : response.imageUrl || undefined,
+                                                                            mode: "send",
                                                                         });
                                                                         return;
                                                                     }

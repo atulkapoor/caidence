@@ -204,6 +204,15 @@ def require_analytics_read(current_user: User = Depends(require_permission("read
 def require_crm_read(current_user: User = Depends(require_permission("read", "crm"))) -> User:
     return current_user
 
+def require_crm_create(current_user: User = Depends(require_permission("create", "crm"))) -> User:
+    return current_user
+
+def require_crm_update(current_user: User = Depends(require_permission("update", "crm"))) -> User:
+    return current_user
+
+def require_crm_delete(current_user: User = Depends(require_permission("delete", "crm"))) -> User:
+    return current_user
+
 def require_crm_write(current_user: User = Depends(require_permission("write", "crm"))) -> User:
     return current_user
 

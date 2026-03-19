@@ -85,6 +85,7 @@ export interface SchedulePostPayload {
     scheduled_at: string;
     title?: string;
     image_url?: string;
+    to_numbers?: string[];
     content_id?: number;
     design_asset_id?: number;
     campaign_id?: number;
@@ -101,6 +102,7 @@ export interface ScheduledPost {
     platform: string;
     message: string;
     image_url?: string | null;
+    to_numbers?: string[] | null;
     status: string;
     scheduled_at: string;
     published_at?: string | null;
