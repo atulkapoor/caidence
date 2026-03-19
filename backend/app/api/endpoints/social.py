@@ -59,6 +59,18 @@ class SelectInstagramAccountRequest(BaseModel):
     instagram_business_id: str
 
 
+class WhatsAppPhoneResponse(BaseModel):
+    phone_number_id: str
+    display_phone_number: str | None = None
+    verified_name: str | None = None
+    waba_id: str | None = None
+    waba_name: str | None = None
+
+
+class SelectWhatsAppPhoneRequest(BaseModel):
+    phone_number_id: str
+
+
 class PublishPostRequest(BaseModel):
     message: str
     image_url: Optional[str] = None
@@ -95,6 +107,23 @@ class LinkedInPublishRequest(BaseModel):
     image_data_url: Optional[str] = None
     design_asset_id: Optional[int] = None
     content_id: Optional[int] = None
+    brand_id: Optional[int] = None
+
+
+class WhatsAppTemplateRequest(BaseModel):
+    name: str
+    language: dict
+    components: Optional[list[dict]] = None
+
+
+class WhatsAppPublishRequest(BaseModel):
+    to_numbers: list[str]
+    message: Optional[str] = None
+    image_url: Optional[str] = None
+    image_data_url: Optional[str] = None
+    design_asset_id: Optional[int] = None
+    content_id: Optional[int] = None
+    template: Optional[WhatsAppTemplateRequest] = None
     brand_id: Optional[int] = None
 
 
@@ -285,6 +314,60 @@ async def select_instagram_account(
     }
 
 
+@router.post("/whatsapp/select-phone")
+async def select_whatsapp_phone(
+    payload: SelectWhatsAppPhoneRequest,
+    current_user: User = Depends(get_current_authenticated_user),
+    brand_id: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Select the WhatsApp phone number used for messaging."""
+    connection = await SocialAuthService.get_connection("whatsapp", current_user.id, db, brand_id=brand_id)
+    if not connection:
+        raise HTTPException(status_code=400, detail="WhatsApp is not connected")
+
+    raw_payload: dict = {}
+    if connection.raw_profile_json:
+        try:
+            raw_payload = json.loads(connection.raw_profile_json)
+        except Exception:
+            raw_payload = {}
+
+    phones = raw_payload.get("whatsapp_phone_numbers", [])
+    if not isinstance(phones, list) or not phones:
+        raise HTTPException(status_code=400, detail="No WhatsApp phone numbers available for this account")
+
+    selected_phone = next(
+        (p for p in phones if str(p.get("phone_number_id")) == payload.phone_number_id),
+        None,
+    )
+    if not selected_phone:
+        raise HTTPException(status_code=404, detail="WhatsApp phone number not found")
+
+    raw_payload["selected_whatsapp_phone"] = selected_phone
+    connection.platform_user_id = str(selected_phone.get("phone_number_id") or "")
+    connection.platform_username = str(selected_phone.get("display_phone_number") or "")
+    connection.platform_display_name = (
+        str(selected_phone.get("verified_name") or "")
+        or str(selected_phone.get("display_phone_number") or "")
+        or "WhatsApp"
+    )
+    connection.raw_profile_json = json.dumps(raw_payload)
+    await db.commit()
+    await db.refresh(connection)
+
+    return {
+        "platform": "whatsapp",
+        "selected_phone": WhatsAppPhoneResponse(
+            phone_number_id=str(selected_phone.get("phone_number_id") or ""),
+            display_phone_number=str(selected_phone.get("display_phone_number") or "") or None,
+            verified_name=str(selected_phone.get("verified_name") or "") or None,
+            waba_id=str(selected_phone.get("waba_id") or "") or None,
+            waba_name=str(selected_phone.get("waba_name") or "") or None,
+        ),
+    }
+
+
 @router.get("/connections", response_model=list[SocialConnectionResponse])
 async def list_connections(
     brand_id: int | None = Query(default=None),
@@ -452,6 +535,102 @@ async def publish_linkedin(
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"LinkedIn publish unexpected error: {exc}")
+
+
+@router.post("/publish/whatsapp")
+async def publish_whatsapp(
+    payload: WhatsAppPublishRequest,
+    current_user: User = Depends(get_current_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send WhatsApp messages to multiple recipients using Cloud API.
+    - text only: pass `message`
+    - text + public image URL: pass `image_url`
+    - text + base64 image: pass `image_data_url` or `design_asset_id`
+    - template: pass `template` (name + language + optional components)
+    """
+    if not payload.to_numbers:
+        raise HTTPException(status_code=400, detail="WhatsApp recipients list is required")
+
+    image_bytes: Optional[bytes] = None
+    if payload.design_asset_id:
+        design_row = await db.execute(
+            select(DesignAsset).where(
+                DesignAsset.id == payload.design_asset_id,
+                DesignAsset.user_id == current_user.id,
+            )
+        )
+        asset = design_row.scalar_one_or_none()
+        if not asset:
+            raise HTTPException(status_code=404, detail="Design asset not found")
+        if not asset.image_url:
+            raise HTTPException(status_code=400, detail="Design asset has no image data")
+        try:
+            image_bytes = _decode_base64_data(asset.image_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid stored image data: {exc}")
+    elif payload.image_data_url:
+        try:
+            image_bytes = _decode_base64_data(payload.image_data_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid image data: {exc}")
+
+    effective_message = (payload.message or "").strip()
+    if payload.content_id and not effective_message:
+        content_row = await db.execute(
+            select(ContentGeneration).where(
+                ContentGeneration.id == payload.content_id,
+                ContentGeneration.user_id == current_user.id,
+            )
+        )
+        content_item = content_row.scalar_one_or_none()
+        if content_item:
+            effective_message = (content_item.result or "").strip()
+
+    effective_brand_id = payload.brand_id
+    if effective_brand_id is None and payload.content_id:
+        content_row = await db.execute(
+            select(ContentGeneration).where(
+                ContentGeneration.id == payload.content_id,
+                ContentGeneration.user_id == current_user.id,
+            )
+        )
+        content_item = content_row.scalar_one_or_none()
+        if content_item:
+            effective_brand_id = content_item.brand_id
+    if effective_brand_id is None and payload.design_asset_id:
+        design_row = await db.execute(
+            select(DesignAsset).where(
+                DesignAsset.id == payload.design_asset_id,
+                DesignAsset.user_id == current_user.id,
+            )
+        )
+        design_item = design_row.scalar_one_or_none()
+        if design_item:
+            effective_brand_id = design_item.brand_id
+
+    if payload.template:
+        template_payload = payload.template.model_dump()
+    else:
+        template_payload = None
+
+    try:
+        data = await SocialAuthService.publish_whatsapp_messages(
+            user_id=current_user.id,
+            db=db,
+            to_numbers=payload.to_numbers,
+            message=effective_message or None,
+            template=template_payload,
+            image_url=payload.image_url,
+            image_bytes=image_bytes,
+            brand_id=effective_brand_id,
+        )
+        return data
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"WhatsApp publish unexpected error: {exc}")
 
 
 @router.post("/publish/{platform}", response_model=PublishPostResponse)

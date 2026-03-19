@@ -5,7 +5,7 @@ import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { generateDesign, fetchDesignAssetsPage, DesignAsset, enhanceDescription, fetchBrands, type Brand } from "@/lib/api";
 import { saveDesign } from "@/lib/api/design";
-import { getConnectionStatus, publishSocialPost, publishToLinkedIn, scheduleSocialPost } from "@/lib/api/social";
+import { getConnectionStatus, publishSocialPost, publishToLinkedIn, publishToWhatsApp, scheduleSocialPost } from "@/lib/api/social";
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useTabState } from "@/hooks/useTabState";
 import { useModalScroll } from "@/hooks/useModalScroll";
@@ -13,7 +13,7 @@ import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalend
 import { usePermissionContext } from "@/contexts/PermissionContext";
 // import Link from "next/link"; // Unused
 import { toast } from "sonner";
-import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send, Save, Plus, Linkedin, Twitter, FileText, Mail, Facebook, Instagram } from "lucide-react";
+import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send, Save, Plus, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, MessageCircle } from "lucide-react";
 
 function DesignStudioContent() {
     const { hasPermission } = usePermissionContext();
@@ -74,6 +74,16 @@ function DesignStudioContent() {
         designAssetId?: number;
         brandId?: number | null;
     } | null>(null);
+    const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
+    const [whatsAppRecipients, setWhatsAppRecipients] = useState("");
+    const [isWhatsAppSending, setIsWhatsAppSending] = useState(false);
+    const [whatsAppDraft, setWhatsAppDraft] = useState<{
+        title: string;
+        text: string;
+        imageUrl?: string;
+        designAssetId?: number;
+        brandId?: number | null;
+    } | null>(null);
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
@@ -83,7 +93,7 @@ function DesignStudioContent() {
     const [libraryPage, setLibraryPage] = useState(1);
     const [totalLibraryItems, setTotalLibraryItems] = useState(0);
     const scheduleInputRef = useRef<HTMLInputElement | null>(null);
-    useModalScroll(!!previewDesign || isScheduleOpen);
+    useModalScroll(!!previewDesign || isScheduleOpen || isWhatsAppOpen);
     const LIBRARY_PAGE_SIZE = 12;
 
     const totalLibraryPages = Math.max(1, Math.ceil(totalLibraryItems / LIBRARY_PAGE_SIZE));
@@ -94,6 +104,7 @@ function DesignStudioContent() {
         { id: "Email", icon: Mail, color: "text-purple-500", bg: "bg-purple-50", border: "border-purple-200" },
         { id: "Facebook", icon: Facebook, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
         { id: "Instagram", icon: Instagram, color: "text-pink-600", bg: "bg-pink-50", border: "border-pink-200" },
+        { id: "WhatsApp", icon: MessageCircle, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
     ];
     const supportedPublishPlatforms = new Set(["linkedin", "facebook", "instagram"]);
     const primarySelectedPlatform = selectedPlatforms[0] || "LinkedIn";
@@ -101,7 +112,7 @@ function DesignStudioContent() {
         (isGenerating || Boolean(generatedDesignPreview)) && generatedPlatforms.length > 0
             ? generatedPlatforms
             : [primarySelectedPlatform];
-    const knownPlatforms = ["LinkedIn", "Twitter", "Blog", "Email", "Facebook", "Instagram"];
+    const knownPlatforms = ["LinkedIn", "Twitter", "Blog", "Email", "Facebook", "Instagram", "WhatsApp"];
     const getBrandName = (brandId?: number | null) =>
         availableBrands.find((brand) => brand.id === brandId)?.name || null;
 
@@ -145,6 +156,25 @@ function DesignStudioContent() {
             if (suffixRegex.test(titleValue)) return platform;
         }
         return null;
+    };
+
+    const openWhatsAppModal = (draft: {
+        title: string;
+        text: string;
+        imageUrl?: string;
+        designAssetId?: number;
+        brandId?: number | null;
+    }) => {
+        setWhatsAppDraft(draft);
+        setWhatsAppRecipients("");
+        setIsWhatsAppOpen(true);
+    };
+
+    const parseRecipients = (raw: string): string[] => {
+        return raw
+            .split(/[\n,;]+/g)
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0);
     };
 
     const resetGeneratorState = () => {
@@ -636,6 +666,16 @@ function DesignStudioContent() {
         }
 
         const platformKey = platform.toLowerCase();
+        if (platformKey === "whatsapp") {
+            openWhatsAppModal({
+                title: normalizedText || "WhatsApp",
+                text: normalizedText,
+                imageUrl,
+                designAssetId,
+                brandId: brandId ?? null,
+            });
+            return;
+        }
         if (!supportedPublishPlatforms.has(platformKey)) {
             toast.error(`Direct publishing currently supports LinkedIn, Facebook, and Instagram only. "${platform}" is not supported yet.`);
             return;
@@ -690,6 +730,77 @@ function DesignStudioContent() {
             toast.success(`Posted to ${publishResult.target_name || platform}`, { id: toastId });
         } catch (error: any) {
             toast.error(error?.message || `Failed to post to ${platform}`, { id: toastId });
+        }
+    };
+
+    const handleWhatsAppSend = async () => {
+        if (!whatsAppDraft) return;
+        if (isDesignReadOnly) {
+            toast.error("Read-only access: sending is disabled");
+            return;
+        }
+
+        const recipients = parseRecipients(whatsAppRecipients);
+        if (recipients.length === 0) {
+            toast.error("Add at least one WhatsApp number");
+            return;
+        }
+
+        const status = await getConnectionStatus("whatsapp", whatsAppDraft.brandId ?? undefined);
+        if (!status.connected) {
+            const brandName = whatsAppDraft.brandId ? getBrandName(whatsAppDraft.brandId) : null;
+            toast.error(
+                brandName
+                    ? `Connect WhatsApp for ${brandName} before sending`
+                    : "Connect WhatsApp in Onboarding/Settings before sending"
+            );
+            return;
+        }
+
+        setIsWhatsAppSending(true);
+        const toastId = toast.loading(`Sending WhatsApp message to ${recipients.length} recipient(s)...`);
+        try {
+            const isDataUrl = typeof whatsAppDraft.imageUrl === "string" && whatsAppDraft.imageUrl.startsWith("data:");
+            const imageUrl = whatsAppDraft.imageUrl && /^https?:\/\//i.test(whatsAppDraft.imageUrl)
+                ? whatsAppDraft.imageUrl
+                : undefined;
+            const imageDataUrl = isDataUrl ? whatsAppDraft.imageUrl : undefined;
+
+            const result = await publishToWhatsApp({
+                to_numbers: recipients,
+                message: whatsAppDraft.text,
+                design_asset_id: whatsAppDraft.designAssetId,
+                brand_id: whatsAppDraft.brandId ?? undefined,
+                image_url: imageUrl,
+                image_data_url: imageDataUrl,
+            });
+
+            const successes = result.results.filter((item) => item.status === "sent").length;
+            const failures = result.results.length - successes;
+            if (failures > 0) {
+                toast.error(`Sent ${successes}/${result.results.length}. Some numbers failed.`, { id: toastId });
+            } else {
+                toast.success(`WhatsApp sent to ${successes} recipient(s).`, { id: toastId });
+            }
+
+            if (whatsAppDraft.designAssetId) {
+                setPostedDesignIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(whatsAppDraft.designAssetId as number);
+                    return next;
+                });
+                setPostedDesignPlatformKeys((prev) => {
+                    const next = new Set(prev);
+                    next.add(makeDesignPlatformKey(whatsAppDraft.designAssetId, "WhatsApp"));
+                    return next;
+                });
+            }
+            setIsWhatsAppOpen(false);
+            setWhatsAppDraft(null);
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to send WhatsApp message", { id: toastId });
+        } finally {
+            setIsWhatsAppSending(false);
         }
     };
 
@@ -778,7 +889,7 @@ function DesignStudioContent() {
                                         const actionKey = makeDesignPlatformKey(previewDesign.id, platform);
                                         const isAssetPosted = Boolean(previewDesign.is_posted) || postedDesignIds.has(previewDesign.id || 0);
                                         const isPostedForPlatform = postedDesignPlatformKeys.has(actionKey);
-                                        const unsupported = !supportedPublishPlatforms.has(platformKey);
+                                        const unsupported = !supportedPublishPlatforms.has(platformKey) && platformKey !== "whatsapp";
 
                                         return (
                                             <div key={`${previewDesign.id || "preview"}:${platform}`} className="space-y-2">
@@ -789,7 +900,9 @@ function DesignStudioContent() {
                                                             return;
                                                         }
                                                         try {
-                                                            setPostingDesignPlatform(actionKey);
+                                                            if (platformKey !== "whatsapp") {
+                                                                setPostingDesignPlatform(actionKey);
+                                                            }
                                                             await handleDesignPost({
                                                                 platform,
                                                                 text: previewDesign.title || "New design",
@@ -801,7 +914,7 @@ function DesignStudioContent() {
                                                             setPostingDesignPlatform(null);
                                                         }
                                                     }}
-                                                    disabled={isDesignReadOnly || unsupported || postingDesignPlatform === actionKey || isPostedForPlatform || isAssetPosted}
+                                                    disabled={isDesignReadOnly || unsupported || (platformKey !== "whatsapp" && postingDesignPlatform === actionKey) || isPostedForPlatform || isAssetPosted}
                                                     className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${(isPostedForPlatform || isAssetPosted)
                                                         ? "bg-emerald-100 text-emerald-700 cursor-default"
                                                         : "bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
@@ -815,15 +928,19 @@ function DesignStudioContent() {
                                                             : `Post to ${platform}`}
                                                 </button>
                                                 <button
-                                                    onClick={() =>
+                                                    onClick={() => {
+                                                        if (platformKey === "whatsapp") {
+                                                            toast.error("WhatsApp scheduling is not supported yet.");
+                                                            return;
+                                                        }
                                                         openDesignScheduleModal({
                                                             title: previewDesign.title || "New design",
                                                             platform,
                                                             imageUrl: previewDesign.image_url,
                                                             designAssetId: previewDesign.id || undefined,
                                                             brandId: previewDesign.brand_id ?? null,
-                                                        })
-                                                    }
+                                                        });
+                                                    }}
                                                     disabled={isDesignReadOnly || unsupported || isPostedForPlatform || isAssetPosted}
                                                     className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                                                 >
@@ -889,6 +1006,69 @@ function DesignStudioContent() {
                                     className="px-4 py-2 text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg disabled:opacity-60"
                                 >
                                     {isScheduling ? "Scheduling..." : "Schedule Post"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {isWhatsAppOpen && whatsAppDraft && (
+                    <div
+                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+                        onClick={() => {
+                            if (!isWhatsAppSending) {
+                                setIsWhatsAppOpen(false);
+                                setWhatsAppDraft(null);
+                            }
+                        }}
+                    >
+                        <div
+                            className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-200"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <h3 className="text-lg font-bold text-slate-900 mb-1">Send WhatsApp Image</h3>
+                            <p className="text-sm text-slate-500 mb-4">
+                                {whatsAppDraft.title || "Design"}
+                            </p>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                                        Recipients (E.164)
+                                    </label>
+                                    <textarea
+                                        value={whatsAppRecipients}
+                                        onChange={(e) => setWhatsAppRecipients(e.target.value)}
+                                        placeholder="+919876543210, +919812345678"
+                                        className="w-full min-h-[90px] p-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-2">
+                                        Use commas or new lines. In Meta Dev mode, only approved test numbers will receive messages.
+                                    </p>
+                                </div>
+                                <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-lg p-3">
+                                    Free-form captions are delivered only within the 24-hour customer care window.
+                                    Use approved templates for outbound campaigns.
+                                </div>
+                            </div>
+
+                            <div className="mt-6 flex justify-end gap-2">
+                                <button
+                                    onClick={() => {
+                                        setIsWhatsAppOpen(false);
+                                        setWhatsAppDraft(null);
+                                    }}
+                                    disabled={isWhatsAppSending}
+                                    className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-60"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleWhatsAppSend}
+                                    disabled={isWhatsAppSending}
+                                    className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-60"
+                                >
+                                    {isWhatsAppSending ? "Sending..." : "Send WhatsApp"}
                                 </button>
                             </div>
                         </div>
@@ -1198,8 +1378,17 @@ function DesignStudioContent() {
                                                     <button
                                                         onClick={async () => {
                                                             try {
-                                                                if (!supportedPublishPlatforms.has(primarySelectedPlatform.toLowerCase())) {
+                                                                const normalizedPrimary = primarySelectedPlatform.toLowerCase();
+                                                                if (!supportedPublishPlatforms.has(normalizedPrimary) && normalizedPrimary !== "whatsapp") {
                                                                     toast.error(`Direct publishing is not supported for ${primarySelectedPlatform} yet.`);
+                                                                    return;
+                                                                }
+                                                                if (normalizedPrimary === "whatsapp") {
+                                                                    openWhatsAppModal({
+                                                                        title: primarySelectedPlatform,
+                                                                        text: generatedContent,
+                                                                        brandId: selectedBrandId ?? null,
+                                                                    });
                                                                     return;
                                                                 }
                                                                 setPostingGeneratedText(true);
@@ -1236,123 +1425,124 @@ function DesignStudioContent() {
                             </div>
 
                             {/* RIGHT PANEL: Previews */}
-                            <div className="lg:col-span-7 h-full bg-slate-100 p-6 sm:p-8 overflow-y-auto custom-scrollbar">
-                                <div className="max-w-3xl mx-auto space-y-6">
-                                    <div className="flex items-center justify-between">
-                                        <button
-                                            onClick={resetGeneratorState}
-                                            className="text-sm font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 hover:bg-white px-3 py-1.5 rounded-lg transition-all"
-                                        >
-                                            <Plus className="w-4 h-4" /> New Design
-                                        </button>
-                                        <button
-                                            onClick={handleSaveAllGeneratedDesigns}
-                                            disabled={!generatedDesignPreview?.image_url || !(canDesignCreate || canEditExistingDesign)}
-                                            className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-50"
-                                        >
-                                            <Sparkles className="w-3 h-3 text-amber-400" /> Save All
-                                        </button>
-                                    </div>
-                                    {previewPlatforms.map((platform) => {
-                                        const platformKey = platform.toLowerCase();
-                                        const platformDesignId = designAssetIdByPlatform[platformKey]
-                                            ?? (selectedPlatforms.length === 1 ? editingDesignId ?? undefined : undefined);
-                                        const actionKey = makeDesignPlatformKey(platformDesignId, platform);
-                                        const isPostedForPlatform = postedDesignPlatformKeys.has(actionKey);
-                                        const unsupported = !supportedPublishPlatforms.has(platformKey);
+                            {(isGenerating || generatedDesignPreview?.image_url) && (
+                                <div className="lg:col-span-7 h-full bg-slate-100 p-6 sm:p-8 overflow-y-auto custom-scrollbar">
+                                    <div className="max-w-3xl mx-auto space-y-6">
+                                        <div className="flex items-center justify-between">
+                                            <button
+                                                onClick={resetGeneratorState}
+                                                className="text-sm font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 hover:bg-white px-3 py-1.5 rounded-lg transition-all"
+                                            >
+                                                <Plus className="w-4 h-4" /> New Design
+                                            </button>
+                                            <button
+                                                onClick={handleSaveAllGeneratedDesigns}
+                                                disabled={!generatedDesignPreview?.image_url || !(canDesignCreate || canEditExistingDesign)}
+                                                className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-50"
+                                            >
+                                                <Sparkles className="w-3 h-3 text-amber-400" /> Save All
+                                            </button>
+                                        </div>
+                                        {previewPlatforms.map((platform) => {
+                                            const platformKey = platform.toLowerCase();
+                                            const platformDesignId = designAssetIdByPlatform[platformKey]
+                                                ?? (selectedPlatforms.length === 1 ? editingDesignId ?? undefined : undefined);
+                                            const actionKey = makeDesignPlatformKey(platformDesignId, platform);
+                                            const isPostedForPlatform = postedDesignPlatformKeys.has(actionKey);
+                                            const unsupported = !supportedPublishPlatforms.has(platformKey) && platformKey !== "whatsapp";
 
-                                        return (
-                                            <div key={`generate-preview:${platform}`} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <div className="min-w-0">
-                                                        <p className="text-sm font-bold text-slate-900 truncate">{generatedDesignPreview?.title || title || "Untitled Design"}</p>
-                                                        <p className="text-xs text-slate-500 font-medium">{platform}</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={async () => {
-                                                                if (!generatedDesignPreview?.image_url) return;
-                                                                if (unsupported) {
-                                                                    toast.error(`Direct publishing is not supported for ${platform} yet.`);
-                                                                    return;
-                                                                }
-                                                                try {
+                                            return (
+                                                <div key={`generate-preview:${platform}`} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-bold text-slate-900 truncate">{generatedDesignPreview?.title || title || "Untitled Design"}</p>
+                                                            <p className="text-xs text-slate-500 font-medium">{platform}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (!generatedDesignPreview?.image_url) return;
+                                                                    if (unsupported) {
+                                                                        toast.error(`Direct publishing is not supported for ${platform} yet.`);
+                                                                        return;
+                                                                    }
+                                                                    try {
+                                                                        const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(platform, platformDesignId);
+                                                                        if (!designAssetId) return;
+                                                                        if (platformKey !== "whatsapp") {
+                                                                            setPostingPreviewPlatform(platformKey);
+                                                                        }
+                                                                        await handleDesignPost({
+                                                                            platform,
+                                                                            text: generatedDesignPreview.title || title || "New design",
+                                                                            imageUrl: generatedDesignPreview.image_url,
+                                                                            designAssetId,
+                                                                            brandId: generatedDesignPreview.brand_id ?? selectedBrandId ?? null,
+                                                                        });
+                                                                    } finally {
+                                                                        setPostingPreviewPlatform(null);
+                                                                    }
+                                                                }}
+                                                                disabled={isDesignReadOnly || unsupported || (platformKey !== "whatsapp" && postingPreviewPlatform === platformKey) || isPostedForPlatform || !generatedDesignPreview?.image_url}
+                                                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                                                            >
+                                                                <span className="inline-flex items-center gap-1"><Send className="w-3.5 h-3.5" /> {postingPreviewPlatform === platformKey ? "Posting..." : isPostedForPlatform ? "Posted" : "Post"}</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (!generatedDesignPreview?.image_url) return;
+                                                                    if (platformKey === "whatsapp") {
+                                                                        toast.error("WhatsApp scheduling is not supported yet.");
+                                                                        return;
+                                                                    }
                                                                     const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(platform, platformDesignId);
                                                                     if (!designAssetId) return;
-                                                                    setPostingPreviewPlatform(platformKey);
-                                                                    await handleDesignPost({
+                                                                    openDesignScheduleModal({
+                                                                        title: generatedDesignPreview.title || title || "New design",
                                                                         platform,
-                                                                        text: generatedDesignPreview.title || title || "New design",
                                                                         imageUrl: generatedDesignPreview.image_url,
                                                                         designAssetId,
                                                                         brandId: generatedDesignPreview.brand_id ?? selectedBrandId ?? null,
                                                                     });
-                                                                } finally {
-                                                                    setPostingPreviewPlatform(null);
-                                                                }
-                                                            }}
-                                                            disabled={isDesignReadOnly || unsupported || postingPreviewPlatform === platformKey || isPostedForPlatform || !generatedDesignPreview?.image_url}
-                                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
-                                                        >
-                                                            <span className="inline-flex items-center gap-1"><Send className="w-3.5 h-3.5" /> {postingPreviewPlatform === platformKey ? "Posting..." : isPostedForPlatform ? "Posted" : "Post"}</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={async () => {
-                                                                if (!generatedDesignPreview?.image_url) return;
-                                                                const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(platform, platformDesignId);
-                                                                if (!designAssetId) return;
-                                                                openDesignScheduleModal({
-                                                                    title: generatedDesignPreview.title || title || "New design",
-                                                                    platform,
-                                                                    imageUrl: generatedDesignPreview.image_url,
-                                                                    designAssetId,
-                                                                    brandId: generatedDesignPreview.brand_id ?? selectedBrandId ?? null,
-                                                                });
-                                                            }}
-                                                            disabled={isDesignReadOnly || unsupported || !generatedDesignPreview?.image_url}
-                                                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
-                                                        >
-                                                            <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleSaveGeneratedDesign(platform)}
-                                                            disabled={savingDesignPlatform === platformKey || isGenerating || !generatedDesignPreview?.image_url || (!canEditExistingDesign && platformDesignId !== undefined) || (!canDesignCreate && platformDesignId === undefined)}
-                                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            <span className="inline-flex items-center gap-1">
-                                                                {savingDesignPlatform === platformKey ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                                                                {savingDesignPlatform === platformKey ? "Saving..." : platformDesignId ? "Update" : "Save"}
-                                                            </span>
-                                                        </button>
+                                                                }}
+                                                                disabled={isDesignReadOnly || unsupported || !generatedDesignPreview?.image_url}
+                                                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                                                            >
+                                                                <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleSaveGeneratedDesign(platform)}
+                                                                disabled={savingDesignPlatform === platformKey || isGenerating || !generatedDesignPreview?.image_url || (!canEditExistingDesign && platformDesignId !== undefined) || (!canDesignCreate && platformDesignId === undefined)}
+                                                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    {savingDesignPlatform === platformKey ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                                                    {savingDesignPlatform === platformKey ? "Saving..." : platformDesignId ? "Update" : "Save"}
+                                                                </span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="relative rounded-xl border border-slate-200 bg-slate-50 min-h-[420px] flex items-center justify-center overflow-hidden">
+                                                        {isGenerating ? (
+                                                            <div className="flex flex-col items-center gap-3 text-slate-500">
+                                                                <div className="w-10 h-10 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin"></div>
+                                                                <p className="text-xs font-semibold uppercase tracking-wider">Generating Preview...</p>
+                                                            </div>
+                                                        ) : generatedDesignPreview?.image_url ? (
+                                                            <img
+                                                                src={generatedDesignPreview.image_url}
+                                                                alt={`${generatedDesignPreview.title || "Generated design preview"} - ${platform}`}
+                                                                className="w-full h-full object-contain"
+                                                            />
+                                                        ) : null}
                                                     </div>
                                                 </div>
-
-                                                <div className="relative rounded-xl border border-slate-200 bg-slate-50 min-h-[420px] flex items-center justify-center overflow-hidden">
-                                                    {isGenerating ? (
-                                                        <div className="flex flex-col items-center gap-3 text-slate-500">
-                                                            <div className="w-10 h-10 border-4 border-slate-200 border-t-rose-500 rounded-full animate-spin"></div>
-                                                            <p className="text-xs font-semibold uppercase tracking-wider">Generating Preview...</p>
-                                                        </div>
-                                                    ) : generatedDesignPreview?.image_url ? (
-                                                        <img
-                                                            src={generatedDesignPreview.image_url}
-                                                            alt={`${generatedDesignPreview.title || "Generated design preview"} - ${platform}`}
-                                                            className="w-full h-full object-contain"
-                                                        />
-                                                    ) : (
-                                                        <div className="text-center p-6">
-                                                            <ImageIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                                                            <p className="text-sm font-medium text-slate-500">
-                                                                Generate a design to preview it here before saving.
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     )}
 
@@ -1479,8 +1669,8 @@ function DesignStudioContent() {
                                                 <div className="mt-auto">
                                                     <div className="w-full h-px bg-slate-100"></div>
 
-                                                    <div className="grid grid-cols-[1fr_15px] items-center mt-3">
-                                                        <div className="flex items-center">
+                                                    <div className="grid grid-cols-[1fr_24px] items-center gap-1 mt-3">
+                                                        <div className="flex items-center gap-0.2">
                                                             {isLocked ? (
                                                                 <span className="inline-flex items-center gap-1 text-xs opacity-0 select-none w-[72px]">
                                                                     <Wand2 className="w-3 h-3" /> Remix
@@ -1509,12 +1699,15 @@ function DesignStudioContent() {
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
                                                                     if (isAssetPosted) return;
-                                                                    if (!supportedPublishPlatforms.has(platformKey)) {
+                                                                    const unsupported = !supportedPublishPlatforms.has(platformKey) && platformKey !== "whatsapp";
+                                                                    if (unsupported) {
                                                                         toast.error(`Direct publishing is not supported for ${platform} yet.`);
                                                                         return;
                                                                     }
                                                                     try {
-                                                                        setPostingDesignPlatform(actionKey);
+                                                                        if (platformKey !== "whatsapp") {
+                                                                            setPostingDesignPlatform(actionKey);
+                                                                        }
                                                                         await handleDesignPost({
                                                                             platform,
                                                                             text: asset.title || "New design",
@@ -1529,8 +1722,8 @@ function DesignStudioContent() {
                                                                 }}
                                                                 disabled={
                                                                     isDesignReadOnly
-                                                                    || !supportedPublishPlatforms.has(platformKey)
-                                                                    || postingDesignPlatform === actionKey
+                                                                    || (!supportedPublishPlatforms.has(platformKey) && platformKey !== "whatsapp")
+                                                                    || (platformKey !== "whatsapp" && postingDesignPlatform === actionKey)
                                                                     || isPostedForPlatform
                                                                     || isAssetPosted
                                                                 }
@@ -1563,80 +1756,6 @@ function DesignStudioContent() {
                                                             </button>
                                                         )}
                                                     </div>
-
-                                                    {/* Pinned Action - View Details */}
-                                                    <div className="justify-self-center flex items-center gap-4">
-                                                        <button
-                                                            onClick={() => setPreviewDesign(asset)}
-                                                            className="text-slate-500 hover:text-slate-700 transition-colors flex items-center gap-1 text-xs font-semibold"
-                                                        >
-                                                            View <ArrowRight className="w-3 h-3" />
-                                                        </button>
-
-                                                        <button
-                                                            onClick={async (e) => {
-                                                                e.stopPropagation();
-                                                                const platform = resolveAssetPlatform(asset);
-                                                                const platformKey = platform.toLowerCase();
-                                                                const isAssetPosted = Boolean(asset.is_posted) || postedDesignIds.has(asset.id || 0);
-                                                                const actionKey = makeDesignPlatformKey(asset.id, platform);
-                                                                if (isAssetPosted) return;
-                                                                if (!supportedPublishPlatforms.has(platformKey)) {
-                                                                    toast.error(`Direct publishing is not supported for ${platform} yet.`);
-                                                                    return;
-                                                                }
-                                                                try {
-                                                                    setPostingDesignPlatform(actionKey);
-                                                                    await handleDesignPost({
-                                                                        platform,
-                                                                        text: asset.title || "New design",
-                                                                        imageUrl: asset.image_url,
-                                                                        designAssetId: asset.id || undefined,
-                                                                        brandId: asset.brand_id ?? null,
-                                                                    });
-                                                                } catch (error: any) {
-                                                                    toast.error(error?.message || `Failed to post to ${platform}`);
-                                                                } finally {
-                                                                    setPostingDesignPlatform(null);
-                                                                }
-                                                            }}
-                                                            disabled={
-                                                                isDesignReadOnly
-                                                                || 
-                                                                !supportedPublishPlatforms.has(resolveAssetPlatform(asset).toLowerCase())
-                                                                || postingDesignPlatform === makeDesignPlatformKey(asset.id, resolveAssetPlatform(asset))
-                                                                || postedDesignPlatformKeys.has(makeDesignPlatformKey(asset.id, resolveAssetPlatform(asset)))
-                                                                || Boolean(asset.is_posted)
-                                                                || postedDesignIds.has(asset.id || 0)
-                                                            }
-                                                            className={`transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${(postedDesignPlatformKeys.has(makeDesignPlatformKey(asset.id, resolveAssetPlatform(asset))) || Boolean(asset.is_posted) || postedDesignIds.has(asset.id || 0))
-                                                                ? "px-3 py-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700"
-                                                                : "text-emerald-600 hover:text-emerald-700"
-                                                                }`}
-                                                        >
-                                                            <Send className="w-3 h-3" /> {(postedDesignPlatformKeys.has(makeDesignPlatformKey(asset.id, resolveAssetPlatform(asset))) || Boolean(asset.is_posted) || postedDesignIds.has(asset.id || 0)) ? "Posted" : postingDesignPlatform === makeDesignPlatformKey(asset.id, resolveAssetPlatform(asset)) ? "Posting" : "Post"}
-                                                        </button>
-                                                    </div>
-
-                                                    {canDesignDelete && (
-                                                        <button
-                                                            onClick={async (e) => {
-                                                                e.stopPropagation();
-                                                                if (confirm("Delete this design?")) {
-                                                                    setRecentDesigns(prev => prev.filter(p => p.id !== asset.id));
-                                                                    try {
-                                                                        const { deleteDesign } = await import("@/lib/api/design");
-                                                                        await deleteDesign(asset.id);
-                                                                    } catch { /* already removed from UI */ }
-                                                                    toast.success("Design deleted");
-                                                                }
-                                                            }}
-                                                            className="justify-self-end text-slate-400 hover:text-red-500 transition-colors"
-                                                            title="Delete"
-                                                        >
-                                                            <X className="w-4 h-4" />
-                                                        </button>
-                                                    )}
                                                 </div>
                                             </div>
                                         </div>

@@ -7,11 +7,14 @@ import json
 import base64
 import secrets
 import ipaddress
+import os
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode, urlparse, unquote
 
 import httpx
+from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -67,7 +70,7 @@ PLATFORM_CONFIG: Dict[str, dict] = {
         "token_url": "https://graph.facebook.com/v18.0/oauth/access_token",
         "profile_url": "https://graph.facebook.com/v18.0/me",
         "profile_params": {"fields": "id,name"},
-        "scopes": "whatsapp_business_management,whatsapp_business_messaging",
+        "scopes": "whatsapp_business_management,whatsapp_business_messaging,business_management",
         "client_id_attr": "WHATSAPP_APP_ID",
         "client_secret_attr": "WHATSAPP_APP_SECRET",
         "username_key": "name",
@@ -86,6 +89,10 @@ PLATFORM_CONFIG: Dict[str, dict] = {
 
 VALID_PLATFORMS = list(PLATFORM_CONFIG.keys())
 
+# Ensure .env is loaded for direct env access in this module.
+_backend_root = Path(__file__).resolve().parents[2]
+load_dotenv(str(_backend_root / ".env"))
+
 # In-memory OAuth state store (use Redis in production for multi-instance deploys)
 _oauth_states: Dict[str, Dict] = {}
 
@@ -96,7 +103,10 @@ class SocialAuthService:
     @staticmethod
     def _resolve_client_id(platform: str, client_id_attr: str) -> str:
         """Resolve OAuth client id with Instagram fallback to Facebook app id."""
-        client_id = getattr(settings, client_id_attr, "")
+        if platform == "whatsapp":
+            client_id = os.getenv(client_id_attr, "")
+        else:
+            client_id = getattr(settings, client_id_attr, "")
         if platform == "instagram" and not client_id:
             client_id = settings.FACEBOOK_APP_ID
         return client_id or ""
@@ -104,7 +114,10 @@ class SocialAuthService:
     @staticmethod
     def _resolve_client_secret(platform: str, client_secret_attr: str) -> str:
         """Resolve OAuth client secret with Instagram fallback to Facebook app secret."""
-        client_secret = getattr(settings, client_secret_attr, "")
+        if platform == "whatsapp":
+            client_secret = os.getenv(client_secret_attr, "")
+        else:
+            client_secret = getattr(settings, client_secret_attr, "")
         if platform == "instagram" and not client_secret:
             client_secret = settings.FACEBOOK_APP_SECRET
         return client_secret or ""
@@ -245,6 +258,14 @@ class SocialAuthService:
                         "No Instagram Business/Creator account found on your Facebook Pages. "
                         "Connect Instagram to a Facebook Page in Meta first."
                     )
+            whatsapp_phones: list[dict[str, str]] = []
+            if platform == "whatsapp":
+                whatsapp_phones = await SocialAuthService._fetch_whatsapp_phone_numbers(client, access_token)
+                if not whatsapp_phones:
+                    raise ValueError(
+                        "No WhatsApp Business phone numbers found. "
+                        "Ensure your Meta Business has a WhatsApp Business Account with an active phone number."
+                    )
 
         username = _extract_nested(profile_data, config.get("username_key", "name"))
         platform_user_id = str(profile_data.get("id", ""))
@@ -267,22 +288,39 @@ class SocialAuthService:
             selected_instagram = instagram_accounts[0]
             platform_user_id = selected_instagram.get("instagram_business_id", "") or platform_user_id
             username = selected_instagram.get("instagram_username", "") or username
+        if platform == "whatsapp" and whatsapp_phones:
+            selected_phone = whatsapp_phones[0]
+            platform_user_id = selected_phone.get("phone_number_id", "") or platform_user_id
+            username = (
+                selected_phone.get("display_phone_number", "")
+                or selected_phone.get("verified_name", "")
+                or username
+            )
 
         # Upsert SocialConnection
         user_id = state_data["user_id"]
         brand_id = state_data.get("brand_id")
         result = await db.execute(
-            select(SocialConnection).where(
+            select(SocialConnection)
+            .where(
                 SocialConnection.user_id == user_id,
                 SocialConnection.platform == platform,
                 SocialConnection.brand_id == brand_id if brand_id is not None else SocialConnection.brand_id.is_(None),
             )
+            .order_by(SocialConnection.connected_at.desc().nullslast())
         )
-        connection = result.scalar_one_or_none()
+        matches = list(result.scalars().all())
+        connection = matches[0] if matches else None
 
         if not connection:
             connection = SocialConnection(user_id=user_id, platform=platform, brand_id=brand_id)
             db.add(connection)
+        elif len(matches) > 1:
+            # Deactivate duplicates to avoid future MultipleResultsFound errors.
+            for duplicate in matches[1:]:
+                duplicate.is_active = False
+                duplicate.access_token = None
+                duplicate.refresh_token = None
 
         connection.access_token = access_token
         connection.refresh_token = refresh_token
@@ -297,6 +335,8 @@ class SocialAuthService:
             "facebook_pages": facebook_pages if platform == "facebook" else [],
             "instagram_accounts": instagram_accounts if platform == "instagram" else [],
             "selected_instagram_account": instagram_accounts[0] if platform == "instagram" and instagram_accounts else None,
+            "whatsapp_phone_numbers": whatsapp_phones if platform == "whatsapp" else [],
+            "selected_whatsapp_phone": whatsapp_phones[0] if platform == "whatsapp" and whatsapp_phones else None,
         }
         connection.raw_profile_json = json.dumps(raw_profile_payload)
 
@@ -347,19 +387,32 @@ class SocialAuthService:
         brand_id: Optional[int] = None,
     ) -> None:
         """Revoke and deactivate a social connection."""
-        result = await db.execute(
-            select(SocialConnection).where(
-                SocialConnection.user_id == user_id,
-                SocialConnection.platform == platform,
-                SocialConnection.brand_id == brand_id if brand_id is not None else SocialConnection.brand_id.is_(None),
+        base_filters = [
+            SocialConnection.user_id == user_id,
+            SocialConnection.platform == platform,
+        ]
+
+        if brand_id is None:
+            result = await db.execute(select(SocialConnection).where(*base_filters))
+            connections = list(result.scalars().all())
+        else:
+            result = await db.execute(
+                select(SocialConnection).where(
+                    *base_filters,
+                    SocialConnection.brand_id == brand_id,
+                )
             )
-        )
-        connection = result.scalar_one_or_none()
-        if connection:
+            connection = result.scalar_one_or_none()
+            connections = [connection] if connection else []
+
+        if not connections:
+            return
+
+        for connection in connections:
             connection.is_active = False
             connection.access_token = None
             connection.refresh_token = None
-            await db.commit()
+        await db.commit()
 
     @staticmethod
     async def refresh_token(
@@ -407,6 +460,137 @@ class SocialAuthService:
             await db.commit()
             await db.refresh(connection)
             return connection
+
+    @staticmethod
+    def _get_selected_whatsapp_phone(connection: SocialConnection) -> Optional[dict]:
+        """Return selected WhatsApp phone metadata from raw profile payload."""
+        if not connection or not connection.raw_profile_json:
+            return None
+        try:
+            payload = json.loads(connection.raw_profile_json or "{}")
+        except Exception:
+            return None
+        selected = payload.get("selected_whatsapp_phone")
+        if isinstance(selected, dict) and str(selected.get("phone_number_id") or "").strip():
+            return selected
+        phones = payload.get("whatsapp_phone_numbers")
+        if isinstance(phones, list) and phones:
+            candidate = phones[0]
+            if isinstance(candidate, dict):
+                return candidate
+        return None
+
+    @staticmethod
+    async def publish_whatsapp_messages(
+        user_id: int,
+        db: AsyncSession,
+        to_numbers: list[str],
+        message: Optional[str] = None,
+        template: Optional[dict] = None,
+        image_url: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        brand_id: Optional[int] = None,
+    ) -> dict:
+        """Send WhatsApp messages to multiple recipients using selected phone number."""
+        connection = await SocialAuthService.get_connection("whatsapp", user_id, db, brand_id=brand_id)
+        if not connection or not connection.access_token:
+            raise ValueError("WhatsApp is not connected for this user")
+
+        selected_phone = SocialAuthService._get_selected_whatsapp_phone(connection)
+        if not selected_phone:
+            raise ValueError("No WhatsApp phone number selected. Reconnect WhatsApp or select a phone number.")
+
+        phone_number_id = str(selected_phone.get("phone_number_id") or "").strip()
+        if not phone_number_id:
+            raise ValueError("Selected WhatsApp phone number is missing phone_number_id")
+
+        # Resolve media payload if provided.
+        media_payload: Optional[dict] = None
+        if image_url and image_bytes:
+            raise ValueError("Provide either image_url or image_bytes, not both")
+
+        if image_url:
+            if not image_url.startswith(("http://", "https://")):
+                raise ValueError("WhatsApp image_url must be a public http/https URL")
+            media_payload = {"type": "image", "image": {"link": image_url}}
+        elif image_bytes:
+            media_id = await SocialAuthService._upload_whatsapp_media(
+                phone_number_id=phone_number_id,
+                access_token=connection.access_token,
+                image_bytes=image_bytes,
+            )
+            media_payload = {"type": "image", "image": {"id": media_id}}
+
+        if not template and not message and not media_payload:
+            raise ValueError("WhatsApp message text, template, or media is required")
+
+        results: list[dict] = []
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for to in to_numbers:
+                recipient = str(to or "").strip()
+                if not recipient:
+                    continue
+
+                payload: dict = {
+                    "messaging_product": "whatsapp",
+                    "to": recipient,
+                }
+
+                if template:
+                    payload.update(
+                        {
+                            "type": "template",
+                            "template": template,
+                        }
+                    )
+                elif media_payload:
+                    payload.update(media_payload)
+                    if message:
+                        payload.setdefault("image", {})["caption"] = message
+                else:
+                    payload.update(
+                        {
+                            "type": "text",
+                            "text": {"preview_url": False, "body": message or ""},
+                        }
+                    )
+
+                resp = await client.post(
+                    f"https://graph.facebook.com/v18.0/{phone_number_id}/messages",
+                    headers={
+                        "Authorization": f"Bearer {connection.access_token}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+
+                if resp.status_code not in (200, 201):
+                    results.append(
+                        {
+                            "to": recipient,
+                            "status": "failed",
+                            "error": resp.text,
+                        }
+                    )
+                    continue
+
+                data = resp.json()
+                results.append(
+                    {
+                        "to": recipient,
+                        "status": "sent",
+                        "message_id": (data.get("messages") or [{}])[0].get("id"),
+                    }
+                )
+
+        return {
+            "platform": "whatsapp",
+            "status": "sent",
+            "phone_number_id": phone_number_id,
+            "display_phone_number": selected_phone.get("display_phone_number"),
+            "verified_name": selected_phone.get("verified_name"),
+            "results": results,
+        }
 
     @staticmethod
     async def _fetch_facebook_pages(client: httpx.AsyncClient, access_token: str) -> list[dict[str, str]]:
@@ -482,6 +666,136 @@ class SocialAuthService:
             return accounts
         except Exception:
             return []
+
+    @staticmethod
+    async def _fetch_meta_businesses(
+        client: httpx.AsyncClient,
+        access_token: str,
+    ) -> list[dict[str, str]]:
+        """Fetch Meta business accounts for the connected user."""
+        try:
+            response = await client.get(
+                "https://graph.facebook.com/v18.0/me/businesses",
+                params={"fields": "id,name"},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if response.status_code != 200:
+                return []
+
+            payload = response.json()
+            businesses: list[dict[str, str]] = []
+            for item in payload.get("data", []):
+                biz_id = str(item.get("id", "")).strip()
+                name = str(item.get("name", "")).strip()
+                if biz_id:
+                    businesses.append({"id": biz_id, "name": name})
+            return businesses
+        except Exception:
+            return []
+
+    @staticmethod
+    async def _upload_whatsapp_media(
+        phone_number_id: str,
+        access_token: str,
+        image_bytes: bytes,
+    ) -> str:
+        """Upload media to WhatsApp Cloud API and return media id."""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"https://graph.facebook.com/v18.0/{phone_number_id}/media",
+                headers={"Authorization": f"Bearer {access_token}"},
+                files={
+                    "file": ("image.png", image_bytes, "image/png"),
+                    "type": (None, "image/png"),
+                    "messaging_product": (None, "whatsapp"),
+                },
+            )
+            if resp.status_code not in (200, 201):
+                raise ValueError(f"WhatsApp media upload failed: {resp.text}")
+            data = resp.json()
+            media_id = str(data.get("id") or "").strip()
+            if not media_id:
+                raise ValueError("WhatsApp media upload did not return a media id")
+            return media_id
+
+    @staticmethod
+    async def _fetch_whatsapp_business_accounts(
+        client: httpx.AsyncClient,
+        access_token: str,
+    ) -> list[dict[str, str]]:
+        """Fetch WhatsApp Business Accounts (WABA) for all Meta businesses."""
+        businesses = await SocialAuthService._fetch_meta_businesses(client, access_token)
+        wabas: list[dict[str, str]] = []
+        for biz in businesses:
+            biz_id = str(biz.get("id", "")).strip()
+            if not biz_id:
+                continue
+            try:
+                resp = await client.get(
+                    f"https://graph.facebook.com/v18.0/{biz_id}/owned_whatsapp_business_accounts",
+                    params={"fields": "id,name"},
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                if resp.status_code != 200:
+                    continue
+                payload = resp.json()
+                for item in payload.get("data", []):
+                    waba_id = str(item.get("id", "")).strip()
+                    name = str(item.get("name", "")).strip()
+                    if waba_id:
+                        wabas.append(
+                            {
+                                "waba_id": waba_id,
+                                "waba_name": name,
+                                "business_id": biz_id,
+                                "business_name": str(biz.get("name", "")).strip(),
+                            }
+                        )
+            except Exception:
+                continue
+        return wabas
+
+    @staticmethod
+    async def _fetch_whatsapp_phone_numbers(
+        client: httpx.AsyncClient,
+        access_token: str,
+    ) -> list[dict[str, str]]:
+        """Fetch phone numbers across all WhatsApp Business Accounts."""
+        wabas = await SocialAuthService._fetch_whatsapp_business_accounts(client, access_token)
+        phones: list[dict[str, str]] = []
+        for waba in wabas:
+            waba_id = str(waba.get("waba_id", "")).strip()
+            if not waba_id:
+                continue
+            try:
+                resp = await client.get(
+                    f"https://graph.facebook.com/v18.0/{waba_id}/phone_numbers",
+                    params={"fields": "id,display_phone_number,verified_name,quality_rating,code_verification_status"},
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                if resp.status_code != 200:
+                    continue
+                payload = resp.json()
+                for item in payload.get("data", []):
+                    phone_id = str(item.get("id", "")).strip()
+                    if not phone_id:
+                        continue
+                    phones.append(
+                        {
+                            "phone_number_id": phone_id,
+                            "display_phone_number": str(item.get("display_phone_number", "")).strip(),
+                            "verified_name": str(item.get("verified_name", "")).strip(),
+                            "quality_rating": str(item.get("quality_rating", "")).strip(),
+                            "code_verification_status": str(item.get("code_verification_status", "")).strip(),
+                            "waba_id": waba_id,
+                            "waba_name": str(waba.get("waba_name", "")).strip(),
+                            "business_id": str(waba.get("business_id", "")).strip(),
+                            "business_name": str(waba.get("business_name", "")).strip(),
+                        }
+                    )
+            except Exception:
+                continue
+        return phones
 
     @staticmethod
     async def publish_facebook_post(

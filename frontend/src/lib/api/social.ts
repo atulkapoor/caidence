@@ -48,6 +48,37 @@ export interface PublishPostResponse {
     published: boolean;
 }
 
+export interface WhatsAppTemplatePayload {
+    name: string;
+    language: { code: string };
+    components?: Array<Record<string, unknown>>;
+}
+
+export interface WhatsAppPublishPayload {
+    to_numbers: string[];
+    message?: string;
+    image_url?: string;
+    image_data_url?: string;
+    design_asset_id?: number;
+    content_id?: number;
+    template?: WhatsAppTemplatePayload;
+    brand_id?: number;
+}
+
+export interface WhatsAppPublishResult {
+    platform: string;
+    status: string;
+    phone_number_id?: string;
+    display_phone_number?: string;
+    verified_name?: string;
+    results: Array<{
+        to: string;
+        status: string;
+        message_id?: string;
+        error?: string;
+    }>;
+}
+
 export interface SchedulePostPayload {
     platform: string;
     message: string;
@@ -163,6 +194,18 @@ export async function publishToLinkedIn(payload: LinkedInPublishPayload): Promis
         target_name: String(data.target_name || "LinkedIn"),
         published,
     };
+}
+
+export async function publishToWhatsApp(payload: WhatsAppPublishPayload): Promise<WhatsAppPublishResult> {
+    const res = await authenticatedFetch(`${API_BASE_URL}/social/publish/whatsapp`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to send WhatsApp message");
+    }
+    return res.json();
 }
 
 export async function publishSocialPost(

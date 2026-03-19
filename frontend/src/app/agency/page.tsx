@@ -86,6 +86,10 @@ export default function AgencyPage() {
     };
 
     const openEditModal = (brand: Brand) => {
+        if (!brand.is_active) {
+            toast.error("Inactive brands cannot be edited. Activate the brand first.");
+            return;
+        }
         setSelectedBrand(brand);
         setShowEditModal(true);
     };
@@ -119,12 +123,22 @@ export default function AgencyPage() {
     };
 
     const handleDeleteBrand = async (brand: Brand) => {
-        const confirmDelete = window.confirm(`Delete ${brand.name}? This will archive the brand.`);
+        const confirmDelete = window.confirm(`Delete ${brand.name}? This will permanently delete the brand. This action cannot be undone.`);
         if (!confirmDelete) return;
         try {
             await deleteBrand(brand.id);
-            setBrands((prev) => prev.map((b) => (b.id === brand.id ? { ...b, is_active: false } : b)));
-            toast.success(`${brand.name} archived`);
+            setBrands((prev) => prev.filter((b) => b.id !== brand.id));
+            setConnectionsByBrand((prev) => {
+                const next = { ...prev };
+                delete next[brand.id];
+                return next;
+            });
+            setConnectionsLoadingByBrand((prev) => {
+                const next = { ...prev };
+                delete next[brand.id];
+                return next;
+            });
+            toast.success(`${brand.name} deleted`);
         } catch (error: any) {
             toast.error(error?.message || "Failed to delete brand");
         }
@@ -219,7 +233,7 @@ export default function AgencyPage() {
                             {brands.map((brand) => (
                                 <div
                                     key={brand.id}
-                                    className={`bg-white p-6 rounded-2xl border shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group ${brand.is_active ? "border-slate-200" : "border-slate-100 opacity-60"
+                                    className={`bg-white p-6 rounded-2xl border shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group ${brand.is_active ? "border-slate-200" : "border-slate-100"
                                         }`}
                                 >
                                     <div className="flex justify-between items-start mb-4">
@@ -246,10 +260,16 @@ export default function AgencyPage() {
                                                             <>
                                                                 <button
                                                                     onClick={() => {
-                                                                        openEditModal(brand);
+                                                                        if (brand.is_active) {
+                                                                            openEditModal(brand);
+                                                                        }
                                                                         setOpenMenuBrandId(null);
                                                                     }}
-                                                                    className="w-full text-left px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg"
+                                                                    disabled={!brand.is_active}
+                                                                    className={`w-full text-left px-3 py-2 text-sm font-medium rounded-lg ${brand.is_active
+                                                                        ? "text-slate-700 hover:bg-slate-50"
+                                                                        : "text-slate-300 cursor-not-allowed"
+                                                                        }`}
                                                                 >
                                                                     Edit Brand
                                                                 </button>
@@ -293,7 +313,7 @@ export default function AgencyPage() {
                                                     ? `${getActiveConnectionCount(brand.id)} connected`
                                                     : "Not connected"}
                                         </span>
-                                        {getActiveConnectionCount(brand.id) === 0 && !connectionsLoadingByBrand[brand.id] && (
+                                        {getActiveConnectionCount(brand.id) === 0 && !connectionsLoadingByBrand[brand.id] && brand.is_active && (
                                             <PermissionGate require="agency:update">
                                                 <button
                                                     onClick={() => openEditModal(brand)}
@@ -308,7 +328,7 @@ export default function AgencyPage() {
                                         <span className="text-slate-400 font-medium">0 Creators</span>
                                         <span className={`px-2 py-1 rounded-full text-xs font-bold ring-1 ring-inset ${brand.is_active
                                             ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
-                                            : "bg-slate-50 text-slate-500 ring-slate-500/10"
+                                            : "bg-rose-50 text-rose-700 ring-rose-600/20"
                                             }`}>
                                             {brand.is_active ? "Active" : "Inactive"}
                                         </span>
@@ -414,6 +434,7 @@ function EditBrandModal({
             });
             onUpdated(updated);
             toast.success("Brand updated");
+            onClose();
         } catch (error: any) {
             toast.error(error?.message || "Failed to update brand");
         } finally {

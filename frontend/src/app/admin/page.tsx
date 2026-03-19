@@ -158,6 +158,7 @@ function UserManagement() {
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(true);
     const [showInviteModal, setShowInviteModal] = useState(false);
+    const [openMenuUserId, setOpenMenuUserId] = useState<number | null>(null);
 
     useModalScroll(showInviteModal);
 
@@ -192,6 +193,13 @@ function UserManagement() {
     useEffect(() => {
         loadUsers();
     }, []);
+
+    useEffect(() => {
+        if (openMenuUserId === null) return;
+        const handleClick = () => setOpenMenuUserId(null);
+        window.addEventListener("click", handleClick);
+        return () => window.removeEventListener("click", handleClick);
+    }, [openMenuUserId]);
 
     const handleApprove = async (id: number) => {
         try {
@@ -272,8 +280,18 @@ function UserManagement() {
                                 </td>
                                 <td className="px-6 py-4">
                                     {user.is_approved ? (
-                                        <span className="inline-flex items-center gap-1.5 text-emerald-600 font-bold text-xs">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> {user.is_active ? "Active" : "Inactive"}
+                                        <span
+                                            className={cn(
+                                                "inline-flex items-center gap-1.5 font-bold text-xs",
+                                                user.is_active ? "text-emerald-600" : "text-red-600"
+                                            )}
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "w-1.5 h-1.5 rounded-full",
+                                                    user.is_active ? "bg-emerald-500" : "bg-red-500"
+                                                )}
+                                            /> {user.is_active ? "Active" : "Inactive"}
                                         </span>
                                     ) : (
                                         <span className="inline-flex items-center gap-1.5 text-orange-600 font-bold text-xs">
@@ -284,29 +302,49 @@ function UserManagement() {
                                 <td className="px-6 py-4 text-slate-500 font-medium">
                                     {new Date(user.created_at).toLocaleDateString()}
                                 </td>
-                                <td className="px-6 py-4 text-right">
-                                    {!user.is_approved && (
-                                        <button
-                                            onClick={() => handleApprove(user.id)}
-                                            className="text-emerald-600 hover:text-emerald-700 font-bold text-xs bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors mr-2"
-                                        >
-                                            Approve
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={() => handleActiveToggle(user.id, user.is_active)}
-                                        className={cn(
-                                            "font-bold text-xs px-3 py-1.5 rounded-lg transition-colors mr-2",
-                                            user.is_active
-                                                ? "text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100"
-                                                : "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100"
+                                <td className="px-6 py-4">
+                                    <div className="flex justify-end items-center gap-2">
+                                        {!user.is_approved && (
+                                            <button
+                                                onClick={() => handleApprove(user.id)}
+                                                className="text-emerald-600 hover:text-emerald-700 font-bold text-xs bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors"
+                                            >
+                                                Approve
+                                            </button>
                                         )}
-                                    >
-                                        {user.is_active ? "Deactivate" : "Activate"}
-                                    </button>
-                                    <button className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100">
-                                        <MoreVertical size={16} />
-                                    </button>
+                                        <div className="relative inline-block text-left">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setOpenMenuUserId((prev) => (prev === user.id ? null : user.id));
+                                                }}
+                                                className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100"
+                                            >
+                                                <MoreVertical size={16} />
+                                            </button>
+                                            {openMenuUserId === user.id && (
+                                                <div
+                                                    className="absolute right-0 mt-2 w-44 rounded-xl border border-slate-200 bg-white shadow-lg p-1 z-10"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <button
+                                                        onClick={() => {
+                                                            handleActiveToggle(user.id, user.is_active);
+                                                            setOpenMenuUserId(null);
+                                                        }}
+                                                        className={cn(
+                                                            "w-full text-left px-3 py-2 text-xs font-bold rounded-lg transition-colors",
+                                                            user.is_active
+                                                                ? "text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                                : "text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                                        )}
+                                                    >
+                                                        {user.is_active ? "Deactivate" : "Activate"}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
