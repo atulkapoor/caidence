@@ -33,6 +33,7 @@ const platformColors: Record<string, { bg: string; color: string; border: string
     instagram: { bg: "#fdf2f8", color: "#be185d", border: "#fbcfe8" },
     facebook: { bg: "#eff6ff", color: "#1e40af", border: "#93c5fd" },
     twitter: { bg: "#f0f9ff", color: "#0369a1", border: "#bae6fd" },
+    whatsapp: { bg: "#ecfdf3", color: "#047857", border: "#bbf7d0" },
 };
 
 const toLocalDateTime = (iso: string) => new Date(iso).toLocaleString();

@@ -193,6 +193,7 @@ class ScheduledPostBase(BaseModel):
     scheduled_at: datetime
     title: Optional[str] = None
     image_url: Optional[str] = None
+    to_numbers: Optional[list[str]] = None
     content_id: Optional[int] = None
     design_asset_id: Optional[int] = None
     campaign_id: Optional[int] = None

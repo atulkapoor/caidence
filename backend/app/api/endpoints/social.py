@@ -133,6 +133,7 @@ class SchedulePostRequest(BaseModel):
     scheduled_at: datetime
     title: Optional[str] = None
     image_url: Optional[str] = None
+    to_numbers: Optional[list[str]] = None
     content_id: Optional[int] = None
     design_asset_id: Optional[int] = None
     campaign_id: Optional[int] = None
@@ -150,6 +151,7 @@ class ScheduledPostResponse(BaseModel):
     platform: str
     message: str
     image_url: Optional[str] = None
+    to_numbers: Optional[list[str]] = None
     status: str
     scheduled_at: datetime
     published_at: Optional[datetime] = None
@@ -569,7 +571,16 @@ async def publish_whatsapp(
         try:
             image_bytes = _decode_base64_data(asset.image_url)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid stored image data: {exc}")
+            if payload.image_data_url:
+                try:
+                    image_bytes = _decode_base64_data(payload.image_data_url)
+                except ValueError as inner_exc:
+                    raise HTTPException(status_code=400, detail=f"Invalid image data: {inner_exc}")
+            elif payload.image_url:
+                # Fall back to public image URL if provided by client.
+                image_bytes = None
+            else:
+                raise HTTPException(status_code=400, detail=f"Invalid stored image data: {exc}")
     elif payload.image_data_url:
         try:
             image_bytes = _decode_base64_data(payload.image_data_url)
@@ -615,6 +626,10 @@ async def publish_whatsapp(
     else:
         template_payload = None
 
+    effective_image_url = payload.image_url
+    if image_bytes:
+        effective_image_url = None
+
     try:
         data = await SocialAuthService.publish_whatsapp_messages(
             user_id=current_user.id,
@@ -622,7 +637,7 @@ async def publish_whatsapp(
             to_numbers=payload.to_numbers,
             message=effective_message or None,
             template=template_payload,
-            image_url=payload.image_url,
+            image_url=effective_image_url,
             image_bytes=image_bytes,
             brand_id=effective_brand_id,
         )
@@ -683,6 +698,7 @@ async def publish_post(
             message=payload.message,
             image_url=payload.image_url,
             design_asset_id=payload.design_asset_id,
+            to_numbers=None,
             user_id=current_user.id,
             db=db,
             brand_id=effective_brand_id,
@@ -714,12 +730,15 @@ async def create_scheduled_post(
     db: AsyncSession = Depends(get_db),
 ):
     platform = (payload.platform or "").strip().lower()
-    if platform not in {"linkedin", "facebook", "instagram"}:
+    if platform not in {"linkedin", "facebook", "instagram", "whatsapp"}:
         raise HTTPException(status_code=400, detail=f"Scheduling is not supported for platform: {payload.platform}")
 
     message = (payload.message or "").strip()
-    if not message:
+    normalized_to_numbers = _normalize_to_numbers(payload.to_numbers)
+    if platform != "whatsapp" and not message:
         raise HTTPException(status_code=400, detail="Post message is required")
+    if platform == "whatsapp" and not normalized_to_numbers:
+        raise HTTPException(status_code=400, detail="WhatsApp recipients list is required")
 
     if platform == "instagram":
         image_url = (payload.image_url or "").strip()
@@ -759,6 +778,8 @@ async def create_scheduled_post(
             validated_content_id = payload.content_id
             if effective_brand_id is None:
                 effective_brand_id = content_obj.brand_id
+            if platform == "whatsapp" and not message:
+                message = (content_obj.result or "").strip()
 
     if payload.design_asset_id:
         design_result = await db.execute(
@@ -769,7 +790,7 @@ async def create_scheduled_post(
         )
         design_obj = design_result.scalar_one_or_none()
         if design_obj:
-            if design_obj.is_posted:
+            if design_obj.is_posted and platform != "whatsapp":
                 raise HTTPException(
                     status_code=409,
                     detail="This design is already posted. Create a new design to schedule again.",
@@ -791,6 +812,14 @@ async def create_scheduled_post(
     if not connection or not connection.access_token:
         raise HTTPException(status_code=400, detail=f"Connect {platform} before scheduling a post")
 
+    if platform == "whatsapp":
+        image_url = (payload.image_url or "").strip() or None
+        if not message and not image_url and not validated_design_asset_id:
+            raise HTTPException(
+                status_code=400,
+                detail="WhatsApp scheduling requires message text, image, or a design asset",
+            )
+
     # Prevent duplicate scheduling of the same content/design item.
     # Re-scheduling is allowed only if previous attempts failed/cancelled.
     blocking_statuses = {"scheduled", "processing", "published", "posted", "success", "completed"}
@@ -799,6 +828,7 @@ async def create_scheduled_post(
     raw_design_asset_id = payload.design_asset_id
     normalized_title = (payload.title or "").strip() or None
     normalized_image_url = (payload.image_url or "").strip() or None
+    normalized_to_numbers_json = _serialize_to_numbers(normalized_to_numbers)
 
     reference_clauses = []
     effective_content_id = validated_content_id or raw_content_id
@@ -814,6 +844,7 @@ async def create_scheduled_post(
         ScheduledPost.message == message,
         ScheduledPost.title == normalized_title,
         ScheduledPost.image_url == normalized_image_url,
+        ScheduledPost.to_numbers == normalized_to_numbers_json,
     )
     conflict_filters = [signature_clause]
     if reference_clauses:
@@ -858,6 +889,7 @@ async def create_scheduled_post(
         platform=platform,
         message=message,
         image_url=normalized_image_url,
+        to_numbers=normalized_to_numbers_json,
         status="scheduled",
         scheduled_at=scheduled_at,
     )
@@ -1013,6 +1045,7 @@ async def _publish_for_platform(
     message: str,
     image_url: Optional[str],
     design_asset_id: Optional[int],
+    to_numbers: Optional[list[str]],
     user_id: int,
     db: AsyncSession,
     brand_id: Optional[int] = None,
@@ -1063,6 +1096,54 @@ async def _publish_for_platform(
             fallback_target_name="Facebook",
         )
 
+    if normalized_platform == "whatsapp":
+        recipients = _normalize_to_numbers(to_numbers)
+        if not recipients:
+            raise ValueError("WhatsApp recipients list is required")
+
+        image_bytes: Optional[bytes] = None
+        resolved_image_url = (image_url or "").strip() or None
+        if design_asset_id:
+            design_result = await db.execute(
+                select(DesignAsset).where(
+                    DesignAsset.id == design_asset_id,
+                    DesignAsset.user_id == user_id,
+                )
+            )
+            design_asset = design_result.scalar_one_or_none()
+            if design_asset and getattr(design_asset, "image_url", None):
+                try:
+                    image_bytes = _decode_base64_data(str(design_asset.image_url))
+                    resolved_image_url = None
+                except ValueError:
+                    # Fall back to explicit image_url if provided.
+                    image_bytes = None
+
+        if resolved_image_url and resolved_image_url.startswith("data:"):
+            image_bytes = _decode_base64_data(resolved_image_url)
+            resolved_image_url = None
+
+        data = await SocialAuthService.publish_whatsapp_messages(
+            user_id=user_id,
+            db=db,
+            to_numbers=recipients,
+            message=message or None,
+            image_url=resolved_image_url,
+            image_bytes=image_bytes,
+            brand_id=brand_id,
+        )
+        sent_count = len([item for item in data.get("results", []) if item.get("status") == "sent"])
+        if sent_count == 0:
+            raise ValueError("WhatsApp send failed for all recipients")
+        return {
+            **data,
+            "published": True,
+            "post_id": data.get("phone_number_id"),
+            "target_name": data.get("verified_name")
+            or data.get("display_phone_number")
+            or "WhatsApp",
+        }
+
     if normalized_platform == "instagram":
         data = await SocialAuthService.publish_instagram_post(
             user_id=user_id,
@@ -1080,6 +1161,34 @@ async def _publish_for_platform(
     raise ValueError(f"Publishing not supported for platform: {platform}")
 
 
+def _normalize_to_numbers(numbers: Optional[list[str]]) -> list[str]:
+    cleaned: list[str] = []
+    for item in numbers or []:
+        value = str(item or "").strip()
+        if value:
+            cleaned.append(value)
+    return sorted(set(cleaned))
+
+
+def _serialize_to_numbers(numbers: Optional[list[str]]) -> Optional[str]:
+    normalized = _normalize_to_numbers(numbers)
+    if not normalized:
+        return None
+    return json.dumps(normalized)
+
+
+def _deserialize_to_numbers(raw: Optional[str]) -> list[str]:
+    if not raw:
+        return []
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return []
+    if isinstance(payload, list):
+        return _normalize_to_numbers([str(item) for item in payload])
+    return []
+
+
 def _to_scheduled_post_response(post: ScheduledPost) -> ScheduledPostResponse:
     return ScheduledPostResponse(
         id=post.id,
@@ -1092,6 +1201,7 @@ def _to_scheduled_post_response(post: ScheduledPost) -> ScheduledPostResponse:
         platform=post.platform,
         message=post.message,
         image_url=post.image_url,
+        to_numbers=_deserialize_to_numbers(post.to_numbers),
         status=post.status,
         scheduled_at=post.scheduled_at,
         published_at=post.published_at,
@@ -1132,6 +1242,7 @@ async def process_due_scheduled_posts(
                 message=post.message,
                 image_url=post.image_url,
                 design_asset_id=post.design_asset_id,
+                to_numbers=_deserialize_to_numbers(post.to_numbers),
                 user_id=post.user_id,
                 db=db,
                 brand_id=post.brand_id,
@@ -1147,18 +1258,19 @@ async def process_due_scheduled_posts(
             )
             post.target_name = str(publish_response.get("target_name") or "").strip() or None
             post.published_at = datetime.now(timezone.utc)
-            await _mark_content_as_posted(
-                content_id=post.content_id,
-                user_id=post.user_id,
-                target_name=post.target_name or post.platform,
-                db=db,
-            )
-            await _mark_design_as_posted(
-                design_asset_id=post.design_asset_id,
-                user_id=post.user_id,
-                target_name=post.target_name or post.platform,
-                db=db,
-            )
+            if (post.platform or "").strip().lower() in {"linkedin", "facebook", "instagram"}:
+                await _mark_content_as_posted(
+                    content_id=post.content_id,
+                    user_id=post.user_id,
+                    target_name=post.target_name or post.platform,
+                    db=db,
+                )
+                await _mark_design_as_posted(
+                    design_asset_id=post.design_asset_id,
+                    user_id=post.user_id,
+                    target_name=post.target_name or post.platform,
+                    db=db,
+                )
             published_count += 1
         except Exception as exc:  # noqa: BLE001
             post.status = "failed"

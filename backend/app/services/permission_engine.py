@@ -271,8 +271,8 @@ class PermissionEngine:
         if requested_action == "read" and granted_action in READ_IMPLYING_ACTIONS:
             return True
 
-        # Legacy write maps to update behavior only.
-        if granted_action == "write" and requested_action == "update":
+        # Legacy write maps to CRUD mutations.
+        if granted_action == "write" and requested_action in {"create", "update", "delete"}:
             return True
 
         # "write" checks should pass for explicit update too.

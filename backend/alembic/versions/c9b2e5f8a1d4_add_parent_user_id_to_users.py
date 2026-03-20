@@ -38,12 +38,18 @@ def _has_index(table_name: str, index_name: str) -> bool:
     return any(idx["name"] == index_name for idx in _inspector().get_indexes(table_name))
 
 
+def _has_fk(table_name: str, fk_name: str) -> bool:
+    if not _has_table(table_name):
+        return False
+    return any(fk.get("name") == fk_name for fk in _inspector().get_foreign_keys(table_name))
+
+
 def upgrade() -> None:
     """Upgrade schema."""
     if not _has_column("users", "parent_user_id"):
         op.add_column("users", sa.Column("parent_user_id", sa.Integer(), nullable=True))
 
-    if _has_column("users", "parent_user_id"):
+    if _has_column("users", "parent_user_id") and not _has_fk("users", "fk_users_parent_user_id_users"):
         with op.batch_alter_table("users") as batch_op:
             try:
                 batch_op.create_foreign_key(

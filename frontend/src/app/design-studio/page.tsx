@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { PermissionGate } from "@/components/rbac/PermissionGate";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
-import { generateDesign, fetchDesignAssetsPage, DesignAsset, enhanceDescription, fetchBrands, type Brand } from "@/lib/api";
+import { generateDesign, fetchDesignAssetsPage, DesignAsset, enhanceDescription, fetchBrands, fetchWhatsAppContacts, type Brand, type WhatsAppContact } from "@/lib/api";
 import { saveDesign } from "@/lib/api/design";
 import { getConnectionStatus, publishSocialPost, publishToLinkedIn, publishToWhatsApp, scheduleSocialPost } from "@/lib/api/social";
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -13,7 +13,8 @@ import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalend
 import { usePermissionContext } from "@/contexts/PermissionContext";
 // import Link from "next/link"; // Unused
 import { toast } from "sonner";
-import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send, Save, Plus, Linkedin, Twitter, FileText, Mail, Facebook, Instagram, MessageCircle } from "lucide-react";
+import { Palette, Wand2, Image as ImageIcon, Maximize2, Upload, Sparkles, Search, Download, Eye, MoreHorizontal, LayoutGrid, ListFilter, X, Calendar, ArrowRight, Send, Save, Plus, Linkedin, Twitter, FileText, Mail, Facebook, Instagram } from "lucide-react";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 
 function DesignStudioContent() {
     const { hasPermission } = usePermissionContext();
@@ -77,13 +78,18 @@ function DesignStudioContent() {
     const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
     const [whatsAppRecipients, setWhatsAppRecipients] = useState("");
     const [isWhatsAppSending, setIsWhatsAppSending] = useState(false);
+    const [whatsAppScheduleDateTime, setWhatsAppScheduleDateTime] = useState("");
+    const [isWhatsAppScheduling, setIsWhatsAppScheduling] = useState(false);
     const [whatsAppDraft, setWhatsAppDraft] = useState<{
         title: string;
         text: string;
         imageUrl?: string;
         designAssetId?: number;
         brandId?: number | null;
+        mode?: "send" | "schedule";
     } | null>(null);
+    const [whatsAppContacts, setWhatsAppContacts] = useState<WhatsAppContact[]>([]);
+    const [selectedCrmNumbers, setSelectedCrmNumbers] = useState<string[]>([]);
 
     // Library State
     const [searchQuery, setSearchQuery] = useState("");
@@ -93,6 +99,7 @@ function DesignStudioContent() {
     const [libraryPage, setLibraryPage] = useState(1);
     const [totalLibraryItems, setTotalLibraryItems] = useState(0);
     const scheduleInputRef = useRef<HTMLInputElement | null>(null);
+    const whatsAppScheduleInputRef = useRef<HTMLInputElement | null>(null);
     useModalScroll(!!previewDesign || isScheduleOpen || isWhatsAppOpen);
     const LIBRARY_PAGE_SIZE = 12;
 
@@ -104,7 +111,7 @@ function DesignStudioContent() {
         { id: "Email", icon: Mail, color: "text-purple-500", bg: "bg-purple-50", border: "border-purple-200" },
         { id: "Facebook", icon: Facebook, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
         { id: "Instagram", icon: Instagram, color: "text-pink-600", bg: "bg-pink-50", border: "border-pink-200" },
-        { id: "WhatsApp", icon: MessageCircle, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
+        { id: "WhatsApp", icon: WhatsAppIcon, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
     ];
     const supportedPublishPlatforms = new Set(["linkedin", "facebook", "instagram"]);
     const primarySelectedPlatform = selectedPlatforms[0] || "LinkedIn";
@@ -164,9 +171,13 @@ function DesignStudioContent() {
         imageUrl?: string;
         designAssetId?: number;
         brandId?: number | null;
+        mode?: "send" | "schedule";
     }) => {
+        const defaultDate = new Date(Date.now() + 30 * 60 * 1000);
         setWhatsAppDraft(draft);
         setWhatsAppRecipients("");
+        setSelectedCrmNumbers([]);
+        setWhatsAppScheduleDateTime(toDateTimeLocalValue(defaultDate));
         setIsWhatsAppOpen(true);
     };
 
@@ -176,6 +187,47 @@ function DesignStudioContent() {
             .map((value) => value.trim())
             .filter((value) => value.length > 0);
     };
+
+    const appendRecipient = (value: string) => {
+        if (!value) return;
+        const current = parseRecipients(whatsAppRecipients);
+        if (current.includes(value)) return;
+        const next = [...current, value].join(", ");
+        setWhatsAppRecipients(next);
+    };
+
+    const toggleCrmNumber = (value: string) => {
+        if (!value) return;
+        setSelectedCrmNumbers((prev) => (
+            prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]
+        ));
+    };
+
+    const addSelectedRecipients = () => {
+        if (selectedCrmNumbers.length === 0) return;
+        const current = parseRecipients(whatsAppRecipients);
+        const merged = Array.from(new Set([...current, ...selectedCrmNumbers]));
+        setWhatsAppRecipients(merged.join(", "));
+        setSelectedCrmNumbers([]);
+    };
+
+    const selectAllCrmNumbers = () => {
+        const allNumbers = Array.from(
+            new Set(
+                whatsAppContacts.flatMap((contact) => contact.whatsapp_numbers || [])
+            )
+        );
+        setSelectedCrmNumbers(allNumbers);
+    };
+
+    const clearAllCrmNumbers = () => {
+        setSelectedCrmNumbers([]);
+    };
+
+    const allCrmNumbers = Array.from(
+        new Set(whatsAppContacts.flatMap((contact) => contact.whatsapp_numbers || []))
+    );
+    const isAllCrmSelected = allCrmNumbers.length > 0 && selectedCrmNumbers.length === allCrmNumbers.length;
 
     const resetGeneratorState = () => {
         setTitle("New Visual");
@@ -207,6 +259,7 @@ function DesignStudioContent() {
 
     useEffect(() => {
         loadBrands();
+        loadWhatsAppContacts();
     }, []);
 
     useEffect(() => {
@@ -311,6 +364,15 @@ function DesignStudioContent() {
             }
         } catch (error) {
             console.error("Failed to load brands", error);
+        }
+    };
+
+    const loadWhatsAppContacts = async () => {
+        try {
+            const data = await fetchWhatsAppContacts();
+            setWhatsAppContacts(data);
+        } catch {
+            setWhatsAppContacts([]);
         }
     };
 
@@ -673,6 +735,7 @@ function DesignStudioContent() {
                 imageUrl,
                 designAssetId,
                 brandId: brandId ?? null,
+                mode: "send",
             });
             return;
         }
@@ -761,10 +824,11 @@ function DesignStudioContent() {
         const toastId = toast.loading(`Sending WhatsApp message to ${recipients.length} recipient(s)...`);
         try {
             const isDataUrl = typeof whatsAppDraft.imageUrl === "string" && whatsAppDraft.imageUrl.startsWith("data:");
-            const imageUrl = whatsAppDraft.imageUrl && /^https?:\/\//i.test(whatsAppDraft.imageUrl)
+            const hasDesignAsset = Boolean(whatsAppDraft.designAssetId);
+            const imageUrl = !hasDesignAsset && whatsAppDraft.imageUrl && /^https?:\/\//i.test(whatsAppDraft.imageUrl)
                 ? whatsAppDraft.imageUrl
                 : undefined;
-            const imageDataUrl = isDataUrl ? whatsAppDraft.imageUrl : undefined;
+            const imageDataUrl = !hasDesignAsset && isDataUrl ? whatsAppDraft.imageUrl : undefined;
 
             const result = await publishToWhatsApp({
                 to_numbers: recipients,
@@ -801,6 +865,63 @@ function DesignStudioContent() {
             toast.error(error?.message || "Failed to send WhatsApp message", { id: toastId });
         } finally {
             setIsWhatsAppSending(false);
+        }
+    };
+
+    const handleWhatsAppSchedule = async () => {
+        if (!whatsAppDraft) return;
+        if (isDesignReadOnly) {
+            toast.error("Read-only access: scheduling is disabled");
+            return;
+        }
+
+        const recipients = parseRecipients(whatsAppRecipients);
+        if (recipients.length === 0) {
+            toast.error("Add at least one WhatsApp number");
+            return;
+        }
+        if (!whatsAppScheduleDateTime) {
+            toast.error("Select date and time");
+            return;
+        }
+
+        const scheduleDate = new Date(whatsAppScheduleDateTime);
+        if (Number.isNaN(scheduleDate.getTime())) {
+            toast.error("Invalid date and time");
+            return;
+        }
+
+        const status = await getConnectionStatus("whatsapp", whatsAppDraft.brandId ?? undefined);
+        if (!status.connected) {
+            const brandName = whatsAppDraft.brandId ? getBrandName(whatsAppDraft.brandId) : null;
+            toast.error(
+                brandName
+                    ? `Connect WhatsApp for ${brandName} before scheduling`
+                    : "Connect WhatsApp in Onboarding/Settings before scheduling"
+            );
+            return;
+        }
+
+        setIsWhatsAppScheduling(true);
+        const toastId = toast.loading(`Scheduling WhatsApp message to ${recipients.length} recipient(s)...`);
+        try {
+            await scheduleSocialPost({
+                title: whatsAppDraft.title,
+                platform: "whatsapp",
+                message: whatsAppDraft.text || "",
+                image_url: whatsAppDraft.imageUrl,
+                to_numbers: recipients,
+                design_asset_id: whatsAppDraft.designAssetId ?? undefined,
+                brand_id: whatsAppDraft.brandId ?? undefined,
+                scheduled_at: scheduleDate.toISOString(),
+            });
+            toast.success("WhatsApp scheduled", { id: toastId });
+            setIsWhatsAppOpen(false);
+            setWhatsAppDraft(null);
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to schedule WhatsApp message", { id: toastId });
+        } finally {
+            setIsWhatsAppScheduling(false);
         }
     };
 
@@ -930,7 +1051,14 @@ function DesignStudioContent() {
                                                 <button
                                                     onClick={() => {
                                                         if (platformKey === "whatsapp") {
-                                                            toast.error("WhatsApp scheduling is not supported yet.");
+                                                            openWhatsAppModal({
+                                                                title: previewDesign.title || "Design",
+                                                                text: previewDesign.title || "Design",
+                                                                imageUrl: previewDesign.image_url,
+                                                                designAssetId: previewDesign.id || undefined,
+                                                                brandId: previewDesign.brand_id ?? null,
+                                                                mode: "schedule",
+                                                            });
                                                             return;
                                                         }
                                                         openDesignScheduleModal({
@@ -1016,7 +1144,7 @@ function DesignStudioContent() {
                     <div
                         className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
                         onClick={() => {
-                            if (!isWhatsAppSending) {
+                            if (!isWhatsAppSending && !isWhatsAppScheduling) {
                                 setIsWhatsAppOpen(false);
                                 setWhatsAppDraft(null);
                             }
@@ -1033,9 +1161,54 @@ function DesignStudioContent() {
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                                        Recipients (E.164)
-                                    </label>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase">
+                                            Recipients (E.164)
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={isAllCrmSelected ? clearAllCrmNumbers : selectAllCrmNumbers}
+                                            disabled={whatsAppContacts.length === 0}
+                                            className="px-2.5 py-1 text-[11px] font-bold border border-slate-200 text-slate-600 rounded-lg disabled:opacity-50"
+                                        >
+                                            {isAllCrmSelected ? "Deselect All" : "Select All"}
+                                        </button>
+                                    </div>
+                                    <div className="border border-slate-200 rounded-xl p-2 max-h-40 overflow-y-auto bg-slate-50 mb-2">
+                                        {whatsAppContacts.length === 0 ? (
+                                            <p className="text-xs text-slate-500 p-2">No WhatsApp numbers in CRM yet.</p>
+                                        ) : (
+                                            whatsAppContacts.flatMap((contact) =>
+                                                (contact.whatsapp_numbers || []).map((number) => {
+                                                    const id = `${contact.id}:${number}`;
+                                                    const checked = selectedCrmNumbers.includes(number);
+                                                    return (
+                                                        <label key={id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white cursor-pointer">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={checked}
+                                                                onChange={() => toggleCrmNumber(number)}
+                                                                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                            />
+                                                            <span className="text-xs font-medium text-slate-700">
+                                                                {contact.handle} - {number}
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })
+                                            )
+                                        )}
+                                    </div>
+                                    <div className="flex justify-end items-center">
+                                        <button
+                                            type="button"
+                                            onClick={addSelectedRecipients}
+                                            disabled={selectedCrmNumbers.length === 0}
+                                            className="px-3 py-2 text-xs font-bold bg-emerald-600 text-white rounded-lg disabled:opacity-50"
+                                        >
+                                            Add Selected
+                                        </button>
+                                    </div>
                                     <textarea
                                         value={whatsAppRecipients}
                                         onChange={(e) => setWhatsAppRecipients(e.target.value)}
@@ -1050,6 +1223,36 @@ function DesignStudioContent() {
                                     Free-form captions are delivered only within the 24-hour customer care window.
                                     Use approved templates for outbound campaigns.
                                 </div>
+                                {whatsAppDraft.mode === "schedule" && (
+                                    <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Schedule Send</label>
+                                        <div className="flex items-center gap-2">
+                                            <div
+                                                className="flex-1"
+                                                onClick={() => {
+                                                    whatsAppScheduleInputRef.current?.focus();
+                                                    (whatsAppScheduleInputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null)?.showPicker?.();
+                                                }}
+                                            >
+                                                <input
+                                                    ref={whatsAppScheduleInputRef}
+                                                    type="datetime-local"
+                                                    value={whatsAppScheduleDateTime}
+                                                    onChange={(e) => setWhatsAppScheduleDateTime(e.target.value)}
+                                                    min={toDateTimeLocalValue(new Date())}
+                                                    className="w-full p-2.5 border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer bg-white"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={handleWhatsAppSchedule}
+                                                disabled={isWhatsAppScheduling}
+                                                className="px-3 py-2 text-xs font-bold bg-emerald-600 text-white rounded-lg disabled:opacity-60"
+                                            >
+                                                {isWhatsAppScheduling ? "Scheduling..." : "Schedule WhatsApp"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="mt-6 flex justify-end gap-2">
@@ -1058,18 +1261,20 @@ function DesignStudioContent() {
                                         setIsWhatsAppOpen(false);
                                         setWhatsAppDraft(null);
                                     }}
-                                    disabled={isWhatsAppSending}
+                                    disabled={isWhatsAppSending || isWhatsAppScheduling}
                                     className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-60"
                                 >
                                     Cancel
                                 </button>
-                                <button
-                                    onClick={handleWhatsAppSend}
-                                    disabled={isWhatsAppSending}
-                                    className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-60"
-                                >
-                                    {isWhatsAppSending ? "Sending..." : "Send WhatsApp"}
-                                </button>
+                                {whatsAppDraft.mode !== "schedule" && (
+                                    <button
+                                        onClick={handleWhatsAppSend}
+                                        disabled={isWhatsAppSending || isWhatsAppScheduling}
+                                        className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-60"
+                                    >
+                                        {isWhatsAppSending ? "Sending..." : "Send WhatsApp"}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -1388,6 +1593,7 @@ function DesignStudioContent() {
                                                                         title: primarySelectedPlatform,
                                                                         text: generatedContent,
                                                                         brandId: selectedBrandId ?? null,
+                                                                        mode: "send",
                                                                     });
                                                                     return;
                                                                 }
@@ -1492,7 +1698,14 @@ function DesignStudioContent() {
                                                                 onClick={async () => {
                                                                     if (!generatedDesignPreview?.image_url) return;
                                                                     if (platformKey === "whatsapp") {
-                                                                        toast.error("WhatsApp scheduling is not supported yet.");
+                                                                        openWhatsAppModal({
+                                                                            title: generatedDesignPreview?.title || "Design",
+                                                                            text: generatedDesignPreview?.title || "Design",
+                                                                            imageUrl: generatedDesignPreview?.image_url,
+                                                                            designAssetId: generatedDesignPreview?.id || undefined,
+                                                                            brandId: generatedDesignPreview?.brand_id ?? selectedBrandId ?? null,
+                                                                            mode: "schedule",
+                                                                        });
                                                                         return;
                                                                     }
                                                                     const designAssetId = await ensureDesignAssetIdForPublishOrSchedule(platform, platformDesignId);
