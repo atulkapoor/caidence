@@ -61,7 +61,7 @@ function ContentStudioContent() {
     const [writingExpert, setWritingExpert] = useState("General Marketing");
     const [length, setLength] = useState("Medium");
     const [webSearch, setWebSearch] = useState(false);
-    const [selectedModel, setSelectedModel] = useState("Gemini")
+    const [selectedModel, setSelectedModel] = useState("qwen2.5:0.5b")
     const [generateWithImage, setGenerateWithImage] = useState(false);
     const [brandColors, setBrandColors] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
@@ -99,6 +99,7 @@ function ContentStudioContent() {
         contentId?: number | null;
         brandId?: number | null;
         imageUrl?: string;
+        responseIndex?: number | null;
         mode?: "send" | "schedule";
     } | null>(null);
     const [whatsAppContacts, setWhatsAppContacts] = useState<WhatsAppContact[]>([]);
@@ -549,6 +550,10 @@ ${prompt}
 
     const isResponsePosted = (response: GeneratedResponse, idx: number) =>
         Boolean(postedIndices[idx] || (response.contentId ? postedContentIds.has(response.contentId) : false));
+    const isContentPosted = (item?: Pick<ContentGeneration, "id" | "is_posted"> | null) =>
+        Boolean(item?.is_posted || (item?.id && postedContentIds.has(item.id)));
+    const isWhatsAppDraftPosted = Boolean(whatsAppDraft?.contentId && postedContentIds.has(whatsAppDraft.contentId));
+    const previewContentIsPosted = Boolean(previewContent && isContentPosted(previewContent));
 
     const toHexColorOrNull = (value?: string | null) => {
         const cleaned = (value || "").trim().replace(/^#/, "");
@@ -592,6 +597,7 @@ ${prompt}
         contentId?: number | null;
         brandId?: number | null;
         imageUrl?: string;
+        responseIndex?: number | null;
         mode?: "send" | "schedule";
     }) => {
         const defaultDate = new Date(Date.now() + 30 * 60 * 1000);
@@ -876,11 +882,28 @@ ${prompt}
             toast.error("Read-only access: sending is disabled");
             return;
         }
+        if (isWhatsAppDraftPosted) {
+            toast.info("This content is already posted and is view-only.");
+            return;
+        }
 
         const recipients = parseRecipients(whatsAppRecipients);
         if (recipients.length === 0) {
             toast.error("Add at least one WhatsApp number");
             return;
+        }
+
+        let contentIdForSend = whatsAppDraft.contentId ?? null;
+        if (!contentIdForSend && typeof whatsAppDraft.responseIndex === "number") {
+            const response = currentResponses[whatsAppDraft.responseIndex];
+            if (response && response.outputType !== "image") {
+                try {
+                    contentIdForSend = await ensureContentIdForPosting(response, whatsAppDraft.responseIndex);
+                } catch (error: any) {
+                    toast.error(error?.message || "Failed to save content before WhatsApp send");
+                    return;
+                }
+            }
         }
 
         const status = await getConnectionStatus("whatsapp", whatsAppDraft.brandId ?? undefined);
@@ -906,7 +929,7 @@ ${prompt}
             const result = await publishToWhatsApp({
                 to_numbers: recipients,
                 message: whatsAppDraft.text,
-                content_id: whatsAppDraft.contentId ?? undefined,
+                content_id: contentIdForSend ?? undefined,
                 brand_id: whatsAppDraft.brandId ?? undefined,
                 image_url: imageUrl,
                 image_data_url: imageDataUrl,
@@ -920,8 +943,15 @@ ${prompt}
                 toast.success(`WhatsApp sent to ${successes} recipient(s).`, { id: toastId });
             }
 
-            if (whatsAppDraft.contentId) {
-                markContentPostedLocally(whatsAppDraft.contentId, "WhatsApp");
+            const targetName = result.verified_name || result.display_phone_number || "WhatsApp";
+            if (typeof whatsAppDraft.responseIndex === "number") {
+                setPostedIndices((prev) => ({
+                    ...prev,
+                    [whatsAppDraft.responseIndex as number]: targetName,
+                }));
+            }
+            if (contentIdForSend) {
+                markContentPostedLocally(contentIdForSend, targetName);
                 await loadHistory();
             }
             setIsWhatsAppOpen(false);
@@ -937,6 +967,10 @@ ${prompt}
         if (!whatsAppDraft) return;
         if (isContentReadOnly) {
             toast.error("Read-only access: scheduling is disabled");
+            return;
+        }
+        if (isWhatsAppDraftPosted) {
+            toast.info("This content is already posted and is view-only.");
             return;
         }
 
@@ -1111,6 +1145,10 @@ ${prompt}
             toast.error("You don't have update access");
             return;
         }
+        if (isContentPosted(item)) {
+            toast.info("Posted content is view-only.");
+            return;
+        }
         const parsedPrompt = parseSavedPrompt(item.prompt || "");
         const matchedCampaign = parsedPrompt.campaignTitle
             ? availableCampaigns.find((campaign) => campaign.title.trim().toLowerCase() === parsedPrompt.campaignTitle!.trim().toLowerCase())
@@ -1265,7 +1303,7 @@ ${prompt}
                                     {canEditExistingContent && (
                                         <button
                                             onClick={() => {
-                                                if (previewContent.is_posted) {
+                                                if (previewContentIsPosted) {
                                                     toast.info("Posted content is view-only.");
                                                     return;
                                                 }
@@ -1273,11 +1311,11 @@ ${prompt}
                                                 setActiveTab("generator");
                                                 setPreviewContent(null);
                                             }}
-                                            disabled={previewContent.is_posted}
+                                            disabled={previewContentIsPosted}
                                             className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                                         >
                                             <PenTool className="w-4 h-4" />
-                                            {previewContent.is_posted ? "View Only (Posted)" : "Edit / Remix"}
+                                            {previewContentIsPosted ? "View" : "Edit / Remix"}
                                         </button>
                                     )}
                                     <button
@@ -1318,13 +1356,13 @@ ${prompt}
                                                 setPostingPreview(false);
                                             }
                                         }}
-                                        disabled={isContentReadOnly || postingPreview || previewContent.is_posted}
+                                        disabled={isContentReadOnly || postingPreview || previewContentIsPosted}
                                         className="w-full py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 disabled:opacity-60"
                                     >
                                         <Send className="w-4 h-4" />
                                         {postingPreview
                                             ? "Posting..."
-                                            : previewContent.is_posted || postedContentIds.has(previewContent.id) || postedPreviewByContentId[previewContent.id]
+                                            : previewContentIsPosted || postedPreviewByContentId[previewContent.id]
                                                 ? `Posted to ${previewContent.platform}`
                                                 : `Post to ${previewContent.platform}`}
                                     </button>
@@ -1352,7 +1390,7 @@ ${prompt}
                                                 });
                                             }
                                         }
-                                        disabled={isContentReadOnly || previewContent.is_posted}
+                                        disabled={isContentReadOnly || previewContentIsPosted}
                                         className="w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-60"
                                     >
                                         <Calendar className="w-4 h-4" />
@@ -1546,10 +1584,10 @@ ${prompt}
                                             </div>
                                             <button
                                                 onClick={handleWhatsAppSchedule}
-                                                disabled={isWhatsAppScheduling}
+                                                disabled={isWhatsAppScheduling || isWhatsAppDraftPosted}
                                                 className="px-3 py-2 text-xs font-bold bg-emerald-600 text-white rounded-lg disabled:opacity-60"
                                             >
-                                                {isWhatsAppScheduling ? "Scheduling..." : "Schedule WhatsApp"}
+                                                {isWhatsAppDraftPosted ? "Posted" : isWhatsAppScheduling ? "Scheduling..." : "Schedule WhatsApp"}
                                             </button>
                                         </div>
                                     </div>
@@ -1570,10 +1608,10 @@ ${prompt}
                                 {whatsAppDraft.mode !== "schedule" && (
                                     <button
                                         onClick={handleWhatsAppSend}
-                                        disabled={isWhatsAppSending || isWhatsAppScheduling}
+                                        disabled={isWhatsAppSending || isWhatsAppScheduling || isWhatsAppDraftPosted}
                                         className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-60"
                                     >
-                                        {isWhatsAppSending ? "Sending..." : "Send WhatsApp"}
+                                        {isWhatsAppDraftPosted ? "Posted" : isWhatsAppSending ? "Sending..." : "Send WhatsApp"}
                                     </button>
                                 )}
                             </div>
@@ -1875,6 +1913,7 @@ ${prompt}
                                                                         imageUrl: response.outputType === "image"
                                                                             ? response.result
                                                                             : response.imageUrl || undefined,
+                                                                        responseIndex: idx,
                                                                         mode: "schedule",
                                                                     });
                                                                     return;
@@ -1925,6 +1964,7 @@ ${prompt}
                                                                             imageUrl: response.outputType === "image"
                                                                                 ? response.result
                                                                                 : response.imageUrl || undefined,
+                                                                            responseIndex: idx,
                                                                             mode: "send",
                                                                         });
                                                                         return;
@@ -2076,7 +2116,9 @@ ${prompt}
                                             <p className="text-slate-500 font-medium">Loading content...</p>
                                         </div>
                                     )}
-                                    {!isLibraryLoading && recentCreations.map((item) => (
+                                    {!isLibraryLoading && recentCreations.map((item) => {
+                                        const itemPosted = isContentPosted(item);
+                                        return (
                                         <div
                                             key={item.id}
                                             onClick={() => setPreviewContent(item)}
@@ -2105,7 +2147,7 @@ ${prompt}
                                                 <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent"></div>
                                             </div>
                                             <div className="flex items-center gap-2 pt-4 border-t border-slate-100 mt-auto">
-                                                {!item.is_posted && canEditExistingContent && (
+                                                {!itemPosted && canEditExistingContent && (
                                                     <>
                                                         <button
                                                             onClick={(e) => {
@@ -2129,7 +2171,7 @@ ${prompt}
                                                 >
                                                     View <ArrowRight className="w-3 h-3" />
                                                 </button>
-                                                {item.is_posted && (
+                                                {itemPosted && (
                                                     <>
                                                         <div className="w-px h-4 bg-slate-200"></div>
                                                         <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -2172,7 +2214,8 @@ ${prompt}
                                                 )}
                                             </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                     {!isLibraryLoading && recentCreations.length === 0 && (
                                         <div className="col-span-full py-20 text-center">
                                             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">

@@ -45,7 +45,7 @@ function DesignStudioContent() {
     const [selectedStyle, setSelectedStyle] = useState("Photorealistic");
     const [aspectRatio, setAspectRatio] = useState("16:9");
     const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["LinkedIn"]);
-    const [selectedModel, setSelectedModel] = useState("NanoBanana");
+    const [selectedModel, setSelectedModel] = useState("IDKiro/sdxs-512-0.9");
     const [brandColors, setBrandColors] = useState(""); // Text input
     const [referenceImage, setReferenceImage] = useState("");
     const [availableBrands, setAvailableBrands] = useState<Brand[]>([]);
@@ -809,6 +809,12 @@ function DesignStudioContent() {
             return;
         }
 
+        let designAssetIdForSend = whatsAppDraft.designAssetId;
+        if (!designAssetIdForSend && whatsAppDraft.imageUrl) {
+            designAssetIdForSend = await ensureDesignAssetIdForPublishOrSchedule("WhatsApp");
+            if (!designAssetIdForSend) return;
+        }
+
         const status = await getConnectionStatus("whatsapp", whatsAppDraft.brandId ?? undefined);
         if (!status.connected) {
             const brandName = whatsAppDraft.brandId ? getBrandName(whatsAppDraft.brandId) : null;
@@ -833,7 +839,7 @@ function DesignStudioContent() {
             const result = await publishToWhatsApp({
                 to_numbers: recipients,
                 message: whatsAppDraft.text,
-                design_asset_id: whatsAppDraft.designAssetId,
+                design_asset_id: designAssetIdForSend,
                 brand_id: whatsAppDraft.brandId ?? undefined,
                 image_url: imageUrl,
                 image_data_url: imageDataUrl,
@@ -847,15 +853,22 @@ function DesignStudioContent() {
                 toast.success(`WhatsApp sent to ${successes} recipient(s).`, { id: toastId });
             }
 
-            if (whatsAppDraft.designAssetId) {
+            if (designAssetIdForSend) {
                 setPostedDesignIds((prev) => {
                     const next = new Set(prev);
-                    next.add(whatsAppDraft.designAssetId as number);
+                    next.add(designAssetIdForSend as number);
                     return next;
                 });
                 setPostedDesignPlatformKeys((prev) => {
                     const next = new Set(prev);
-                    next.add(makeDesignPlatformKey(whatsAppDraft.designAssetId, "WhatsApp"));
+                    next.add(makeDesignPlatformKey(designAssetIdForSend, "WhatsApp"));
+                    return next;
+                });
+            } else {
+                // Text-only WhatsApp post (no design asset): mark the generated-text post button as posted
+                setGeneratedTextPostedPlatforms((prev) => {
+                    const next = new Set(prev);
+                    next.add("whatsapp");
                     return next;
                 });
             }
@@ -885,6 +898,12 @@ function DesignStudioContent() {
             return;
         }
 
+        let designAssetIdForSchedule = whatsAppDraft.designAssetId;
+        if (!designAssetIdForSchedule && whatsAppDraft.imageUrl) {
+            designAssetIdForSchedule = await ensureDesignAssetIdForPublishOrSchedule("WhatsApp");
+            if (!designAssetIdForSchedule) return;
+        }
+
         const scheduleDate = new Date(whatsAppScheduleDateTime);
         if (Number.isNaN(scheduleDate.getTime())) {
             toast.error("Invalid date and time");
@@ -911,7 +930,7 @@ function DesignStudioContent() {
                 message: whatsAppDraft.text || "",
                 image_url: whatsAppDraft.imageUrl,
                 to_numbers: recipients,
-                design_asset_id: whatsAppDraft.designAssetId ?? undefined,
+                design_asset_id: designAssetIdForSchedule ?? undefined,
                 brand_id: whatsAppDraft.brandId ?? undefined,
                 scheduled_at: scheduleDate.toISOString(),
             });
@@ -1718,7 +1737,7 @@ function DesignStudioContent() {
                                                                         brandId: generatedDesignPreview.brand_id ?? selectedBrandId ?? null,
                                                                     });
                                                                 }}
-                                                                disabled={isDesignReadOnly || unsupported || !generatedDesignPreview?.image_url}
+                                                                disabled={isDesignReadOnly || unsupported || !generatedDesignPreview?.image_url || isPostedForPlatform}
                                                                 className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50"
                                                             >
                                                                 <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule</span>
