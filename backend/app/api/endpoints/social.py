@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import json
 from datetime import datetime, timezone
 from typing import Optional, Literal
@@ -24,6 +25,7 @@ from app.services.rbac_scope import visible_user_filter
 from app.services.social_auth_service import SocialAuthService, VALID_PLATFORMS
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class SocialConnectionResponse(BaseModel):
@@ -566,6 +568,11 @@ async def publish_whatsapp(
         asset = design_row.scalar_one_or_none()
         if not asset:
             raise HTTPException(status_code=404, detail="Design asset not found")
+        if asset.is_posted:
+            raise HTTPException(
+                status_code=409,
+                detail="This design is already posted. Create a new design to post again.",
+            )
         if not asset.image_url:
             raise HTTPException(status_code=400, detail="Design asset has no image data")
         try:
@@ -597,6 +604,11 @@ async def publish_whatsapp(
         )
         content_item = content_row.scalar_one_or_none()
         if content_item:
+            if content_item.is_posted:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This content is already posted. Create a new draft to post again.",
+                )
             effective_message = (content_item.result or "").strip()
 
     effective_brand_id = payload.brand_id
@@ -641,7 +653,22 @@ async def publish_whatsapp(
             image_bytes=image_bytes,
             brand_id=effective_brand_id,
         )
-        return data
+        sent_count = len([item for item in data.get("results", []) if item.get("status") == "sent"])
+        target_name = str(data.get("verified_name") or data.get("display_phone_number") or "WhatsApp")
+        if sent_count > 0:
+            await _mark_content_as_posted(
+                content_id=payload.content_id,
+                user_id=current_user.id,
+                target_name=target_name,
+                db=db,
+            )
+            await _mark_design_as_posted(
+                design_asset_id=payload.design_asset_id,
+                user_id=current_user.id,
+                target_name=target_name,
+                db=db,
+            )
+        return {**data, "published": sent_count > 0, "target_name": target_name}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:  # noqa: BLE001
@@ -680,6 +707,11 @@ async def publish_post(
         )
         content_item = content_row.scalar_one_or_none()
         if content_item:
+            if content_item.is_posted:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This content is already posted. Create a new draft to post again.",
+                )
             effective_brand_id = content_item.brand_id
     if effective_brand_id is None and payload.design_asset_id:
         design_row = await db.execute(
@@ -775,6 +807,11 @@ async def create_scheduled_post(
         # Do not block scheduling when content reference is stale/unavailable.
         # Scheduling should still work with raw message payload.
         if content_obj:
+            if content_obj.is_posted:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This content is already posted. Create a new draft to schedule again.",
+                )
             validated_content_id = payload.content_id
             if effective_brand_id is None:
                 effective_brand_id = content_obj.brand_id
@@ -1135,13 +1172,39 @@ async def _publish_for_platform(
         sent_count = len([item for item in data.get("results", []) if item.get("status") == "sent"])
         if sent_count == 0:
             raise ValueError("WhatsApp send failed for all recipients")
+
+        target_name = str(data.get("verified_name") or data.get("display_phone_number") or "WhatsApp")
+        logger.info(
+            "WhatsApp publish succeeded for user_id=%s content_id=%s design_asset_id=%s sent_count=%s target=%s",
+            current_user.id,
+            payload.content_id,
+            payload.design_asset_id,
+            sent_count,
+            target_name,
+        )
+        await _mark_content_as_posted(
+            content_id=payload.content_id,
+            user_id=current_user.id,
+            target_name=target_name,
+            db=db,
+        )
+        await _mark_design_as_posted(
+            design_asset_id=payload.design_asset_id,
+            user_id=current_user.id,
+            target_name=target_name,
+            db=db,
+        )
+        logger.info(
+            "WhatsApp content/design marked posted for user_id=%s content_id=%s design_asset_id=%s",
+            current_user.id,
+            payload.content_id,
+            payload.design_asset_id,
+        )
         return {
             **data,
             "published": True,
             "post_id": data.get("phone_number_id"),
-            "target_name": data.get("verified_name")
-            or data.get("display_phone_number")
-            or "WhatsApp",
+            "target_name": target_name,
         }
 
     if normalized_platform == "instagram":
@@ -1258,7 +1321,7 @@ async def process_due_scheduled_posts(
             )
             post.target_name = str(publish_response.get("target_name") or "").strip() or None
             post.published_at = datetime.now(timezone.utc)
-            if (post.platform or "").strip().lower() in {"linkedin", "facebook", "instagram"}:
+            if (post.platform or "").strip().lower() in {"linkedin", "facebook", "instagram", "whatsapp"}:
                 await _mark_content_as_posted(
                     content_id=post.content_id,
                     user_id=post.user_id,
@@ -1342,6 +1405,12 @@ async def _mark_content_as_posted(
     if not content:
         raise HTTPException(status_code=404, detail="Content generation not found for post status update")
     if content.is_posted:
+        logger.warning(
+            "Skipped repost mark because content is already posted: content_id=%s user_id=%s target=%s",
+            content_id,
+            user_id,
+            target_name,
+        )
         raise HTTPException(
             status_code=409,
             detail="This content is already posted. Create a new draft to post again.",
@@ -1351,6 +1420,12 @@ async def _mark_content_as_posted(
     content.posted_at = datetime.now(timezone.utc)
     content.posted_target_name = target_name or None
     await db.commit()
+    logger.info(
+        "Marked content as posted: content_id=%s user_id=%s target=%s",
+        content_id,
+        user_id,
+        target_name,
+    )
 
 
 async def _mark_design_as_posted(
@@ -1373,9 +1448,21 @@ async def _mark_design_as_posted(
         return
 
     if asset.is_posted:
+        logger.warning(
+            "Skipped repost mark because design is already posted: design_asset_id=%s user_id=%s target=%s",
+            design_asset_id,
+            user_id,
+            target_name,
+        )
         return
 
     asset.is_posted = True
     asset.posted_at = datetime.now(timezone.utc)
     asset.posted_target_name = target_name or None
     await db.commit()
+    logger.info(
+        "Marked design as posted: design_asset_id=%s user_id=%s target=%s",
+        design_asset_id,
+        user_id,
+        target_name,
+    )
