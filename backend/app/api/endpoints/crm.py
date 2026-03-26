@@ -6,15 +6,18 @@ import random
 import csv
 import re
 from io import StringIO, BytesIO
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete, insert
 from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.models.models import Influencer, Campaign, CampaignInfluencer, User
+from app.models.brand import Brand
 from app.models.creator import Creator
+from app.models.crm_category import CRMCategory, creator_categories
+from app.models.crm_generate_post import CRMGeneratePost
 from app.api.deps import require_crm_read, require_crm_create, require_crm_update, require_crm_delete, require_crm_write
-from app.services.auth_service import is_super_admin
+from app.services.auth_service import is_super_admin, is_agency_level
 from app.services.rbac_scope import visible_user_filter
 
 router = APIRouter()
@@ -38,6 +41,8 @@ class RelationshipProfile(BaseModel):
     data_source: str = "real"  # "real" or "demo"
     whatsapp_numbers: Optional[List[str]] = None
     can_edit: bool = False
+    category_ids: List[int] = []
+    category_names: List[str] = []
 
 
 class RelationshipCreate(BaseModel):
@@ -46,6 +51,7 @@ class RelationshipCreate(BaseModel):
     relationship_status: Optional[str] = "Active"
     whatsapp_numbers: Optional[List[str]] = None
     name: Optional[str] = None
+    category_ids: Optional[List[int]] = None
 
 
 class RelationshipUpdate(BaseModel):
@@ -54,6 +60,7 @@ class RelationshipUpdate(BaseModel):
     relationship_status: Optional[str] = None
     whatsapp_numbers: Optional[List[str]] = None
     name: Optional[str] = None
+    category_ids: Optional[List[int]] = None
 
 
 class WhatsAppContact(BaseModel):
@@ -62,6 +69,70 @@ class WhatsAppContact(BaseModel):
     name: Optional[str] = None
     brand_id: Optional[int] = None
     whatsapp_numbers: List[str]
+    category_ids: List[int] = []
+
+
+class CategoryBrandOption(BaseModel):
+    id: int
+    name: str
+
+
+class CategoryCreate(BaseModel):
+    name: str
+    brand_ids: List[int] = []
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    brand_ids: Optional[List[int]] = None
+    is_active: Optional[bool] = None
+
+
+class CategoryResponse(BaseModel):
+    id: int
+    name: str
+    user_id: int
+    brand_ids: List[int]
+    is_active: bool
+    created_at: Optional[str] = None
+    brands: List[CategoryBrandOption]
+
+
+class GeneratePostCreate(BaseModel):
+    title: Optional[str] = "New Post"
+    platform: str
+    brand_id: Optional[int] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    image_name: Optional[str] = None
+
+
+class GeneratePostUpdate(BaseModel):
+    title: Optional[str] = None
+    platform: Optional[str] = None
+    brand_id: Optional[int] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    image_name: Optional[str] = None
+    is_posted: Optional[bool] = None
+    posted_target_name: Optional[str] = None
+    posted_recipients: Optional[List[str]] = None
+
+
+class GeneratePostResponse(BaseModel):
+    id: int
+    user_id: int
+    title: str
+    platform: str
+    brand_id: Optional[int] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    image_name: Optional[str] = None
+    is_posted: bool = False
+    posted_at: Optional[str] = None
+    posted_target_name: Optional[str] = None
+    posted_recipients: Optional[List[str]] = None
+    created_at: Optional[str] = None
 
 @router.get("/relationships", response_model=List[RelationshipProfile])
 async def get_relationships(
@@ -78,11 +149,15 @@ async def get_relationships(
     # 1. Query Creators (richer relationship data) with org filtering
     if current_user.role == "super_admin":
         creators_result = await db.execute(
-            select(Creator).order_by(Creator.created_at.desc()).limit(20)
+            select(Creator)
+            .options(selectinload(Creator.categories))
+            .order_by(Creator.created_at.desc())
+            .limit(20)
         )
     else:
         creators_result = await db.execute(
             select(Creator)
+            .options(selectinload(Creator.categories))
             .where(Creator.user_id == current_user.id)
             .order_by(Creator.created_at.desc())
             .limit(20)
@@ -92,6 +167,11 @@ async def get_relationships(
     for creator in creators:
         # Get campaign history for this creator's linked influencer
         campaign_history = await _get_creator_campaign_history(db, creator.handle, current_user)
+        category_links = [c for c in (creator.categories or []) if c and c.is_active]
+        category_ids = [c.id for c in category_links]
+        category_names = [c.name for c in category_links]
+        if not category_names and creator.category:
+            category_names = [creator.category]
         
         profiles.append(RelationshipProfile(
             creator_id=creator.id,
@@ -105,7 +185,9 @@ async def get_relationships(
             campaign_history=campaign_history,
             data_source="real",
             whatsapp_numbers=creator.whatsapp_numbers or [],
-            can_edit=True
+            can_edit=True,
+            category_ids=category_ids,
+            category_names=category_names,
         ))
     
     # 2. Also query Influencers table if we need more (super_admin only)
@@ -135,10 +217,12 @@ async def get_relationships(
                 avg_roi=3.0,
                 last_contact=datetime.now().strftime("%Y-%m-%d"),
                 campaign_history=campaign_history,
-                data_source="real",
-                whatsapp_numbers=[],
-                can_edit=False
-            ))
+            data_source="real",
+            whatsapp_numbers=[],
+            can_edit=False,
+            category_ids=[],
+            category_names=[],
+        ))
     
     return profiles
 
@@ -238,7 +322,9 @@ def _generate_demo_relationships() -> List[RelationshipProfile]:
             campaign_history=history,
             data_source="demo",
             whatsapp_numbers=[],
-            can_edit=False
+            can_edit=False,
+            category_ids=[],
+            category_names=[],
         ))
         
     return profiles
@@ -253,6 +339,7 @@ async def get_whatsapp_contacts(
     if current_user.role == "super_admin":
         creators_result = await db.execute(
             select(Creator)
+            .options(selectinload(Creator.categories))
             .where(Creator.status == "active")
             .order_by(Creator.created_at.desc())
             .limit(200)
@@ -260,6 +347,7 @@ async def get_whatsapp_contacts(
     else:
         creators_result = await db.execute(
             select(Creator)
+            .options(selectinload(Creator.categories))
             .where(Creator.user_id == current_user.id)
             .where(Creator.status == "active")
             .order_by(Creator.created_at.desc())
@@ -278,9 +366,236 @@ async def get_whatsapp_contacts(
                 name=creator.name,
                 brand_id=creator.brand_id,
                 whatsapp_numbers=[str(n).strip() for n in numbers if str(n).strip()],
+                category_ids=[category.id for category in (creator.categories or [])],
             )
         )
     return contacts
+
+
+@router.get("/category-brand-options", response_model=List[CategoryBrandOption])
+async def get_category_brand_options(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_read),
+):
+    brands = await _get_allowed_brands(db, current_user)
+    return [CategoryBrandOption(id=brand.id, name=brand.name) for brand in brands]
+
+
+@router.get("/categories", response_model=List[CategoryResponse])
+async def get_categories(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_read),
+):
+    categories = await _get_visible_categories(db, current_user, include_inactive=False)
+    return await _serialize_categories(db, categories)
+
+
+@router.post("/categories", response_model=CategoryResponse)
+async def create_category(
+    payload: CategoryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_create),
+):
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Category name is required")
+
+    brand_ids = await _normalize_and_validate_category_brand_ids(db, current_user, payload.brand_ids)
+
+    duplicate_query = select(CRMCategory).where(CRMCategory.name.ilike(name))
+    if not is_super_admin(current_user.role):
+        duplicate_query = duplicate_query.where(CRMCategory.user_id == current_user.id)
+    duplicate_result = await db.execute(duplicate_query)
+    if duplicate_result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Category with this name already exists")
+
+    category = CRMCategory(
+        name=name,
+        user_id=current_user.id,
+        created_by_role=current_user.role,
+        brand_ids=brand_ids,
+        is_active=True,
+    )
+    db.add(category)
+    await db.commit()
+    await db.refresh(category)
+
+    serialized = await _serialize_categories(db, [category])
+    return serialized[0]
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryResponse)
+async def update_category(
+    category_id: int,
+    payload: CategoryUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_update),
+):
+    query = select(CRMCategory).where(CRMCategory.id == category_id)
+    if not is_super_admin(current_user.role):
+        query = query.where(CRMCategory.user_id == current_user.id)
+    result = await db.execute(query)
+    category = result.scalar_one_or_none()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Category name cannot be empty")
+        duplicate_query = select(CRMCategory).where(
+            CRMCategory.id != category_id,
+            CRMCategory.name.ilike(name),
+        )
+        if not is_super_admin(current_user.role):
+            duplicate_query = duplicate_query.where(CRMCategory.user_id == current_user.id)
+        duplicate_result = await db.execute(duplicate_query)
+        if duplicate_result.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Category with this name already exists")
+        category.name = name
+
+    if payload.brand_ids is not None:
+        category.brand_ids = await _normalize_and_validate_category_brand_ids(db, current_user, payload.brand_ids)
+
+    if payload.is_active is not None:
+        category.is_active = payload.is_active
+
+    await db.commit()
+    await db.refresh(category)
+    serialized = await _serialize_categories(db, [category])
+    return serialized[0]
+
+
+@router.delete("/categories/{category_id}")
+async def delete_category(
+    category_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_delete),
+):
+    query = select(CRMCategory).where(CRMCategory.id == category_id)
+    if not is_super_admin(current_user.role):
+        query = query.where(CRMCategory.user_id == current_user.id)
+    result = await db.execute(query)
+    category = result.scalar_one_or_none()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    await db.delete(category)
+    await db.commit()
+    return {"message": "Category deleted"}
+
+
+@router.get("/generate-posts", response_model=List[GeneratePostResponse])
+async def get_generate_posts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_read),
+):
+    query = select(CRMGeneratePost).order_by(CRMGeneratePost.created_at.desc())
+    if not is_super_admin(current_user.role):
+        query = query.where(CRMGeneratePost.user_id == current_user.id)
+    result = await db.execute(query)
+    posts = result.scalars().all()
+    return [_serialize_generate_post(post) for post in posts]
+
+
+@router.post("/generate-posts", response_model=GeneratePostResponse)
+async def create_generate_post(
+    payload: GeneratePostCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_create),
+):
+    platform = (payload.platform or "").strip()
+    if not platform:
+        raise HTTPException(status_code=400, detail="Platform is required")
+
+    post = CRMGeneratePost(
+        user_id=current_user.id,
+        title=(payload.title or "New Post").strip() or "New Post",
+        platform=platform,
+        brand_id=payload.brand_id,
+        description=(payload.description or "").strip() or None,
+        image_url=payload.image_url,
+        image_name=payload.image_name,
+    )
+    db.add(post)
+    await db.commit()
+    await db.refresh(post)
+    return _serialize_generate_post(post)
+
+
+@router.patch("/generate-posts/{post_id}", response_model=GeneratePostResponse)
+async def update_generate_post(
+    post_id: int,
+    payload: GeneratePostUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_update),
+):
+    query = select(CRMGeneratePost).where(CRMGeneratePost.id == post_id)
+    if not is_super_admin(current_user.role):
+        query = query.where(CRMGeneratePost.user_id == current_user.id)
+    result = await db.execute(query)
+    post = result.scalar_one_or_none()
+    if not post:
+        raise HTTPException(status_code=404, detail="Generate post not found")
+    if post.is_posted:
+        raise HTTPException(status_code=409, detail="Posted CRM generate posts cannot be edited")
+
+    if payload.title is not None:
+        post.title = payload.title.strip() or "New Post"
+    if payload.platform is not None:
+        platform = payload.platform.strip()
+        if not platform:
+            raise HTTPException(status_code=400, detail="Platform is required")
+        post.platform = platform
+    if payload.brand_id is not None:
+        post.brand_id = payload.brand_id
+    if payload.description is not None:
+        post.description = payload.description.strip() or None
+    if payload.image_url is not None:
+        post.image_url = payload.image_url
+    if payload.image_name is not None:
+        post.image_name = payload.image_name
+    if payload.is_posted is not None:
+        post.is_posted = payload.is_posted
+        if payload.is_posted:
+            post.posted_at = datetime.now(timezone.utc)
+            if payload.posted_target_name is not None:
+                post.posted_target_name = payload.posted_target_name.strip() or None
+        else:
+            raise HTTPException(status_code=409, detail="Posted CRM generate posts cannot be reverted")
+    elif payload.posted_target_name is not None:
+        post.posted_target_name = payload.posted_target_name.strip() or None
+    if payload.posted_recipients is not None:
+        cleaned_recipients = [
+            str(value).strip()
+            for value in payload.posted_recipients
+            if str(value).strip()
+        ]
+        post.posted_recipients = cleaned_recipients or None
+
+    await db.commit()
+    await db.refresh(post)
+    return _serialize_generate_post(post)
+
+
+@router.delete("/generate-posts/{post_id}")
+async def delete_generate_post(
+    post_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_crm_delete),
+):
+    query = select(CRMGeneratePost).where(CRMGeneratePost.id == post_id)
+    if not is_super_admin(current_user.role):
+        query = query.where(CRMGeneratePost.user_id == current_user.id)
+    result = await db.execute(query)
+    post = result.scalar_one_or_none()
+    if not post:
+        raise HTTPException(status_code=404, detail="Generate post not found")
+
+    await db.delete(post)
+    await db.commit()
+    return {"message": "Generate post deleted"}
+
 
 @router.post("/generate-report")
 async def generate_xray_report(
@@ -338,10 +653,15 @@ def _map_relationship_status_to_creator(status: Optional[str]) -> str:
 
 async def _get_creator_for_write(db: AsyncSession, creator_id: int, current_user: User) -> Creator:
     if is_super_admin(current_user.role):
-        result = await db.execute(select(Creator).where(Creator.id == creator_id))
+        result = await db.execute(
+            select(Creator)
+            .options(selectinload(Creator.categories))
+            .where(Creator.id == creator_id)
+        )
     else:
         result = await db.execute(
             select(Creator)
+            .options(selectinload(Creator.categories))
             .where(
                 (Creator.id == creator_id)
                 & (Creator.user_id == current_user.id)
@@ -358,7 +678,18 @@ async def _creator_to_relationship_profile(
     creator: Creator,
     current_user: User,
 ) -> RelationshipProfile:
+    refreshed_result = await db.execute(
+        select(Creator)
+        .options(selectinload(Creator.categories))
+        .where(Creator.id == creator.id)
+    )
+    creator = refreshed_result.scalar_one_or_none() or creator
     campaign_history = await _get_creator_campaign_history(db, creator.handle, current_user)
+    category_links = [c for c in (creator.categories or []) if c and c.is_active]
+    category_ids = [c.id for c in category_links]
+    category_names = [c.name for c in category_links]
+    if not category_names and creator.category:
+        category_names = [creator.category]
     return RelationshipProfile(
         creator_id=creator.id,
         handle=f"@{creator.handle.lstrip('@')}",
@@ -372,6 +703,173 @@ async def _creator_to_relationship_profile(
         data_source="real",
         whatsapp_numbers=creator.whatsapp_numbers or [],
         can_edit=True,
+        category_ids=category_ids,
+        category_names=category_names,
+    )
+
+
+def _normalize_brand_ids(brand_ids: Optional[List[int]]) -> List[int]:
+    cleaned = [int(b) for b in (brand_ids or []) if b and int(b) > 0]
+    return sorted(set(cleaned))
+
+
+async def _get_allowed_brand_ids(db: AsyncSession, current_user: User) -> List[int]:
+    if is_super_admin(current_user.role):
+        result = await db.execute(select(Brand.id))
+    elif is_agency_level(current_user.role):
+        if not current_user.organization_id:
+            return []
+        result = await db.execute(
+            select(Brand.id).where(Brand.organization_id == current_user.organization_id)
+        )
+    else:
+        result = await db.execute(
+            select(Brand.id).where(Brand.created_by_user_id == current_user.id)
+        )
+    return [brand_id for brand_id in result.scalars().all() if brand_id]
+
+
+async def _get_allowed_brands(db: AsyncSession, current_user: User) -> List[Brand]:
+    if is_super_admin(current_user.role):
+        result = await db.execute(select(Brand).order_by(Brand.name.asc()))
+    elif is_agency_level(current_user.role):
+        if not current_user.organization_id:
+            return []
+        result = await db.execute(
+            select(Brand)
+            .where(Brand.organization_id == current_user.organization_id)
+            .order_by(Brand.name.asc())
+        )
+    else:
+        result = await db.execute(
+            select(Brand)
+            .where(Brand.created_by_user_id == current_user.id)
+            .order_by(Brand.name.asc())
+        )
+    return result.scalars().all()
+
+
+async def _normalize_and_validate_category_brand_ids(
+    db: AsyncSession,
+    current_user: User,
+    brand_ids: Optional[List[int]],
+) -> List[int]:
+    allowed_brand_ids = set(await _get_allowed_brand_ids(db, current_user))
+    if not allowed_brand_ids:
+        raise HTTPException(status_code=400, detail="No brands available for this user")
+
+    selected_brand_ids = _normalize_brand_ids(brand_ids)
+    if not selected_brand_ids and not is_super_admin(current_user.role) and not is_agency_level(current_user.role):
+        selected_brand_ids = sorted(allowed_brand_ids)
+
+    if not selected_brand_ids:
+        raise HTTPException(status_code=400, detail="At least one brand must be selected")
+
+    invalid = [brand_id for brand_id in selected_brand_ids if brand_id not in allowed_brand_ids]
+    if invalid:
+        raise HTTPException(status_code=403, detail="One or more selected brands are not accessible")
+
+    return selected_brand_ids
+
+
+async def _get_visible_categories(
+    db: AsyncSession,
+    current_user: User,
+    include_inactive: bool = False,
+) -> List[CRMCategory]:
+    query = select(CRMCategory)
+    if not is_super_admin(current_user.role):
+        query = query.where(CRMCategory.user_id == current_user.id)
+    if not include_inactive:
+        query = query.where(CRMCategory.is_active == True)
+    query = query.order_by(CRMCategory.created_at.desc())
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+async def _serialize_categories(
+    db: AsyncSession,
+    categories: List[CRMCategory],
+) -> List[CategoryResponse]:
+    all_brand_ids: set[int] = set()
+    for category in categories:
+        for brand_id in (category.brand_ids or []):
+            if isinstance(brand_id, int):
+                all_brand_ids.add(brand_id)
+
+    brand_map: dict[int, Brand] = {}
+    if all_brand_ids:
+        brand_result = await db.execute(select(Brand).where(Brand.id.in_(all_brand_ids)))
+        brand_map = {brand.id: brand for brand in brand_result.scalars().all()}
+
+    response: list[CategoryResponse] = []
+    for category in categories:
+        category_brand_ids = [int(brand_id) for brand_id in (category.brand_ids or []) if isinstance(brand_id, int)]
+        response.append(
+            CategoryResponse(
+                id=category.id,
+                name=category.name,
+                user_id=category.user_id,
+                brand_ids=category_brand_ids,
+                is_active=category.is_active,
+                created_at=category.created_at.isoformat() if category.created_at else None,
+                brands=[
+                    CategoryBrandOption(id=brand_id, name=brand_map[brand_id].name)
+                    for brand_id in category_brand_ids
+                    if brand_id in brand_map
+                ],
+            )
+        )
+    return response
+
+
+async def _assign_creator_categories(
+    db: AsyncSession,
+    creator: Creator,
+    category_ids: Optional[List[int]],
+    current_user: User,
+) -> None:
+    if category_ids is None:
+        return
+
+    cleaned_ids = sorted(set(int(cid) for cid in category_ids if cid and int(cid) > 0))
+    if not cleaned_ids:
+        creator.categories = []
+        return
+
+    query = select(CRMCategory).where(CRMCategory.id.in_(cleaned_ids), CRMCategory.is_active == True)
+    if not is_super_admin(current_user.role):
+        query = query.where(CRMCategory.user_id == current_user.id)
+    result = await db.execute(query)
+    categories = result.scalars().all()
+    if len(categories) != len(cleaned_ids):
+        raise HTTPException(status_code=400, detail="One or more categories are invalid")
+
+    await db.execute(
+        delete(creator_categories).where(creator_categories.c.creator_id == creator.id)
+    )
+    if cleaned_ids:
+        await db.execute(
+            insert(creator_categories),
+            [{"creator_id": creator.id, "category_id": cid} for cid in cleaned_ids],
+        )
+
+
+def _serialize_generate_post(post: CRMGeneratePost) -> GeneratePostResponse:
+    return GeneratePostResponse(
+        id=post.id,
+        user_id=post.user_id,
+        title=post.title,
+        platform=post.platform,
+        brand_id=post.brand_id,
+        description=post.description,
+        image_url=post.image_url,
+        image_name=post.image_name,
+        is_posted=bool(post.is_posted),
+        posted_at=post.posted_at.isoformat() if post.posted_at else None,
+        posted_target_name=post.posted_target_name,
+        posted_recipients=[str(value) for value in (post.posted_recipients or [])],
+        created_at=post.created_at.isoformat() if post.created_at else None,
     )
 
 
@@ -402,6 +900,8 @@ async def create_relationship(
         user_id=current_user.id,
     )
     db.add(creator)
+    await db.flush()
+    await _assign_creator_categories(db, creator, payload.category_ids, current_user)
     await db.commit()
     await db.refresh(creator)
 
@@ -442,6 +942,8 @@ async def update_relationship(
 
     if payload.name is not None:
         creator.name = payload.name
+
+    await _assign_creator_categories(db, creator, payload.category_ids, current_user)
 
     await db.commit()
     await db.refresh(creator)

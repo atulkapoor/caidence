@@ -192,6 +192,11 @@ async def save_design(
 
             if not db_asset:
                 raise HTTPException(status_code=404, detail="Design not found")
+            if db_asset.is_posted:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Posted design is read-only. Create a new design draft to edit.",
+                )
 
             # ⭐ Update fields
             db_asset.title = request.title
@@ -258,6 +263,11 @@ async def update_design_asset(
 
     if not asset:
         raise HTTPException(status_code=404, detail="Design asset not found")
+    if asset.is_posted:
+        raise HTTPException(
+            status_code=409,
+            detail="Posted design is read-only. Create a new design draft to edit.",
+        )
 
     # ⭐ Regenerate image
     new_image = await AIService.generate_image(

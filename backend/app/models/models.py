@@ -208,6 +208,7 @@ class ScheduledPost(Base):
     content_id = Column(Integer, ForeignKey("content_generations.id"), nullable=True, index=True)
     design_asset_id = Column(Integer, ForeignKey("design_assets.id"), nullable=True, index=True)
     campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=True, index=True)
+    crm_generate_post_id = Column(Integer, ForeignKey("crm_generate_posts.id"), nullable=True, index=True)
     brand_id = Column(Integer, ForeignKey("brands.id"), nullable=True, index=True)
     title = Column(String, nullable=True)
     platform = Column(String, nullable=False, index=True)

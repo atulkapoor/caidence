@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, momentLocalizer, Views, type View } from "react-big-calendar";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -10,7 +10,7 @@ import { toast } from "sonner";
 
 const localizer = momentLocalizer(moment);
 
-type CalendarScope = "content" | "design";
+type CalendarScope = "content" | "design" | "crm";
 
 interface ScheduledEvent {
     id: string;
@@ -68,41 +68,46 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
     const [currentView, setCurrentView] = useState<View>(Views.MONTH);
     const hasLoadedOnce = useRef(false);
 
-    useEffect(() => {
-        const loadPosts = async (initialLoad = false) => {
+    const loadPosts = useCallback(async (initialLoad = false) => {
+        if (initialLoad) {
+            setIsLoading(true);
+        }
+        try {
+            const visibleRange = getVisibleRange(currentDate, currentView);
+            const rows = await fetchScheduledPosts({
+                scope,
+                status_in: "scheduled,queued,pending,processing,published,posted,success,completed",
+                from_date: visibleRange.start.toISOString(),
+                to_date: visibleRange.end.toISOString(),
+                limit: 500,
+            }).catch(() => [] as ScheduledPost[]);
+
+            const deduped = rows.sort(
+                (a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()
+            );
+            setAllPosts(deduped);
+        } catch (error) {
+            console.error("Failed to load scheduled posts", error);
+            setAllPosts([]);
+        } finally {
             if (initialLoad) {
-                setIsLoading(true);
+                setIsLoading(false);
             }
-            try {
-                const visibleRange = getVisibleRange(currentDate, currentView);
-                const rows = await fetchScheduledPosts({
-                    scope,
-                    status_in: "scheduled,queued,pending,processing,published,posted,success,completed",
-                    from_date: visibleRange.start.toISOString(),
-                    to_date: visibleRange.end.toISOString(),
-                    limit: 500,
-                }).catch(() => [] as ScheduledPost[]);
+        }
+    }, [currentDate, currentView, scope]);
 
-                const deduped = rows.sort(
-                    (a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()
-                );
-                setAllPosts(deduped);
-            } catch (error) {
-                console.error("Failed to load scheduled posts", error);
-                setAllPosts([]);
-            } finally {
-                if (initialLoad) {
-                    setIsLoading(false);
-                }
-            }
-        };
-
+    useEffect(() => {
         const initialLoad = !hasLoadedOnce.current;
         loadPosts(initialLoad);
         if (!hasLoadedOnce.current) {
             hasLoadedOnce.current = true;
         }
-    }, [currentDate, currentView, scope]);
+        const intervalId = window.setInterval(() => {
+            loadPosts(false);
+        }, 30000);
+
+        return () => window.clearInterval(intervalId);
+    }, [loadPosts]);
 
     const posts = useMemo(() => {
         const visibleRange = getVisibleRange(currentDate, currentView);
@@ -118,16 +123,22 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
 
             const hasContentRef = hasValue(post.content_id);
             const hasDesignRef = hasValue(post.design_asset_id);
+            const hasCampaignRef = hasValue(post.campaign_id);
+            const hasCrmRef = hasValue(post.crm_generate_post_id);
 
             if (scope === "content") {
                 // Content calendar only: explicit content-linked posts.
                 return hasContentRef && !hasDesignRef;
             }
 
+            if (scope === "crm") {
+                return hasCrmRef;
+            }
+
             // Design calendar:
             // 1) explicit design-linked posts
             // 2) fallback posts with no content_id (common for some design schedules)
-            return hasDesignRef || !hasContentRef;
+            return !hasCrmRef && (hasDesignRef || !hasContentRef);
         });
     }, [allPosts, scope, currentDate, currentView]);
 
@@ -172,7 +183,7 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
     };
 
     return (
-        <div className="h-full bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col">
+        <div className="min-h-[560px] h-full bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col">
             <div className="mb-5">
                 <h2 className="text-2xl font-bold text-slate-900">{title}</h2>
                 <p className="text-slate-500 text-sm">{subtitle}</p>
@@ -181,7 +192,7 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
             <div className="mb-4 text-xs font-semibold text-slate-500">
                 {isLoading
                     ? "Loading scheduled posts..."
-                    : `${posts.length} scheduled posts (${scope === "design" ? "Design Studio" : "Content Studio"} view)`}
+                    : `${posts.length} scheduled posts (${scope === "design" ? "Design Studio" : scope === "crm" ? "CRM" : "Content Studio"} view)`}
             </div>
 
             <div className="flex-1 min-h-0">
@@ -189,7 +200,7 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
                     <div className="h-full py-20 text-center bg-white rounded-2xl border border-slate-200 border-dashed flex flex-col items-center justify-center">
                         <div className="w-10 h-10 mx-auto border-4 border-slate-200 border-t-violet-500 rounded-full animate-spin mb-4"></div>
                         <p className="text-slate-500 font-medium">
-                            {scope === "content" ? "Loading content..." : "Loading designs..."}
+                            {scope === "content" ? "Loading content..." : scope === "crm" ? "Loading CRM posts..." : "Loading designs..."}
                         </p>
                     </div>
                 ) : (
@@ -198,7 +209,7 @@ export function ScheduledPostsCalendar({ scope, title, subtitle }: ScheduledPost
                         events={events}
                         startAccessor="start"
                         endAccessor="end"
-                        style={{ height: "100%" }}
+                        style={{ height: "520px" }}
                         date={currentDate}
                         view={currentView}
                         views={[Views.MONTH, Views.WEEK, Views.DAY]}

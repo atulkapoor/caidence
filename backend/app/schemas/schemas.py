@@ -197,6 +197,7 @@ class ScheduledPostBase(BaseModel):
     content_id: Optional[int] = None
     design_asset_id: Optional[int] = None
     campaign_id: Optional[int] = None
+    crm_generate_post_id: Optional[int] = None
     brand_id: Optional[int] = None
 
 

@@ -56,3 +56,4 @@ class Creator(Base):
 
     # Relationships
     brand = relationship("Brand", back_populates="creators")
+    categories = relationship("CRMCategory", secondary="creator_categories", back_populates="creator_links")

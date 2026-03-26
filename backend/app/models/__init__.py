@@ -17,6 +17,8 @@ from app.models.models import (
 from app.models.organization import Organization
 from app.models.brand import Brand
 from app.models.creator import Creator
+from app.models.crm_category import CRMCategory, creator_categories
+from app.models.crm_generate_post import CRMGeneratePost
 # TODO: Fix table name conflicts in creators.py before importing
 # from app.models.creators import (
 #     Influencer,
@@ -45,6 +47,9 @@ __all__ = [
     "Organization",
     "Brand",
     "Creator",
+    "CRMCategory",
+    "CRMGeneratePost",
+    "creator_categories",
     "Creator",
     # "UserPermission",
     "Team",
