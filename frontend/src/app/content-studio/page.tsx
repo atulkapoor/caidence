@@ -974,6 +974,14 @@ ${prompt}
             return;
         }
 
+        let contentIdForSchedule = whatsAppDraft.contentId ?? null;
+        if (!contentIdForSchedule && typeof whatsAppDraft.responseIndex === "number") {
+            const response = currentResponses[whatsAppDraft.responseIndex];
+            if (response && response.outputType !== "image") {
+                contentIdForSchedule = await ensureContentIdForPosting(response, whatsAppDraft.responseIndex);
+            }
+        }
+
         const recipients = parseRecipients(whatsAppRecipients);
         if (recipients.length === 0) {
             toast.error("Add at least one WhatsApp number");
@@ -1010,7 +1018,7 @@ ${prompt}
                 message: whatsAppDraft.text || "",
                 image_url: whatsAppDraft.imageUrl,
                 to_numbers: recipients,
-                content_id: whatsAppDraft.contentId ?? undefined,
+                content_id: contentIdForSchedule ?? undefined,
                 brand_id: whatsAppDraft.brandId ?? undefined,
                 scheduled_at: scheduleDate.toISOString(),
             });

@@ -19,6 +19,7 @@ from app.api.deps import get_current_authenticated_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.models import Campaign, ContentGeneration, DesignAsset, ScheduledPost, User
+from app.models.crm_generate_post import CRMGeneratePost
 from app.models.social import SocialConnection
 from app.services.auth_service import is_super_admin
 from app.services.rbac_scope import visible_user_filter
@@ -139,6 +140,7 @@ class SchedulePostRequest(BaseModel):
     content_id: Optional[int] = None
     design_asset_id: Optional[int] = None
     campaign_id: Optional[int] = None
+    crm_generate_post_id: Optional[int] = None
     brand_id: Optional[int] = None
 
 
@@ -148,6 +150,7 @@ class ScheduledPostResponse(BaseModel):
     content_id: Optional[int] = None
     design_asset_id: Optional[int] = None
     campaign_id: Optional[int] = None
+    crm_generate_post_id: Optional[int] = None
     brand_id: Optional[int] = None
     title: Optional[str] = None
     platform: str
@@ -790,6 +793,7 @@ async def create_scheduled_post(
 
     validated_content_id: Optional[int] = None
     validated_design_asset_id: Optional[int] = None
+    validated_crm_generate_post_id: Optional[int] = None
     effective_brand_id: Optional[int] = payload.brand_id
     if payload.content_id:
         if is_super_admin(current_user.role):
@@ -800,41 +804,46 @@ async def create_scheduled_post(
             content_result = await db.execute(
                 select(ContentGeneration).where(
                     ContentGeneration.id == payload.content_id,
-                    ContentGeneration.user_id == current_user.id,
+                    visible_user_filter(current_user, ContentGeneration.user_id),
                 )
             )
         content_obj = content_result.scalar_one_or_none()
-        # Do not block scheduling when content reference is stale/unavailable.
-        # Scheduling should still work with raw message payload.
-        if content_obj:
-            if content_obj.is_posted:
-                raise HTTPException(
-                    status_code=409,
-                    detail="This content is already posted. Create a new draft to schedule again.",
-                )
-            validated_content_id = payload.content_id
-            if effective_brand_id is None:
-                effective_brand_id = content_obj.brand_id
-            if platform == "whatsapp" and not message:
-                message = (content_obj.result or "").strip()
+        if not content_obj:
+            raise HTTPException(status_code=404, detail="Content not found for scheduling")
+        if content_obj.is_posted:
+            raise HTTPException(
+                status_code=409,
+                detail="This content is already posted. Create a new draft to schedule again.",
+            )
+        validated_content_id = payload.content_id
+        if effective_brand_id is None:
+            effective_brand_id = content_obj.brand_id
+        if platform == "whatsapp" and not message:
+            message = (content_obj.result or "").strip()
 
     if payload.design_asset_id:
-        design_result = await db.execute(
-            select(DesignAsset).where(
-                DesignAsset.id == payload.design_asset_id,
-                DesignAsset.user_id == current_user.id,
+        if is_super_admin(current_user.role):
+            design_result = await db.execute(
+                select(DesignAsset).where(DesignAsset.id == payload.design_asset_id)
             )
-        )
-        design_obj = design_result.scalar_one_or_none()
-        if design_obj:
-            if design_obj.is_posted and platform != "whatsapp":
-                raise HTTPException(
-                    status_code=409,
-                    detail="This design is already posted. Create a new design to schedule again.",
+        else:
+            design_result = await db.execute(
+                select(DesignAsset).where(
+                    DesignAsset.id == payload.design_asset_id,
+                    visible_user_filter(current_user, DesignAsset.user_id),
                 )
-            validated_design_asset_id = payload.design_asset_id
-            if effective_brand_id is None:
-                effective_brand_id = design_obj.brand_id
+            )
+        design_obj = design_result.scalar_one_or_none()
+        if not design_obj:
+            raise HTTPException(status_code=404, detail="Design asset not found for scheduling")
+        if design_obj.is_posted:
+            raise HTTPException(
+                status_code=409,
+                detail="This design is already posted. Create a new design to schedule again.",
+            )
+        validated_design_asset_id = payload.design_asset_id
+        if effective_brand_id is None:
+            effective_brand_id = design_obj.brand_id
 
     if payload.campaign_id:
         campaign_result = await db.execute(
@@ -844,6 +853,22 @@ async def create_scheduled_post(
         )
         if not campaign_result.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Campaign not found")
+
+    if payload.crm_generate_post_id:
+        crm_result = await db.execute(
+            select(CRMGeneratePost).where(
+                CRMGeneratePost.id == payload.crm_generate_post_id,
+                CRMGeneratePost.user_id == current_user.id,
+            )
+        )
+        crm_post = crm_result.scalar_one_or_none()
+        if not crm_post:
+            raise HTTPException(status_code=404, detail="CRM generate post not found")
+        if crm_post.is_posted:
+            raise HTTPException(status_code=409, detail="This CRM generate post is already posted")
+        validated_crm_generate_post_id = payload.crm_generate_post_id
+        if effective_brand_id is None:
+            effective_brand_id = crm_post.brand_id
 
     connection = await SocialAuthService.get_connection(platform, current_user.id, db, brand_id=effective_brand_id)
     if not connection or not connection.access_token:
@@ -874,6 +899,8 @@ async def create_scheduled_post(
         reference_clauses.append(ScheduledPost.content_id == effective_content_id)
     if effective_design_asset_id:
         reference_clauses.append(ScheduledPost.design_asset_id == effective_design_asset_id)
+    if validated_crm_generate_post_id:
+        reference_clauses.append(ScheduledPost.crm_generate_post_id == validated_crm_generate_post_id)
 
     # Fallback duplicate detection for cases where IDs are missing/stale:
     # treat same platform + same message + same title + same image as the same post.
@@ -921,6 +948,7 @@ async def create_scheduled_post(
         content_id=validated_content_id,
         design_asset_id=validated_design_asset_id,
         campaign_id=payload.campaign_id,
+        crm_generate_post_id=validated_crm_generate_post_id,
         brand_id=effective_brand_id,
         title=normalized_title,
         platform=platform,
@@ -940,7 +968,7 @@ async def create_scheduled_post(
 async def list_scheduled_posts(
     status: Optional[str] = Query(default=None),
     status_in: Optional[str] = Query(default=None, description="Comma-separated statuses"),
-    scope: Optional[Literal["content", "design"]] = Query(default=None),
+    scope: Optional[Literal["content", "design", "crm"]] = Query(default=None),
     from_date: Optional[datetime] = Query(default=None),
     to_date: Optional[datetime] = Query(default=None),
     skip: int = Query(default=0, ge=0),
@@ -975,6 +1003,9 @@ async def list_scheduled_posts(
                 ScheduledPost.content_id.is_(None),
             )
         )
+        query = query.where(ScheduledPost.crm_generate_post_id.is_(None))
+    elif scope == "crm":
+        query = query.where(ScheduledPost.crm_generate_post_id.is_not(None))
 
     rows = (await db.execute(query.offset(skip).limit(limit))).scalars().all()
     return [_to_scheduled_post_response(row) for row in rows]
@@ -1175,30 +1206,11 @@ async def _publish_for_platform(
 
         target_name = str(data.get("verified_name") or data.get("display_phone_number") or "WhatsApp")
         logger.info(
-            "WhatsApp publish succeeded for user_id=%s content_id=%s design_asset_id=%s sent_count=%s target=%s",
-            current_user.id,
-            payload.content_id,
-            payload.design_asset_id,
+            "WhatsApp publish succeeded for user_id=%s design_asset_id=%s sent_count=%s target=%s",
+            user_id,
+            design_asset_id,
             sent_count,
             target_name,
-        )
-        await _mark_content_as_posted(
-            content_id=payload.content_id,
-            user_id=current_user.id,
-            target_name=target_name,
-            db=db,
-        )
-        await _mark_design_as_posted(
-            design_asset_id=payload.design_asset_id,
-            user_id=current_user.id,
-            target_name=target_name,
-            db=db,
-        )
-        logger.info(
-            "WhatsApp content/design marked posted for user_id=%s content_id=%s design_asset_id=%s",
-            current_user.id,
-            payload.content_id,
-            payload.design_asset_id,
         )
         return {
             **data,
@@ -1259,6 +1271,7 @@ def _to_scheduled_post_response(post: ScheduledPost) -> ScheduledPostResponse:
         content_id=post.content_id,
         design_asset_id=post.design_asset_id,
         campaign_id=post.campaign_id,
+        crm_generate_post_id=post.crm_generate_post_id,
         brand_id=post.brand_id,
         title=post.title,
         platform=post.platform,
@@ -1294,6 +1307,17 @@ async def process_due_scheduled_posts(
     published_count = 0
 
     for post in due_posts:
+        if post.crm_generate_post_id:
+            crm_result = await db.execute(
+                select(CRMGeneratePost).where(CRMGeneratePost.id == post.crm_generate_post_id)
+            )
+            crm_post = crm_result.scalar_one_or_none()
+            if crm_post and crm_post.is_posted:
+                post.status = "canceled"
+                post.error_message = "CRM generate post already posted"
+                await db.commit()
+                continue
+
         post.status = "processing"
         post.error_message = None
         await db.commit()
@@ -1332,6 +1356,13 @@ async def process_due_scheduled_posts(
                     design_asset_id=post.design_asset_id,
                     user_id=post.user_id,
                     target_name=post.target_name or post.platform,
+                    db=db,
+                )
+                await _mark_crm_generate_post_as_posted(
+                    crm_generate_post_id=post.crm_generate_post_id,
+                    user_id=post.user_id,
+                    target_name=post.target_name or post.platform,
+                    posted_recipients=_deserialize_to_numbers(post.to_numbers),
                     db=db,
                 )
             published_count += 1
@@ -1463,6 +1494,54 @@ async def _mark_design_as_posted(
     logger.info(
         "Marked design as posted: design_asset_id=%s user_id=%s target=%s",
         design_asset_id,
+        user_id,
+        target_name,
+    )
+
+
+async def _mark_crm_generate_post_as_posted(
+    crm_generate_post_id: Optional[int],
+    user_id: int,
+    target_name: str,
+    posted_recipients: Optional[list[str]],
+    db: AsyncSession,
+) -> None:
+    if not crm_generate_post_id:
+        return
+
+    result = await db.execute(
+        select(CRMGeneratePost).where(
+            CRMGeneratePost.id == crm_generate_post_id,
+            CRMGeneratePost.user_id == user_id,
+        )
+    )
+    post = result.scalar_one_or_none()
+    if not post:
+        return
+
+    if post.is_posted:
+        logger.warning(
+            "Skipped repost mark because CRM generate post is already posted: crm_generate_post_id=%s user_id=%s target=%s",
+            crm_generate_post_id,
+            user_id,
+            target_name,
+        )
+        # Keep recipients in sync if scheduler provides them later.
+        normalized_recipients = _normalize_to_numbers(posted_recipients)
+        if normalized_recipients and (post.posted_recipients or []) != normalized_recipients:
+            post.posted_recipients = normalized_recipients
+            await db.commit()
+        return
+
+    normalized_recipients = _normalize_to_numbers(posted_recipients)
+    post.is_posted = True
+    post.posted_at = datetime.now(timezone.utc)
+    post.posted_target_name = target_name or None
+    post.posted_recipients = normalized_recipients or None
+    await db.commit()
+    logger.info(
+        "Marked CRM generate post as posted: crm_generate_post_id=%s user_id=%s target=%s",
+        crm_generate_post_id,
         user_id,
         target_name,
     )
