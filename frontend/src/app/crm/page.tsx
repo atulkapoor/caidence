@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
     createCrmCategory,
@@ -43,7 +43,7 @@ import { usePermissionContext } from "@/contexts/PermissionContext";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { ScheduledPostsCalendar } from "@/components/social/ScheduledPostsCalendar";
 
-export default function CRMPage() {
+function CRMPageInner() {
     const [activeTab, setActiveTab] = useTabState("portfolio");
     const [relationships, setRelationships] = useState<RelationshipProfile[]>([]);
     const [categories, setCategories] = useState<CrmCategory[]>([]);
@@ -2068,5 +2068,13 @@ export default function CRMPage() {
                 </div>
             </PermissionGate>
         </DashboardLayout>
+    );
+}
+
+export default function CRMPage() {
+    return (
+        <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading CRM...</div>}>
+            <CRMPageInner />
+        </Suspense>
     );
 }
